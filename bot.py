@@ -15,9 +15,6 @@ def create_bot() -> lightbulb.Bot:
     logging.getLogger("lightbulb").setLevel(logging.DEBUG)
     _LOGGER = logging.getLogger(__name__)
 
-    # Gather all slash command files.
-    extensions = Path("./extensions").glob("*.py")
-
     with open(store.settings_path, "r") as settings_file:
         settings = json.load(settings_file)
 
@@ -35,9 +32,13 @@ def create_bot() -> lightbulb.Bot:
         intents=hikari.Intents.ALL,
     )
 
+    # Gather all slash command files.
+    extensions = Path("./extensions").glob("*.py")
+
     for ext in extensions:
-        bot.load_extension(f"extensions.{ext}")
-        _LOGGER.info(f"Loaded extension: {ext}")
+        bot.load_extension(f"extensions.{ext.stem}")
+        _LOGGER.info(f"Loaded extension: {ext.stem}")
+
 
     return bot
 
