@@ -1,12 +1,12 @@
 from logging.handlers import TimedRotatingFileHandler
-from utils.store import store
 from pathlib import Path
+from utils import store
 
 import logging
 import json
 
 
-def prepareFiles():
+def prepareFiles() -> None:
 
     default_settings = {"token": "", "version": "0.6"}
 
@@ -16,28 +16,28 @@ def prepareFiles():
     # Create 'data' folder if it doesn't exist
     Path("data").mkdir(parents=True, exist_ok=True)
 
-    logger = logging.getLogger("util.prepare_files")
+    _LOGGER = logging.getLogger("util.prepare_files")
 
     # Create 'settings.json' if it doesn't exist
     if not Path(store.settings_path).is_file():
-        logger.info(f"Creating {store.settings_path}")
+        _LOGGER.info(f"Creating {store.settings_path}")
         with open(store.settings_path, "a") as f:
             json.dump(default_settings, f, indent=2)
 
     # Create database file if it doesn't exist
     if not Path(store.db_path).is_file():
-        logger.info(f"Creating {store.db_path}")
+        _LOGGER.info(f"Creating {store.db_path}")
         open(store.db_path, "a")
 
-    logger.info(f"All files ready")
+    _LOGGER.info(f"All files ready")
 
 
-# if bot is 'substiffy alpha' change prefix
-def prefix(bot, message):
+def prefix(bot, message) -> str:
     return prefixById(bot)
 
 
-def prefixById(bot):
+# if bot is 'substiffy alpha' change prefix
+def prefixById(bot) -> str:
     if bot.user.id == 742380498986205234:
         return "§§"
     return "<<"

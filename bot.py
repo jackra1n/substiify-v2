@@ -14,21 +14,44 @@ if os.name != "nt":
 util.prepareFiles()
 
 logging.getLogger("lightbulb").setLevel(logging.DEBUG)
-logger = logging.getLogger(__name__)
+_LOGGER = logging.getLogger(__name__)
 
-extensions = [""]
+extensions = [
+    # "gif",
+    # "music",
+    # "duel",
+    # "daydeal",
+    # "epicGames",
+    # "util",
+    # "giveaway",
+    # "fun",
+    # "help",
+    "util"
+]
+
 
 with open(store.settings_path, "r") as settings_file:
     settings = json.load(settings_file)
 
 if not settings["token"]:
-    logger.error(f"No token in {store.settings_path}! Please add it and try again.")
+    _LOGGER.error(f"No token in {store.settings_path}! Please add it and try again.")
     exit()
 
 prefix = "<<"
 
-bot = hikari.GatewayBot(
-    prefix=prefix,
-    token=settings["token"],
-    intents=hikari.Intents.ALL,
-)
+
+def start_bot():
+    bot = lightbulb.Bot(
+        prefix=prefix,
+        token=settings["token"],
+        intents=hikari.Intents.ALL,
+    )
+    if len(extensions) != 0:
+        for ext in extensions:
+            bot.load_extension(f"extensions.{ext}")
+            _LOGGER.info(f"Loaded extension: {ext}")
+    bot.run()
+
+
+if __name__ == "__main__":
+    start_bot()
