@@ -1,54 +1,26 @@
-import os
+from discord.ext import commands
+from utils.db import create_database
+from utils.store import store
+from utils import util
+import discord
 import logging
 import json
-from pathlib import Path
 
-import hikari
-import lightbulb
+util.prepareFiles()
+create_database()
+logger = logging.getLogger(__name__)
 
-from utils import util, store
+with open(store.settings_path, "r") as settings:
+    settings = json.load(settings)
 
+prefix = ";"
+bot = commands.Bot(command_prefix=prefix, owner_id=276462585690193921, intents=discord.Intents().all())
 
-def create_bot() -> lightbulb.Bot:
-    util.prepareFiles()
+bot.remove_command('help')
+bot.load_extension("modules.mainbot")
 
-    logging.getLogger("lightbulb").setLevel(logging.DEBUG)
-    _LOGGER = logging.getLogger(__name__)
+if not settings['token']:
+    logger.error(f'No token in {store.settings_path}! Please add it and try again.')
+    exit()
 
-    with open(store.settings_path, "r") as settings_file:
-        settings = json.load(settings_file)
-
-    if not settings["token"]:
-        _LOGGER.error(
-            f"No token in {store.settings_path}! Please add it and try again."
-        )
-        exit()
-
-    prefix = "<<"
-
-    bot = lightbulb.Bot(
-        prefix=prefix,
-        token=settings["token"],
-        intents=hikari.Intents.ALL,
-    )
-
-    # Gather all slash command files.
-    extensions = Path("./extensions").glob("*.py")
-
-    for ext in extensions:
-        bot.load_extension(f"extensions.{ext.stem}")
-        _LOGGER.info(f"Loaded extension: {ext.stem}")
-
-
-    return bot
-
-
-if __name__ == "__main__":
-    if os.name != "nt":
-        # uvloop is only available on UNIX systems, but instead of coding
-        # for the OS, we include this if statement to make life easier.
-        import uvloop
-
-        uvloop.install()
-
-    create_bot().run()
+bot.run(settings['token'])

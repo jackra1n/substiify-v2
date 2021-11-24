@@ -1,5 +1,11 @@
-hikari[speedups]
-hikari-lightbulb
-mypy
-uvloop
-black
+#install with "pip3 install -r requirements.txt"
+
+numpy
+discord.py
+psutil
+bs4
+lxml
+requests
+pytz
+sqlalchemy
+wavelink
