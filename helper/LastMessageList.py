@@ -2,6 +2,7 @@ from typing import List
 
 from helper.LastMessage import LastMessage
 
+
 class LastMessageList():
     def __init__(self):
         self.lastMessageList:List[LastMessage] = []

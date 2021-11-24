@@ -1,10 +1,10 @@
-from helper.CustomLogFormatter import CustomLogFormatter
+import json
+import logging
 from logging.handlers import TimedRotatingFileHandler
-from utils.store import store
 from pathlib import Path
 
-import logging
-import json
+from helper.CustomLogFormatter import CustomLogFormatter
+from utils.store import store
 
 ignore_logs = [
     'Got a request',

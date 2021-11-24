@@ -1,7 +1,7 @@
-from enum import Enum
-from nextcord.ext import commands
-
 import random
+from enum import Enum
+
+from nextcord.ext import commands
 
 
 class QueueIsEmpty(commands.CommandError):

@@ -1,5 +1,6 @@
 from datetime import datetime
 
+
 class store:
     settings_path = './data/settings.json'
     db_path = './data/main.sqlite'

@@ -1,7 +1,8 @@
-from nextcord.ext import commands
-from utils import db
-
 import logging
+
+from nextcord.ext import commands
+
+from utils import db
 
 logger = logging.getLogger(__name__)
 

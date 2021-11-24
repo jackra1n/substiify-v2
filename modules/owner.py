@@ -1,14 +1,13 @@
+import json
+import logging
+import subprocess
+from os import path, walk
+
+import nextcord
 from nextcord import Activity, ActivityType
 from nextcord.ext import commands, tasks
 
 from utils.store import store
-from utils import util
-from os import walk, path
-
-import nextcord
-import subprocess
-import logging
-import json
 
 logger = logging.getLogger(__name__)
 

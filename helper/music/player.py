@@ -1,6 +1,8 @@
-from nextcord.ext import commands
-from helper.music.queue import Queue
 import wavelink
+from nextcord.ext import commands
+
+from helper.music.queue import Queue
+
 
 class AlreadyConnectedToChannel(commands.CommandError):
     pass

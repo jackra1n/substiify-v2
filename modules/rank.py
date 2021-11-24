@@ -1,7 +1,9 @@
-from nextcord.ext import commands
 import random
 
+from nextcord.ext import commands
+
 from helper.LastMessageList import LastMessageList
+
 
 class Rank(commands.Cog):
     def __init__(self, bot):
