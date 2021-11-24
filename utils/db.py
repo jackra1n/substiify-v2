@@ -26,8 +26,8 @@ class command_history(Base):
     channel_id = Column(Integer)
     message_id = Column(Integer)
 
-    def __init__(self, message):
-        self.command = message.content
+    def __init__(self, message, command):
+        self.command = command.qualified_name
         self.date = datetime.now()
         self.user_id = message.author.id
         self.message_id = message.id

@@ -141,3 +141,5 @@ cython_debug/
 # substiify custom
 data/main.sqlite
 data/settings.json
+
+logs/

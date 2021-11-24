@@ -15,6 +15,7 @@ class MainBot(commands.Cog):
         self.bot = bot
         with open(store.settings_path, "r") as settings:
             self.settings = json.load(settings)
+        self.prefix = self.settings["prefix"]
         self.startup_extensions = self.get_modules()
 
     def get_modules(self):
@@ -32,22 +33,14 @@ class MainBot(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.prefix = util.prefixById(self.bot)
         await self.load_extensions()
         logger.info(f'Connected as -> [{self.bot.user}]')
 
     @commands.Cog.listener()
-    async def on_message(self, message):
-        try:
-            if self.bot.is_ready() and message.content.startswith(self.prefix):
-                db.session.add(db.command_history(message))
-                db.session.commit()
-        except AttributeError:
-            self.prefix = util.prefixById(self.bot)
-
-    @commands.Cog.listener()
     async def on_command_completion(self, ctx):
         logger.info(f'[{ctx.command.qualified_name}] executed for -> [{ctx.author}]')
+        db.session.add(db.command_history(ctx.messagem, ctx.command))
+        db.session.commit()
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):

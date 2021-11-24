@@ -12,7 +12,7 @@ class Help(commands.Cog):
         self.bot = bot
         with open(store.settings_path, "r") as settings:
             self.settings = json.load(settings)
-        self.prefix = util.prefixById(self.bot)
+        self.prefix = self.settings['prefix']
 
     @commands.group(invoke_without_command = True)
     async def help(self, ctx):

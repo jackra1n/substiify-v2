@@ -18,13 +18,12 @@ class Owner(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.status_task.start()
-        self.prefix = util.prefixById(self.bot)
         with open(store.settings_path, "r") as settings:
             self.settings = json.load(settings)
+        self.prefix = self.settings["prefix"]
 
     async def set_default_status(self):
         servers = len(self.bot.guilds)
-        self.prefix = util.prefixById(self.bot)
         activityName = f"{self.prefix}help | {servers} servers"
         activity = Activity(type=ActivityType.listening, name=activityName)
         await self.bot.change_presence(activity=activity)
