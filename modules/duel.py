@@ -1,7 +1,7 @@
-from discord.ext.commands.cooldowns import BucketType
-from discord.ext import commands
+from nextcord.ext.commands.cooldowns import BucketType
+from nextcord.ext import commands
 from enum import Enum
-import discord
+import nextcord
 import logging
 import asyncio
 import random
@@ -14,7 +14,7 @@ class Duel(commands.Cog):
 
     @commands.command(brief='Fight someone on this server!')
     @commands.max_concurrency(1, per=BucketType.default, wait=True)
-    async def fight(self, ctx, member: discord.Member):
+    async def fight(self, ctx, member: nextcord.Member):
         duel_authors_id = ctx.author.id
         duel_authors_name = ctx.author.display_name
         challenge_member_name = member.display_name
@@ -37,21 +37,21 @@ class Duel(commands.Cog):
 
         # fighting other users
         else:
-            embed = discord.Embed(
+            embed = nextcord.Embed(
                 title='⚔️ ' + duel_authors_name + ' choose your class.',
                 description=ctx.author.mention +
                     'what class do you want to be? `berserker`, `tank` or `wizard`?',
-                colour=discord.Colour.red()
+                colour=nextcord.Colour.red()
             )
             await ctx.channel.send(embed=embed)
 
             warrior1 = await self.createWarrior(ctx, ctx.author)
 
-            embed = discord.Embed(
+            embed = nextcord.Embed(
                 title='⚔️ ' + duel_authors_name + ' has challenged ' + challenge_member_name + ' to a fight!',
                 description=duel_authors_name + ' chose class ' + warrior1.ClassName + '. ' + member.mention +
                     ', what is your class of choice? `berserker`,`tank`, or `wizard`?\nType your choice out in chat as it is displayed!',
-                colour=discord.Colour.red()
+                colour=nextcord.Colour.red()
             )
             await ctx.channel.send(embed=embed)
 
@@ -81,11 +81,11 @@ class Duel(commands.Cog):
             warrior2.user.mention + ', what would like to do? `punch`,`defend`, or `end`?\nType your choice out in chat as it is displayed!')
 
     async def sendWinnerEmbed(self, winner, ctx):
-        winEmbedMessage = discord.Embed(
+        winEmbedMessage = nextcord.Embed(
             title='STOP! STOP! STOP! THE FIGHT IS OVER!!!',
             description='**' + winner.user.display_name +
                 '** wins with just `' + str(winner.Health) + ' HP` left!',
-            colour=discord.Colour.teal()
+            colour=nextcord.Colour.teal()
         )
         await ctx.channel.send(embed=winEmbedMessage)
 

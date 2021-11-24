@@ -1,11 +1,11 @@
-from discord import Activity, ActivityType
-from discord.ext import commands, tasks
+from nextcord import Activity, ActivityType
+from nextcord.ext import commands, tasks
 
 from utils.store import store
 from utils import util
 from os import walk, path
 
-import discord
+import nextcord
 import subprocess
 import logging
 import json
@@ -36,7 +36,7 @@ class Owner(commands.Cog):
     @commands.command()
     async def shutdown(self, ctx):
         if ctx.author.id == 276462585690193921 or ctx.author.id == 205704051856244736:
-            embed = discord.Embed(description=f'Shutting down...', colour=0xf66045)
+            embed = nextcord.Embed(description=f'Shutting down...', colour=0xf66045)
             await ctx.send(embed=embed)
             await self.bot.close()
 
@@ -95,9 +95,9 @@ class Owner(commands.Cog):
             servers += f'{guild.name}\n'
             user_count += f'{guild.member_count}\n'
             server_ids += f'{guild.id}\n'
-        embed = discord.Embed(
+        embed = nextcord.Embed(
             title='Server Infos',
-            colour=discord.Colour.blurple()
+            colour=nextcord.Colour.blurple()
         )
         embed.add_field(name='Name', value=servers, inline=True)
         embed.add_field(name='User count', value=user_count, inline=True)
@@ -119,10 +119,10 @@ class Owner(commands.Cog):
                 members = ""
                 for member in vc.members:
                     members += f"{member.display_name}\n"
-                embed = discord.Embed(
+                embed = nextcord.Embed(
                     title = vc.name,
                     description = members,
-                    colour = discord.Colour.blurple()
+                    colour = nextcord.Colour.blurple()
                 )
                 await ctx.send(embed=embed)
         await ctx.message.delete()
@@ -137,7 +137,7 @@ class Owner(commands.Cog):
             json.dump(settings_json, settings, indent=2)
         if ctx.channel.permissions_for(ctx.guild.me).manage_messages:
             await ctx.message.delete()
-        embed = discord.Embed(description=f'Version has been set to {version}')
+        embed = nextcord.Embed(description=f'Version has been set to {version}')
         await ctx.send(embed=embed, delete_after=10)
 
     def get_modules(self):

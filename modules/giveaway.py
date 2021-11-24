@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
-from discord.ext import commands, tasks
+from nextcord.ext import commands, tasks
 from asyncio import TimeoutError
 from random import choice, seed
 from time import time
 from utils import db
-import discord
+import nextcord
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ def convert(time):
     return timeVal*time_dict[unit]
 
 def create_giveaway_embed(author, prize):
-    embed = discord.Embed(title=":tada: Giveaway :tada:",
+    embed = nextcord.Embed(title=":tada: Giveaway :tada:",
                     description=f"Win **{prize}**!",
                     colour=0x00FFFF)
     embed.add_field(name="Hosted By:", value=author.mention)
@@ -65,7 +65,7 @@ class Giveaway(commands.Cog):
             return m.author == ctx.author and m.channel == ctx.channel
 
         for i, question in enumerate(questions):
-            embed = discord.Embed(title=f"Question {i}",
+            embed = nextcord.Embed(title=f"Question {i}",
                           description=question)
             await ctx.send(embed=embed)
             try:
@@ -108,7 +108,7 @@ class Giveaway(commands.Cog):
         self.giveaway_task.start()
 
     @giveaway.command()
-    async def reroll(self, ctx, channel: discord.TextChannel, id_: int):
+    async def reroll(self, ctx, channel: nextcord.TextChannel, id_: int):
         if not await self.has_permissions(ctx):
             return
         try:
@@ -130,17 +130,17 @@ class Giveaway(commands.Cog):
         await msg.edit(embed=embed)
 
     @giveaway.command()
-    async def stop(self, ctx, channel: discord.TextChannel, id_: int):
+    async def stop(self, ctx, channel: nextcord.TextChannel, id_: int):
         if not await self.has_permissions(ctx):
             return
         try:
             msg = await channel.fetch_message(id_)
-            newEmbed = discord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!!")
+            newEmbed = nextcord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!!")
             # Set Giveaway cancelled
             self.cancelled = True
             await msg.edit(embed=newEmbed)
         except Exception as e:
-            embed = discord.Embed(title="Failure!", description="Cannot cancel Giveaway")
+            embed = nextcord.Embed(title="Failure!", description="Cannot cancel Giveaway")
             await ctx.send(emebed=embed)
 
     @tasks.loop(seconds=45.0)
@@ -172,7 +172,7 @@ class Giveaway(commands.Cog):
                 db.session.query(db.active_giveaways).filter_by(message_id=message.id).delete()
                 db.session.commit()
 
-    async def get_giveaway_prize(self, ctx, channel: discord.TextChannel, id_: int):
+    async def get_giveaway_prize(self, ctx, channel: nextcord.TextChannel, id_: int):
         try:
             msg = await channel.fetch_message(id_)
         except Exception as e:

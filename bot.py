@@ -1,8 +1,8 @@
-from discord.ext import commands
+from nextcord.ext import commands
 from utils.db import create_database
 from utils.store import store
 from utils import util
-import discord
+import nextcord
 import logging
 import json
 
@@ -14,7 +14,7 @@ with open(store.settings_path, "r") as settings:
     settings = json.load(settings)
 
 prefix = ";"
-bot = commands.Bot(command_prefix=prefix, owner_id=276462585690193921, intents=discord.Intents().all())
+bot = commands.Bot(command_prefix=prefix, owner_id=276462585690193921, intents=nextcord.Intents().all())
 
 bot.remove_command('help')
 bot.load_extension("modules.mainbot")

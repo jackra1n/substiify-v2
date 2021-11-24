@@ -1,12 +1,12 @@
 from random import shuffle
 from helper.ModulesManager import ModulesManager
 from utils.store import store
-from discord.ext import commands
+from nextcord.ext import commands
 from datetime import datetime
 from pytz import timezone
 
 import platform
-import discord
+import nextcord
 import logging
 import psutil
 import json
@@ -21,13 +21,13 @@ class Util(commands.Cog):
 
     @commands.cooldown(6, 5)
     @commands.command(aliases=['avatar'],brief='Enlarge and view your profile picture or another member')
-    async def av(self, ctx, member: discord.Member = None):
+    async def av(self, ctx, member: nextcord.Member = None):
         await ctx.message.delete()
         member = ctx.author if member is None else member
-        embed = discord.Embed(
+        embed = nextcord.Embed(
             title=f"{str(member.display_name)}'s avatar",
             url=member.avatar_url,
-            colour=discord.Colour.light_grey()
+            colour=nextcord.Colour.light_grey()
         )
         embed.set_image(url=member.avatar_url)
         await ctx.channel.send(embed=embed)
@@ -60,7 +60,7 @@ class Util(commands.Cog):
         title = 'Pong!'
         if 'dink' in ctx.message.content.lower():
             title = 'Donk!'
-        embed = discord.Embed(title=f'{title} 🏓', description=f'⏱️Ping:`{round(self.bot.latency*1000)}` ms')
+        embed = nextcord.Embed(title=f'{title} 🏓', description=f'⏱️Ping:`{round(self.bot.latency*1000)}` ms')
         await ctx.message.delete()
         await ctx.send(embed=embed)
 
@@ -68,7 +68,7 @@ class Util(commands.Cog):
     async def specialThanks(self, ctx):
         peeople_who_helped = ["<@205704051856244736>", "<@812414532563501077>", "<@299478604809764876>", "<@291291715598286848>", "<@224618877626089483>", "<@231151428167663616>"]
         shuffle(peeople_who_helped)
-        embed = discord.Embed(
+        embed = nextcord.Embed(
             title="Special thanks for any help to those people",
             description = f" ".join(peeople_who_helped)
         )
@@ -88,14 +88,14 @@ class Util(commands.Cog):
 
         content = f'**Instance uptime:** `{bot_time}`\n' \
             f'**Version:** `{self.settings["version"]}`\n' \
-            f'**Python:** `{platform.python_version()}` | **discord.py:** `{discord.__version__}`\n\n' \
+            f'**Python:** `{platform.python_version()}` | **nextcord.py:** `{nextcord.__version__}`\n\n' \
             f'**CPU:** `{cpu_percent}%` | **RAM:** `{ram_used} ({ram_percent}%)`\n\n' \
             f'**Made by:** <@{self.bot.owner_id}>\n' \
             f'**Source:** [Link](https://github.com/jackra1n/substiify)' 
 
-        embed = discord.Embed(
+        embed = nextcord.Embed(
             title=f'Info about {self.bot.user.display_name}',
-            description=content, colour=discord.Colour(0xc44c27),
+            description=content, colour=nextcord.Colour(0xc44c27),
             timestamp=datetime.now(timezone("Europe/Zurich"))
         )
         embed.set_thumbnail(url=self.bot.user.avatar_url)
@@ -136,9 +136,9 @@ class Util(commands.Cog):
             else:
                 commandStatuses += '`disabled` <:redCross:876177262813278288>\n'
             commandNames += f'{command}\n'
-        embed = discord.Embed(
+        embed = nextcord.Embed(
             title='Module List',
-            colour=discord.Colour.blurple()
+            colour=nextcord.Colour.blurple()
         )
         embed.add_field(name='Command', value=commandNames, inline=True)
         embed.add_field(name='Status', value=commandStatuses, inline=True)

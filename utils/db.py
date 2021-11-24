@@ -6,7 +6,7 @@ from datetime import datetime
 from utils.store import store
 
 import logging
-import discord
+import nextcord
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class command_history(Base):
         self.message_id = message.id
         self.server_id = None
         self.channel_id = None
-        if isinstance(message.channel, discord.channel.TextChannel):
+        if isinstance(message.channel, nextcord.channel.TextChannel):
             self.server_id = message.guild.id
             self.channel_id = message.channel.id
 

@@ -1,9 +1,9 @@
-from discord.ext.commands import BucketType
-from discord.ext import commands
+from nextcord.ext.commands import BucketType
+from nextcord.ext import commands
 
 from utils.store import store
 
-import discord
+import nextcord
 import logging
 import json
 
@@ -20,18 +20,18 @@ class Submit(commands.Cog):
             self.settings = json.load(settings)
 
     async def submission_error(self, ctx, sentence):
-        embed = discord.Embed(
+        embed = nextcord.Embed(
             title='Submission error',
             description=f'Your message is too short: {len(sentence)} characters',
-            colour=discord.Colour.red()
+            colour=nextcord.Colour.red()
         )
         await ctx.send(embed=embed, delete_after=15)
 
     async def send_submission(self, ctx, channel, sentence, submission_type):
-        embed = discord.Embed(
+        embed = nextcord.Embed(
             title=f'New {submission_type} submission',
             description=f'```{sentence}```\nSubmitted by: {ctx.author.mention}',
-            colour=discord.Colour.red()
+            colour=nextcord.Colour.red()
         )
         embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar_url)
         message = await channel.send(embed=embed)
@@ -50,16 +50,16 @@ class Submit(commands.Cog):
         message = await channel.fetch_message(payload.message_id)
         embed = message.embeds[0]
         user = await self.bot.fetch_user(int(embed.footer.text))
-        new_embed = discord.Embed(
+        new_embed = nextcord.Embed(
             title=f'{submission_type} submission',
             description=embed.description,
-            colour=discord.Colour.red()
+            colour=nextcord.Colour.red()
         )
         await user.send(content=f'Hello {user.name}!\nYour {self.bot.user.mention} {submission_type} submission has been {action}.\n', embed=new_embed)
         await message.delete()
 
     @commands.Cog.listener()
-    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+    async def on_raw_reaction_add(self, payload: nextcord.RawReactionActionEvent):
         if payload.guild_id is None or payload.channel_id is None or payload.member is None or payload.message_id is None:
             return
         # return if its the bot itself
@@ -103,10 +103,10 @@ class Submit(commands.Cog):
     @bug.error
     async def command_error(self, ctx, error):
         if isinstance(error, commands.CommandOnCooldown):
-            em = discord.Embed(
+            em = nextcord.Embed(
                 title=f"Slow it down!",
                 description=f"Try again in {error.retry_after:.2f}s.",
-                color=discord.Colour.red())
+                color=nextcord.Colour.red())
             await ctx.send(embed=em, delete_after=30)
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.channel.send('Missing the bug description', delete_after=30)
@@ -114,10 +114,10 @@ class Submit(commands.Cog):
     @suggestion.error
     async def command_error(self, ctx, error):
         if isinstance(error, commands.CommandOnCooldown):
-            em = discord.Embed(
+            em = nextcord.Embed(
                 title=f"Slow it down!",
                 description=f"Try again in {error.retry_after:.2f}s.",
-                color=discord.Colour.red())
+                color=nextcord.Colour.red())
             await ctx.send(embed=em, delete_after=30)
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.channel.send('Missing the suggestion description', delete_after=30)

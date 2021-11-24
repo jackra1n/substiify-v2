@@ -1,7 +1,7 @@
 #install with "pip3 install -r requirements.txt"
 
 numpy
-discord.py
+nextcord
 psutil
 bs4
 lxml
