@@ -27,10 +27,10 @@ class Util(commands.Cog):
         member = ctx.author if member is None else member
         embed = nextcord.Embed(
             title=f"{str(member.display_name)}'s avatar",
-            url=member.avatar_url,
+            url=member.avatar.url,
             colour=nextcord.Colour.light_grey()
         )
-        embed.set_image(url=member.avatar_url)
+        embed.set_image(url=member.avatar.url)
         await ctx.channel.send(embed=embed)
 
     @commands.group(brief='Clears messages within the current channel.', invoke_without_command = True)
@@ -78,7 +78,6 @@ class Util(commands.Cog):
 
     @commands.command()
     async def info(self, ctx):
-        await ctx.message.delete()
         bot_time = time_up((datetime.now() - store.script_start).total_seconds()) #uptime of the bot
         cpu_percent = psutil.cpu_percent()
         ram = psutil.virtual_memory()
@@ -89,19 +88,19 @@ class Util(commands.Cog):
 
         content = f'**Instance uptime:** `{bot_time}`\n' \
             f'**Version:** `{self.settings["version"]}`\n' \
-            f'**Python:** `{platform.python_version()}` | **nextcord.py:** `{nextcord.__version__}`\n\n' \
+            f'**Python:** `{platform.python_version()}` | **{nextcord.__name__}:** `{nextcord.__version__}`\n\n' \
             f'**CPU:** `{cpu_percent}%` | **RAM:** `{ram_used} ({ram_percent}%)`\n\n' \
-            f'**Made by:** <@{self.bot.owner_id}>\n' \
-            f'**Source:** [Link](https://github.com/jackra1n/substiify)' 
+            f'**Made by:** <@{self.bot.owner_id}>' 
 
         embed = nextcord.Embed(
             title=f'Info about {self.bot.user.display_name}',
             description=content, colour=nextcord.Colour(0xc44c27),
             timestamp=datetime.now(timezone("Europe/Zurich"))
         )
-        embed.set_thumbnail(url=self.bot.user.avatar_url)
+        embed.set_thumbnail(url=self.bot.user.avatar.url)
         embed.set_footer(text=f"Requested by by {ctx.author.display_name}")
         await ctx.channel.send(embed=embed)
+        await ctx.message.delete()
 
     @commands.group()
     async def module(self, ctx):

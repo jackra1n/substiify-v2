@@ -228,7 +228,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             colour=ctx.author.colour,
             timestamp=dt.datetime.utcnow()
         )
-        embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.avatar_url)
+        embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.avatar.url)
         embed.add_field(
             name="Currently playing",
             value=getattr(queue.current_track, "title", "No tracks currently playing."),
@@ -264,7 +264,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             timestamp=dt.datetime.utcnow()
         )
         embed.set_author(name="Query Results")
-        embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.avatar_url)
+        embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.avatar.url)
         embed.add_field(name="Duration", value=f"{track.duration / 1000}s", inline=False)
         embed.add_field(name="URL", value=f"[Click here]({track.uri})", inline=False)
 
@@ -348,7 +348,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             colour=ctx.author.colour,
             timestamp=dt.datetime.utcnow(),
         )
-        embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.avatar_url)
+        embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.avatar.url)
         embed.add_field(name="Track title", value=player.queue.current_track.title, inline=False)
 
         position = divmod(player.position, 60000)

@@ -33,7 +33,7 @@ class Submit(commands.Cog):
             description=f'```{sentence}```\nSubmitted by: {ctx.author.mention}',
             colour=nextcord.Colour.red()
         )
-        embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar_url)
+        embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar.url)
         message = await channel.send(embed=embed)
         await ctx.send(f'Thank you for submitting the {submission_type}!', delete_after=15)
         await message.add_reaction(f'<{self.accept_emoji}>')
