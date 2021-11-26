@@ -8,6 +8,7 @@ from random import shuffle
 import nextcord
 import psutil
 from nextcord.ext import commands
+from nextcord import MessageType
 from pytz import timezone
 from sqlalchemy import func
 
@@ -36,9 +37,15 @@ class Util(commands.Cog):
         embed.set_image(url=member.avatar.url)
         await ctx.channel.send(embed=embed)
 
-    @commands.group(brief='Clears messages within the current channel.', invoke_without_command = True)
-    async def clear(self, ctx, amount):
+    @commands.group(brief='Clears messages within the current channel.', aliases=['c'], invoke_without_command = True)
+    async def clear(self, ctx, amount = None):
         if not await has_permissions_to_delete(ctx):
+            return
+        if ctx.message.type == MessageType.reply:
+            message = ctx.message.reference.resolved
+            if message:
+                await message.delete()
+                await ctx.message.delete()
             return
         amount = int(amount)
         if amount <= 100:
