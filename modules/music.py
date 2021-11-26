@@ -92,6 +92,9 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
     @commands.command(name="stop", aliases=["leave"])
     async def disconnect_command(self, ctx):
+        if ctx.voice_client.is_playing() and ctx.voice_client.channel != ctx.author.voice.channel:
+            await ctx.send("You are not in the voice channel.", delete_after = 30)
+            return
         player = self.get_player(ctx)
         await player.teardown()
         await ctx.send("Disconnected.", delete_after = 30)
@@ -99,6 +102,16 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
 
     @commands.command(name="play", aliases=["p"])
     async def play_command(self, ctx, *, query: t.Optional[str]):
+        # if user is not connected to a voice channel return
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send("You must be connected to a voice channel.", delete_after = 30)
+            return
+        
+        # if bot is playing and user is not in the same voice channel return
+        if ctx.voice_client.is_playing() and ctx.voice_client.channel != ctx.author.voice.channel:
+            await ctx.send("You are not in the same voice channel as the bot.", delete_after = 30)
+            return
+
         player = self.get_player(ctx)
 
         if not player.is_connected:

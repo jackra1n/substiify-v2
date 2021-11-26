@@ -1,6 +1,7 @@
 import json
 import logging
 import platform
+import subprocess
 from datetime import datetime
 from random import shuffle
 
@@ -11,7 +12,8 @@ from pytz import timezone
 from sqlalchemy import func
 
 from helper.ModulesManager import ModulesManager
-from utils.store import store, db
+from utils.store import store
+from utils import db
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +82,7 @@ class Util(commands.Cog):
     @commands.command()
     async def info(self, ctx):
         bot_time = time_up((datetime.now() - store.script_start).total_seconds()) #uptime of the bot
+        last_commit_date = subprocess.check_output(['git', 'log', '-1', '--date=format:"%Y/%m/%d"', '--format=%ad']).decode('utf-8').strip().strip('"')
         cpu_percent = psutil.cpu_percent()
         ram = psutil.virtual_memory()
         ram_used = format_bytes((ram.total - ram.available))
@@ -88,7 +91,7 @@ class Util(commands.Cog):
             self.settings = json.load(settings)
 
         content = f'**Instance uptime:** `{bot_time}`\n' \
-            f'**Version:** `{self.settings["version"]}`\n' \
+            f'**Version:** `{self.settings["version"]}` | **Updated:** `{last_commit_date}`\n' \
             f'**Python:** `{platform.python_version()}` | **{nextcord.__name__}:** `{nextcord.__version__}`\n\n' \
             f'**CPU:** `{cpu_percent}%` | **RAM:** `{ram_used} ({ram_percent}%)`\n\n' \
             f'**Made by:** <@{self.bot.owner_id}>' 

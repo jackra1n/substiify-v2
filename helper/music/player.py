@@ -31,7 +31,7 @@ class Player(wavelink.Player):
         if (channel := getattr(ctx.author.voice, "channel", channel)) is None:
             raise NoVoiceChannel
 
-        await super().set_volume(50)
+        await super().set_volume(80)
         await super().connect(channel.id)
         return channel
 
