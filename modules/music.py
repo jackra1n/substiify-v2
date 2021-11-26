@@ -108,7 +108,7 @@ class Music(commands.Cog, wavelink.WavelinkMixin):
             return
         
         # if bot is playing and user is not in the same voice channel return
-        if ctx.voice_client.is_playing() and ctx.voice_client.channel != ctx.author.voice.channel:
+        if ctx.voice_client and ctx.voice_client.channel != ctx.author.voice.channel:
             await ctx.send("You are not in the same voice channel as the bot.", delete_after = 30)
             return
 
