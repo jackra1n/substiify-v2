@@ -8,9 +8,10 @@ import nextcord
 import psutil
 from nextcord.ext import commands
 from pytz import timezone
+from sqlalchemy import func
 
 from helper.ModulesManager import ModulesManager
-from utils.store import store
+from utils.store import store, db
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,19 @@ class Util(commands.Cog):
         embed.add_field(name='Command', value=commandNames, inline=True)
         embed.add_field(name='Status', value=commandStatuses, inline=True)
         await ctx.send(embed=embed)
+
+    @commands.command(name="usage")
+    async def usage(self, ctx):
+        commands_used = ""
+        commands_count = ""
+        commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
+        embed = nextcord.Embed(title="Most used commands", color=0x00ff00)
+        for row in commands_used_query:
+            commands_used += f"{row[0]}\n"
+            commands_count += f"{row[1]}\n"
+        embed.add_field(name="Command", value=commands_used, inline=True)
+        embed.add_field(name="Count", value=commands_count, inline=True)
+        await ctx.send(embed=embed, delete_after=180)
 
 def setup(bot):
     bot.add_cog(Util(bot))

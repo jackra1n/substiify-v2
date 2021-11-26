@@ -39,7 +39,8 @@ class MainBot(commands.Cog):
     @commands.Cog.listener()
     async def on_command_completion(self, ctx):
         logger.info(f'[{ctx.command.qualified_name}] executed for -> [{ctx.author}]')
-        db.session.add(db.command_history(ctx.message, ctx.command))
+        command = ctx.command.root_parent if ctx.command.root_parent else ctx.command
+        db.session.add(db.command_history(command, ctx.message))
         db.session.commit()
 
     @commands.Cog.listener()

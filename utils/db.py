@@ -2,8 +2,7 @@ import logging
 from datetime import datetime
 
 import nextcord
-from sqlalchemy import (Column, DateTime, Integer, MetaData, String, Table,
-                        create_engine)
+from sqlalchemy import (Column, DateTime, Integer, String, create_engine)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -27,7 +26,7 @@ class command_history(Base):
     channel_id = Column(Integer)
     message_id = Column(Integer)
 
-    def __init__(self, message, command):
+    def __init__(self, command, message):
         self.command = command.qualified_name
         self.date = datetime.now()
         self.user_id = message.author.id
