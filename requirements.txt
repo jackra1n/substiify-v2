@@ -8,4 +8,4 @@ lxml
 requests
 pytz
 sqlalchemy
-wavelink
+lavalink
