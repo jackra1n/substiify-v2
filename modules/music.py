@@ -103,6 +103,7 @@ class Music(commands.Cog):
 
         if not player.is_playing:
             await player.play()
+        await ctx.message.delete()
 
     @commands.command(aliases=['dc'])
     async def disconnect(self, ctx):
