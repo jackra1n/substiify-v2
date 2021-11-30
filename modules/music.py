@@ -1,5 +1,6 @@
 
 import re
+import datetime
 
 import lavalink
 import nextcord
@@ -105,7 +106,7 @@ class Music(commands.Cog):
             await player.play()
         await ctx.message.delete()
 
-    @commands.command(aliases=['dc'])
+    @commands.command(aliases=['leave', 'stop'])
     async def disconnect(self, ctx):
         """ Disconnects the player from the voice channel and clears its queue. """
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
@@ -120,6 +121,37 @@ class Music(commands.Cog):
         await player.stop()
         await ctx.voice_client.disconnect(force=True)
         await ctx.send('*⃣ | Disconnected.')
+        await ctx.message.delete()
+
+    @commands.command()
+    async def skip(self, ctx):
+        """ Skips the current track. """
+        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+
+        if not player.is_playing:
+            return await ctx.send('Not playing.')
+
+        await player.skip()
+        await ctx.send('*⃣ | Skipped.')
+        await ctx.message.delete()
+
+    @commands.command(aliases=['np', 'now'])
+    async def now_playing(self, ctx):
+        """ Shows info about the currently playing track. """
+        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+
+        if not player.current:
+            return await ctx.send('Nothing playing.')
+
+        embed = nextcord.Embed(color=nextcord.Color.blurple())
+        embed.title = 'Now Playing'
+        embed.description = f'[{player.current.title}]({player.current.uri})'
+        timestamp = str(datetime.timedelta(milliseconds=player.current.duration)).split(".")[0]
+        position = str(datetime.timedelta(milliseconds=player.position)).split(".")[0]
+        embed.add_field(name='Duration', value=f"{position}/{timestamp}")
+        embed.add_field(name='Requested By', value=f"<@{player.current.requester}>")
+        await ctx.send(embed=embed)
+        await ctx.message.delete()
 
 
 def setup(bot):

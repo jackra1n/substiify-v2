@@ -160,7 +160,7 @@ class Util(commands.Cog):
         commands_used = ""
         commands_count = ""
         commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
-        embed = nextcord.Embed(title="Most used commands", color=0x00ff00)
+        embed = nextcord.Embed(title=f"Top used commands on: **{ctx.guild.name}**", color=0x00ff00)
         for row in commands_used_query:
             commands_used += f"{row[0]}\n"
             commands_count += f"{row[1]}\n"
