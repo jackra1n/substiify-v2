@@ -153,6 +153,17 @@ class Music(commands.Cog):
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
+    @commands.command()
+    async def shuffle(self, ctx):
+        """ Shuffles the queue. """
+        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+
+        if not player.is_playing:
+            return await ctx.send('Nothing playing.')
+
+        player.shuffle = not player.shuffle
+        await ctx.send('*⃣ | Shuffle: {}'.format(player.shuffle))
+        await ctx.message.delete()
 
 def setup(bot):
     bot.add_cog(Music(bot))
