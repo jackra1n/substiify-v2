@@ -1,6 +1,7 @@
 
 import re
 import datetime
+import random
 
 import lavalink
 import nextcord
@@ -40,6 +41,8 @@ class Music(commands.Cog):
 
     async def ensure_voice(self, ctx):
         """ This check ensures that the bot and command author are in the same voicechannel. """
+        if ctx.command.name in ('players',):
+            return True
         player = self.bot.lavalink.player_manager.create(ctx.guild.id, endpoint=str(ctx.guild.region))
         should_connect = ctx.command.name in ('play',)
 
@@ -143,13 +146,7 @@ class Music(commands.Cog):
         if not player.current:
             return await ctx.send('Nothing playing.')
 
-        embed = nextcord.Embed(color=nextcord.Color.blurple())
-        embed.title = 'Now Playing'
-        embed.description = f'[{player.current.title}]({player.current.uri})'
-        timestamp = str(datetime.timedelta(milliseconds=player.current.duration)).split(".")[0]
-        position = str(datetime.timedelta(milliseconds=player.position)).split(".")[0]
-        embed.add_field(name='Duration', value=f"{position}/{timestamp}")
-        embed.add_field(name='Requested By', value=f"<@{player.current.requester}>")
+        embed = self._create_current_song_embed(player)
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
@@ -158,12 +155,93 @@ class Music(commands.Cog):
         """ Shuffles the queue. """
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 
-        if not player.is_playing:
-            return await ctx.send('Nothing playing.')
+        if len(player.queue) < 2:
+            return await ctx.send('Not enough tracks to shuffle.')
 
-        player.shuffle = not player.shuffle
-        await ctx.send('*⃣ | Shuffle: {}'.format(player.shuffle))
+        random.shuffle(player.queue)
+        await ctx.send('*⃣ | Queue shuffled.')
         await ctx.message.delete()
+
+    @commands.command(aliases=['q'])
+    async def queue(self, ctx):
+        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+
+        if len(player.queue) == 0:
+            return await ctx.send('Nothing queued.')
+        elif len(player.queue) == 1:
+            embed = self._create_current_song_embed(player)
+            return await ctx.send(embed=embed)
+        await ctx.message.delete()
+
+        current_page = 0
+        queue_pages = self._create_queue_embed_list(ctx, player)
+        queue_message = await ctx.send(embed=queue_pages[current_page], delete_after=150)
+
+        await queue_message.add_reaction("⏮")
+        await queue_message.add_reaction("❌")
+        await queue_message.add_reaction("⏭")
+
+        def check(reaction, user):
+            return user == ctx.author and str(reaction.emoji) in ("⏮", "⏭", "❌") and reaction.message.id == queue_message.id
+
+        while True:
+            reaction, user = await self.bot.wait_for("reaction_add", timeout=150.0, check=check)
+            if str(reaction.emoji) == "❌":
+                await queue_message.delete()
+                break
+            elif str(reaction.emoji) == "⏮":
+                if current_page != 0:
+                    current_page -= 1
+            elif str(reaction.emoji) == "⏭":
+                if current_page != len(queue_pages) - 1:
+                    current_page += 1
+            await queue_message.remove_reaction(reaction.emoji, user)
+            await queue_message.edit(embed=queue_pages[current_page])
+
+    @commands.command()
+    @commands.is_owner()
+    async def players(self, ctx):
+        """ Shows all active players. """
+        players = self.bot.lavalink.player_manager.find_all()
+        players = [player for player in players if player.is_connected]
+        if not players:
+            await ctx.message.delete()
+            return await ctx.send('No players found.', delete_after=15)
+
+        # get server names by id
+        server_names = []
+        for player in players:
+            server = await self.bot.fetch_guild(player.guild_id)
+            if server:
+                server_names.append(server.name)
+
+        embed = nextcord.Embed(color=nextcord.Color.blurple())
+        embed.title = 'Active players'
+        embed.description = '\n'.join(f'{server_name}' for server_name in server_names)
+        await ctx.send(embed=embed, delete_after=60)
+        await ctx.message.delete()
+
+    
+    def _create_current_song_embed(self, player):
+        embed = nextcord.Embed(color=nextcord.Color.blurple())
+        embed.title = 'Now Playing'
+        embed.description = f'[{player.current.title}]({player.current.uri})'
+        timestamp = str(datetime.timedelta(milliseconds=player.current.duration)).split(".")[0]
+        position = str(datetime.timedelta(milliseconds=player.position)).split(".")[0]
+        embed.add_field(name='Duration', value=f"{position}/{timestamp}")
+        embed.add_field(name='Requested By', value=f"<@{player.current.requester}>")
+        return embed
+
+    def _create_queue_embed_list(self, ctx, player):
+        pages = []
+        for i in range(0, len(player.queue), 10):
+            embed = nextcord.Embed(colour=ctx.author.colour, timestamp=datetime.datetime.utcnow())
+            embed.title = f"Queue ({len(player.queue)})"
+            embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.avatar.url)
+            upcoming = '\n'.join([f'`{index + 1}.` [{track.title}]({track.uri})' for index, track in enumerate(player.queue[i:i + 10], start=i)])
+            embed.add_field(name="Next up", value=upcoming, inline=False)
+            pages.append(embed)
+        return pages
 
 def setup(bot):
     bot.add_cog(Music(bot))
