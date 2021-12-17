@@ -86,12 +86,10 @@ class Owner(commands.Cog):
         servers = ''
         user_count = ''
         owner = ''
-        server_ids = ''
         for guild in self.bot.guilds:
             servers += f'{guild.name}\n'
             user_count += f'{guild.member_count}\n'
-            owner += f'{guild.owner.mention}\n'
-            server_ids += f'{guild.id}\n'
+            owner += f'{guild.owner.mention} {guild.owner}\n'
         embed = nextcord.Embed(
             title='Server Infos',
             colour=nextcord.Colour.blurple()
@@ -99,8 +97,7 @@ class Owner(commands.Cog):
         embed.add_field(name='Name', value=servers, inline=True)
         embed.add_field(name='User count', value=user_count, inline=True)
         embed.add_field(name='Owner', value=owner, inline=True)
-        embed.add_field(name='Id', value=server_ids, inline=True)
-        await ctx.send(embed=embed, delete_after=60)
+        await ctx.send(embed=embed, delete_after=120)
 
     @commands.is_owner()
     @commands.command()
