@@ -95,9 +95,24 @@ class Owner(commands.Cog):
             colour=nextcord.Colour.blurple()
         )
         embed.add_field(name='Name', value=servers, inline=True)
-        embed.add_field(name='User count', value=user_count, inline=True)
+        embed.add_field(name='Cnt', value=user_count, inline=True)
         embed.add_field(name='Owner', value=owner, inline=True)
         await ctx.send(embed=embed, delete_after=120)
+
+    @commands.is_owner()
+    @server.command(aliases=['channels'])
+    async def channel_list(self, ctx, guild_id: int):
+        guild = self.bot.get_guild(guild_id)
+        channels = ''
+        for channel in guild.channels:
+            channels += f'{channel.name}\n'
+        embed = nextcord.Embed(
+            title='Channel Infos',
+            colour=nextcord.Colour.blurple()
+        )
+        embed.add_field(name='Name', value=channels, inline=True)
+        await ctx.send(embed=embed, delete_after=120)
+
 
     @commands.is_owner()
     @commands.command()

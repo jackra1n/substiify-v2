@@ -44,7 +44,7 @@ class Music(commands.Cog):
         if ctx.command.name in ('players',):
             return True
         player = self.bot.lavalink.player_manager.create(ctx.guild.id, endpoint=str(ctx.guild.region))
-        should_connect = ctx.command.name in ('play',)
+        should_connect = ctx.command.name in ('play','queue','now_playing',)
 
         if not ctx.author.voice or not ctx.author.voice.channel:
             raise commands.CommandInvokeError('Join a voicechannel first.')
@@ -197,6 +197,18 @@ class Music(commands.Cog):
                     current_page += 1
             await queue_message.remove_reaction(reaction.emoji, user)
             await queue_message.edit(embed=queue_pages[current_page])
+
+    @commands.command()
+    async def repeat(self, ctx):
+        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+
+        if not player.current:
+            return await ctx.send('Nothing playing.')
+
+        player.repeat = not player.repeat
+        await ctx.send(f'*⃣ | Repeat is now {player.repeat}.')
+        await ctx.message.delete()
+
 
     @commands.command()
     @commands.is_owner()
