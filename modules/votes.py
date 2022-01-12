@@ -15,7 +15,7 @@ class Votes(commands.Cog):
         self.upvote_emote = ':this:877668616810692608'
         self.downvote_emote = ':that:877668628261126144'
         self.vote_channels = np.array(self.load_vote_channels())
-        with open(store.settings_path, "r") as settings:
+        with open(store.SETTINGS_PATH, "r") as settings:
             self.settings = json.load(settings)
 
     def load_vote_channels(self) -> list:

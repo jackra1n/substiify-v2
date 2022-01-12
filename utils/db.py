@@ -10,7 +10,7 @@ from utils import store
 
 logger = logging.getLogger(__name__)
 
-engine = create_engine(f'sqlite:///{store.db_path}')
+engine = create_engine(f'sqlite:///{store.DB_PATH}')
 session = sessionmaker(bind=engine)()
 
 Base = declarative_base()

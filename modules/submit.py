@@ -16,7 +16,7 @@ class Submit(commands.Cog):
         self.suggestion_channel = bot.get_channel(876413286978031676)
         self.accept_emoji = ':greenTick:876177251832590348'
         self.deny_emoji = ':redCross:876177262813278288'
-        with open(store.settings_path, "r") as settings:
+        with open(store.SETTINGS_PATH, "r") as settings:
             self.settings = json.load(settings)
 
     async def submission_error(self, ctx, sentence):

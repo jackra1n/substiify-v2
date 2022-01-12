@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class Util(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        with open(store.settings_path, "r") as settings:
+        with open(store.SETTINGS_PATH, "r") as settings:
             self.settings = json.load(settings)
 
     @commands.cooldown(6, 5)
@@ -87,13 +87,13 @@ class Util(commands.Cog):
 
     @commands.command()
     async def info(self, ctx):
-        bot_time = time_up((datetime.now() - store.script_start).total_seconds()) #uptime of the bot
+        bot_time = time_up((datetime.now() - store.SCRIPT_START).total_seconds()) #uptime of the bot
         last_commit_date = subprocess.check_output(['git', 'log', '-1', '--date=format:"%Y/%m/%d"', '--format=%ad']).decode('utf-8').strip().strip('"')
         cpu_percent = psutil.cpu_percent()
         ram = psutil.virtual_memory()
         ram_used = format_bytes((ram.total - ram.available))
         ram_percent = psutil.virtual_memory().percent
-        with open(store.settings_path, "r") as settings:
+        with open(store.SETTINGS_PATH, "r") as settings:
             self.settings = json.load(settings)
 
         content = f'**Instance uptime:** `{bot_time}`\n' \

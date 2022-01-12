@@ -54,14 +54,14 @@ def prepareFiles():
     logger = logging.getLogger('util.prepare_files')
 
     # Create 'settings.json' if it doesn't exist
-    if not Path(store.settings_path).is_file():
-        logger.info(f'Creating {store.settings_path}')
-        with open(store.settings_path, 'a') as f:
+    if not Path(store.SETTINGS_PATH).is_file():
+        logger.info(f'Creating {store.SETTINGS_PATH}')
+        with open(store.SETTINGS_PATH, 'a') as f:
             json.dump(default_settings, f, indent=2)
 
     # Create database file if it doesn't exist
-    if not Path(store.db_path).is_file():
-        logger.info(f'Creating {store.db_path}')
-        open(store.db_path, 'a')
+    if not Path(store.DB_PATH).is_file():
+        logger.info(f'Creating {store.DB_PATH}')
+        open(store.DB_PATH, 'a')
 
     logger.info(f'All files ready')

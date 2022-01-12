@@ -15,7 +15,7 @@ class Owner(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.status_task.start()
-        with open(store.settings_path, "r") as settings:
+        with open(store.SETTINGS_PATH, "r") as settings:
             self.settings = json.load(settings)
         self.prefix = self.settings["prefix"]
 
@@ -140,10 +140,10 @@ class Owner(commands.Cog):
     @commands.command()
     @commands.is_owner()
     async def version(self, ctx, version):
-        with open(store.settings_path, "r") as settings:
+        with open(store.SETTINGS_PATH, "r") as settings:
             settings_json = json.load(settings)
         settings_json['version'] = version
-        with open(store.settings_path, "w") as settings:
+        with open(store.SETTINGS_PATH, "w") as settings:
             json.dump(settings_json, settings, indent=2)
         if ctx.channel.permissions_for(ctx.guild.me).manage_messages:
             await ctx.message.delete()

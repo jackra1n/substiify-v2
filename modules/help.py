@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class Help(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        with open(store.settings_path, "r") as settings:
+        with open(store.SETTINGS_PATH, "r") as settings:
             self.settings = json.load(settings)
         self.prefix = self.settings['prefix']
 
