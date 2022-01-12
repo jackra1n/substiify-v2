@@ -5,7 +5,7 @@ import nextcord
 from nextcord.ext import commands
 from nextcord.ext.commands import BucketType
 
-from utils.store import store
+from utils import store
 
 logger = logging.getLogger(__name__)
 

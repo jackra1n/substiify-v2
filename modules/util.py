@@ -13,8 +13,7 @@ from pytz import timezone
 from sqlalchemy import func
 
 from helper.ModulesManager import ModulesManager
-from utils import db
-from utils.store import store
+from utils import db, store
 
 logger = logging.getLogger(__name__)
 

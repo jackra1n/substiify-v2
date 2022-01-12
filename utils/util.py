@@ -4,7 +4,7 @@ from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 from helper.CustomLogFormatter import CustomLogFormatter
-from utils.store import store
+from utils import store
 
 ignore_logs = [
     'Got a request',

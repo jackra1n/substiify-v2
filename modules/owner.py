@@ -7,7 +7,7 @@ import nextcord
 from nextcord import Activity, ActivityType
 from nextcord.ext import commands, tasks
 
-from utils.store import store
+from utils import store
 
 logger = logging.getLogger(__name__)
 

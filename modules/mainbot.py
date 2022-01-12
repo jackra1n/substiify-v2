@@ -5,8 +5,7 @@ from os import path, walk
 from nextcord.ext import commands
 
 from helper.ModulesManager import ModuleDisabledException
-from utils import db
-from utils.store import store
+from utils import db, store
 
 logger = logging.getLogger(__name__)
 

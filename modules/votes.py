@@ -5,8 +5,7 @@ import nextcord
 import numpy as np
 from nextcord.ext import commands
 
-from utils import db
-from utils.store import store
+from utils import db, store
 
 logger = logging.getLogger(__name__)
 
