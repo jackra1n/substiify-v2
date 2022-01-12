@@ -81,8 +81,8 @@ class Music(commands.Cog):
             player = self.bot.lavalink.player_manager.get(member.guild.id)
             player.queue.clear()
             await player.stop()
-            await before.channel.disconnect(force=True)
-
+            guild = self.bot.get_guild(member.guild.id)
+            await guild.voice_client.disconnect(force=True)
 
     @commands.command(aliases=['p'])
     async def play(self, ctx, *, query: str):
