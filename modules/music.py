@@ -213,7 +213,7 @@ class Music(commands.Cog):
             await queue_message.edit(embed=queue_pages[current_page])
 
     @queue.command(aliases=['clear'])
-    async def clear(self, ctx):
+    async def queue_clear(self, ctx):
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
         player.queue.clear()
         await ctx.send('*⃣ | Queue cleared.')
