@@ -4,7 +4,7 @@ import logging
 import nextcord
 from nextcord.ext import commands
 
-from utils.store import store
+from utils import store
 
 logger = logging.getLogger(__name__)
 
