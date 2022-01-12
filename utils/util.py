@@ -42,7 +42,7 @@ def prepareFiles():
     dt_fmt = '%Y-%m-%d %H:%M:%S'
     fileFormatter = logging.Formatter('[{asctime}] [{levelname:<7}] {name}: {message}', dt_fmt, style='{')
 
-    fileHandler = TimedRotatingFileHandler(f'{store.logs_path}/substiify_', when="midnight", interval=1, encoding='utf-8')
+    fileHandler = TimedRotatingFileHandler(f'{store.LOGS_PATH}/substiify_', when="midnight", interval=1, encoding='utf-8')
     fileHandler.suffix = "%Y-%m-%d.log"
     fileHandler.setFormatter(fileFormatter)
     rootLogger.addHandler(fileHandler)
