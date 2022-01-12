@@ -70,6 +70,20 @@ class Music(commands.Cog):
             guild = self.bot.get_guild(guild_id)
             await guild.voice_client.disconnect(force=True)
 
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        if member.bot:
+            return
+        if not self.bot.user in before.channel.members:
+            return
+        users = [user for user in before.channel.members if not user.bot]
+        if len(users) == 0:
+            player = self.bot.lavalink.player_manager.get(member.guild.id)
+            player.queue.clear()
+            await player.stop()
+            await before.channel.disconnect(force=True)
+
+
     @commands.command(aliases=['p'])
     async def play(self, ctx, *, query: str):
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
@@ -162,7 +176,7 @@ class Music(commands.Cog):
         await ctx.send('*⃣ | Queue shuffled.')
         await ctx.message.delete()
 
-    @commands.command(aliases=['q'])
+    @commands.group(aliases=['q'], invoke_without_command=True)
     async def queue(self, ctx):
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 
@@ -197,6 +211,12 @@ class Music(commands.Cog):
                     current_page += 1
             await queue_message.remove_reaction(reaction.emoji, user)
             await queue_message.edit(embed=queue_pages[current_page])
+
+    @queue.command(aliases=['clear'])
+    async def clear(self, ctx):
+        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+        player.queue.clear()
+        await ctx.send('*⃣ | Queue cleared.')
 
     @commands.command()
     async def repeat(self, ctx):

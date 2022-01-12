@@ -154,21 +154,37 @@ class Util(commands.Cog):
         embed.add_field(name='Status', value=commandStatuses, inline=True)
         await ctx.send(embed=embed)
 
-    @commands.command(name="usage")
+    @commands.group(name="usage", invoke_without_command=True)
     async def usage(self, ctx):
-        commands_used = ""
-        commands_count = ""
         commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
-        embed = nextcord.Embed(title=f"Top used commands on: **{ctx.guild.name}**", color=0x00ff00)
-        for row in commands_used_query:
-            commands_used += f"{row[0]}\n"
-            commands_count += f"{row[1]}\n"
-        embed.add_field(name="Command", value=commands_used, inline=True)
-        embed.add_field(name="Count", value=commands_count, inline=True)
+        embed = create_command_usage_embed(commands_used_query, f"Top used commands on: **{ctx.guild.name}**")
+        await ctx.send(embed=embed, delete_after=180)
+
+    @usage.command(name="all")
+    async def usage_all(self, ctx): 
+        commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
+        embed = create_command_usage_embed(commands_used_query, f"Top total used commands")
+        await ctx.send(embed=embed, delete_after=180)
+
+    @usage.command(name="servers")
+    async def usage_servers(self, ctx):
+        commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.server_id).order_by(func.count('*').desc()).all()
+        embed = create_command_usage_embed(commands_used_query, f"Top servers used commands")
         await ctx.send(embed=embed, delete_after=180)
 
 def setup(bot):
     bot.add_cog(Util(bot))
+
+def create_command_usage_embed(commands_used_query, embed_title):
+    commands_used = ""
+    commands_count = ""
+    for row in commands_used_query:
+        commands_used += f"{row[0]}\n"
+        commands_count += f"{row[1]}\n"
+    embed = nextcord.Embed(title=embed_title, color=0x00ff00)
+    embed.add_field(name="Command", value=commands_used, inline=True)
+    embed.add_field(name="Count", value=commands_count, inline=True)
+    return embed
 
 def time_up(t):
     if t <= 60:
