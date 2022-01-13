@@ -93,6 +93,19 @@ class karma(Base):
         self.guild_id = guild_id
         self.amount = amount
 
+class karma_emote(Base):
+    __tablename__ = 'karma_emote'
+
+    id = Column(Integer, primary_key=True)
+    guild_id = Column(Integer)
+    emote_id = Column(Integer)
+    action = Column(Integer)
+
+    def __init__(self, guild_id, emote_id, action):
+        self.guild_id = guild_id
+        self.emote_id = emote_id
+        self.action = action
+
 class user_rank(Base):
     __tablename__ = 'user_rank'
 
