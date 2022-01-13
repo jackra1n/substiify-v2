@@ -11,7 +11,7 @@ class Karma(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command()
+    @commands.group(invoke_without_command=True)
     async def karma(self, ctx, user: nextcord.User = None):
         if user is None:
             user = ctx.author
@@ -27,7 +27,27 @@ class Karma(commands.Cog):
             description=f'{user.mention} has {user_karma} karma.',
             colour=0x23b40c
         )
-        await ctx.send(embed=embed, delete_after=20)
+        await ctx.send(embed=embed, delete_after=120)
+        await ctx.message.delete()
+
+    @karma.command(name='leaderboard', aliases=['lb'])
+    async def karma_leaderboard(self, ctx, global_leaderboard: str = None):
+        embed = nextcord.Embed(title='Karma Leaderboard', colour=0x23b40c)
+        if global_leaderboard is None:
+            query = db.session.query(db.karma).filter_by(guild_id=ctx.guild.id).order_by(db.karma.amount.desc()).limit(15)
+        elif global_leaderboard == 'global': 
+            query = db.session.query(db.karma).order_by(db.karma.amount.desc()).limit(15)
+        if len(query.all()) == 0:
+            embed.description = 'No users have any karma.'
+        embed_users = ''
+        embed_karma = ''
+        for entry in query:
+            user = await self.bot.fetch_user(entry.user_id)
+            embed_users += f'{user.mention}\n'
+            embed_karma += f'{entry.amount}\n'
+        embed.add_field(name='Users', value=embed_users)
+        embed.add_field(name='Karma', value=embed_karma)        
+        await ctx.send(embed=embed)
         await ctx.message.delete()
 
     @commands.Cog.listener()
