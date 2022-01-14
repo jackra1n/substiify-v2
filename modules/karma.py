@@ -99,17 +99,21 @@ class Karma(commands.Cog):
     async def on_raw_reaction_add(self, payload):
         user = await self.check_payload(payload)
         if payload.emoji.id in self.get_query_karma_add(payload.guild_id):
-            self.change_karma(user.id, payload.guild_id, 1) 
+            self.change_user_karma(user.id, payload.guild_id, 1)
+            await self.change_post_upvotes(payload, 1)
         elif payload.emoji.id in self.get_query_karma_remove(payload.guild_id):
-            self.change_karma(user.id, payload.guild_id, -1)
+            self.change_user_karma(user.id, payload.guild_id, -1)
+            await self.change_post_downvotes(payload, 1)
 
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload):
         user = await self.check_payload(payload)
         if payload.emoji.id in self.get_query_karma_add(payload.guild_id):
-            self.change_karma(user.id, payload.guild_id, -1) 
+            self.change_user_karma(user.id, payload.guild_id, -1) 
+            await self.change_post_upvotes(payload, -1)
         elif payload.emoji.id in self.get_query_karma_remove(payload.guild_id):
-            self.change_karma(user.id, payload.guild_id, 1)
+            self.change_user_karma(user.id, payload.guild_id, 1)
+            await self.change_post_downvotes(payload, -1)
 
     def get_query_karma_add(self, guild_id):
         query = db.session.query(db.karma_emote.emote_id).filter_by(guild_id=guild_id).filter_by(action=0).all()
@@ -132,7 +136,7 @@ class Karma(commands.Cog):
             return
         return user
 
-    def change_karma(self, user_id, guild_id, amount):
+    def change_user_karma(self, user_id, guild_id, amount):
         # check if user and guild are in the db
         existing_user = db.session.query(db.karma).filter_by(user_id=user_id).filter_by(guild_id=guild_id).first()
         if existing_user is None:
@@ -141,6 +145,23 @@ class Karma(commands.Cog):
             existing_user.amount += amount
         db.session.commit()
 
+    async def change_post_upvotes(self, payload, amount):
+        message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        existing_post = db.session.query(db.post).filter_by(message_id=message.id).first()
+        if existing_post is None:
+            db.session.add(db.post(message=message, upvotes=amount, downvotes=0))
+        else:
+            existing_post.upvotes += amount
+        db.session.commit()
+
+    async def change_post_downvotes(self, payload, amount):
+        message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        existing_post = db.session.query(db.post).filter_by(message_id=message.id).first()
+        if existing_post is None:
+            db.session.add(db.post(message=message, upvotes=0, downvotes=amount))
+        else:
+            existing_post.downvotes += amount
+        db.session.commit()
 
 def setup(bot):
     bot.add_cog(Karma(bot))

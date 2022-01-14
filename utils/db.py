@@ -93,6 +93,27 @@ class karma(Base):
         self.guild_id = guild_id
         self.amount = amount
 
+class post(Base):
+    __tablename__ = 'posts'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer)
+    server_id = Column(Integer)
+    channel_id = Column(Integer)
+    message_id = Column(Integer)
+    created_at = Column(DateTime)
+    upvotes = Column(Integer)
+    downvotes = Column(Integer)
+
+    def __init__(self, message, upvotes, downvotes):
+        self.user_id = message.author.id
+        self.server_id = message.guild.id
+        self.channel_id = message.channel.id
+        self.message_id = message.id
+        self.created_at = message.created_at
+        self.upvotes = upvotes
+        self.downvotes = downvotes
+
 class karma_emote(Base):
     __tablename__ = 'karma_emote'
 
