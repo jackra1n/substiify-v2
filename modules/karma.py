@@ -45,6 +45,8 @@ class Karma(commands.Cog):
 
     @karma_emotes.command(name='add')
     async def karma_emote_add(self, ctx, emote: nextcord.Emoji, emote_action: int):
+        if not await self.has_permissions(ctx):
+            return
         if emote_action not in [0, 1]:
             embed = nextcord.Embed(title='Invalid action parameter.')
             return await ctx.send(embed=embed, delete_after=20)
@@ -63,8 +65,11 @@ class Karma(commands.Cog):
         await ctx.send(embed=embed, delete_after=20)
         await ctx.message.delete()
 
+
     @karma_emotes.command(name='remove')
     async def karma_emote_remove(self, ctx, emote: nextcord.Emoji):
+        if not await self.has_permissions(ctx):
+            return
         existing_emote = db.session.query(db.karma_emote).filter_by(emote_id=emote.id).filter_by(guild_id=ctx.guild.id).first()
         if existing_emote is None:
             embed = nextcord.Embed(title='That emote is not in the list.')
@@ -162,6 +167,12 @@ class Karma(commands.Cog):
         else:
             existing_post.downvotes += amount
         db.session.commit()
+
+    async def has_permissions(self, ctx):
+        if not ctx.channel.permissions_for(ctx.author).manage_channels and not await self.bot.is_owner(ctx.author):
+            await ctx.send("You don't have permissions to do that", delete_after=10)
+            return False
+        return True
 
 def setup(bot):
     bot.add_cog(Karma(bot))
