@@ -12,8 +12,6 @@ logger = logging.getLogger(__name__)
 class Votes(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.upvote_emote = ':this:877668616810692608'
-        self.downvote_emote = ':that:877668628261126144'
         self.vote_channels = np.array(self.load_vote_channels())
         with open(store.SETTINGS_PATH, "r") as settings:
             self.settings = json.load(settings)
@@ -27,8 +25,8 @@ class Votes(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.channel.id in self.vote_channels and not message.author.bot:
-            await message.add_reaction(f'<{self.upvote_emote}>')
-            await message.add_reaction(f'<{self.downvote_emote}>')
+            await message.add_reaction(store.UPVOTE_EMOTE)
+            await message.add_reaction(store.DOWNVOTE_EMOTE)
 
     @commands.group()
     async def votes(self, ctx):

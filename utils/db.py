@@ -80,6 +80,32 @@ class vote_channels(Base):
         self.server_id = server_id
         self.channel_id = channel_id
 
+class karma(Base):
+    __tablename__ = 'karma'
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer)
+    guild_id = Column(Integer)
+    amount = Column(Integer)
+
+    def __init__(self, user_id, guild_id, amount):
+        self.user_id = user_id
+        self.guild_id = guild_id
+        self.amount = amount
+
+class karma_emote(Base):
+    __tablename__ = 'karma_emote'
+
+    id = Column(Integer, primary_key=True)
+    guild_id = Column(Integer)
+    emote_id = Column(Integer)
+    action = Column(Integer)
+
+    def __init__(self, guild_id, emote_id, action):
+        self.guild_id = guild_id
+        self.emote_id = emote_id
+        self.action = action
+
 class user_rank(Base):
     __tablename__ = 'user_rank'
 
