@@ -103,6 +103,8 @@ class Karma(commands.Cog):
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
         user = await self.check_payload(payload)
+        if user is None:
+            return
         if payload.emoji.id in self.get_query_karma_add(payload.guild_id):
             self.change_user_karma(user.id, payload.guild_id, 1)
             await self.change_post_upvotes(payload, 1)
@@ -113,6 +115,8 @@ class Karma(commands.Cog):
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload):
         user = await self.check_payload(payload)
+        if user is None:
+            return
         if payload.emoji.id in self.get_query_karma_add(payload.guild_id):
             self.change_user_karma(user.id, payload.guild_id, -1) 
             await self.change_post_upvotes(payload, -1)
@@ -138,6 +142,8 @@ class Karma(commands.Cog):
         message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
         user = message.author
         if user.bot:
+            return
+        if payload.member == user:
             return
         return user
 
