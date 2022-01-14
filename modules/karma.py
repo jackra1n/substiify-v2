@@ -23,42 +23,56 @@ class Karma(commands.Cog):
         else:
             user_karma = user_karma.amount
         embed = nextcord.Embed(title=f'Karma - {ctx.guild.name}', description=f'{user.mention} has {user_karma} karma.')
-        await ctx.send(embed=embed, delete_after=120)
+        await ctx.send(embed=embed, delete_after=20)
         await ctx.message.delete()
 
-    @karma.group(name='emote', invoke_without_command=True)
-    async def karma_emote(self, ctx):
-        karma_emotes = db.session.query(db.karma_emote).filter_by(guild_id=ctx.guild.id).all()
+    @karma.group(name='emotes', invoke_without_command=True)
+    async def karma_emotes(self, ctx):
+        karma_emotes = db.session.query(db.karma_emote).filter_by(guild_id=ctx.guild.id).group_by(db.karma_emote.action).all()
         if len(karma_emotes) == 0:
             return await ctx.send(embed=nextcord.Embed(title='No emotes found.'), delete_after=120)
-        embed = nextcord.Embed(title=f'Karma Emotes - {ctx.guild.name}')
+        embed_string = ''
+        last_action = ''
         for emote in karma_emotes:
-            # get emote by id
-            emote_obj = nextcord.Emoji(emote.emote_id)
-            embed.description += f'{emote_obj}, '
-        await ctx.send(embed=embed, delete_after=120)
+            if emote.action != last_action:
+                embed_string += f'\n{emote.action}: '
+                last_action = emote.action
+            embed_string += f'{self.bot.get_emoji(emote.emote_id)} '
+        embed = nextcord.Embed(title=f'Karma Emotes - {ctx.guild.name}', description=embed_string)
+        await ctx.send(embed=embed, delete_after=30)
         await ctx.message.delete()
 
-    @karma_emote.command(name='add')
-    async def karma_emote_add(self, ctx, emote_id: int, action: str = None):
-        print(f'{emote_id}, {action}')
-        if action == "add":
-            action = 0
-        elif action == "remove":
-            action = 1
-        if action not in [0, 1]:
+    @karma_emotes.command(name='add')
+    async def karma_emote_add(self, ctx, emote: nextcord.Emoji, emote_action: int):
+        if emote_action not in [0, 1]:
             embed = nextcord.Embed(title='Invalid action parameter.')
-            return await ctx.send(embed=embed, delete_after=120)
+            return await ctx.send(embed=embed, delete_after=20)
         # check if emote is already in the db
-        existing_emote = db.session.query(db.karma_emote).filter_by(emote_id=emote_id).filter_by(guild_id=ctx.guild.id).first()
+        existing_emote = db.session.query(db.karma_emote).filter_by(emote_id=emote.id).filter_by(guild_id=ctx.guild.id).first()
         if existing_emote is not None:
-            embed = nextcord.Embed(title='That emote is already in the database.')
-            return await ctx.send(embed=embed, delete_after=120)
-        db.session.add(db.karma_emote(ctx.guild.id, emote_id, ))
+            embed = nextcord.Embed(title='That emote is already added.')
+            return await ctx.send(embed=embed, delete_after=20)
+        max_emotes = db.session.query(db.karma_emote).filter_by(guild_id=ctx.guild.id).count()
+        if max_emotes >= 10:
+            embed = nextcord.Embed(title='You can only have 10 emotes.')
+            return await ctx.send(embed=embed, delete_after=20)
+        db.session.add(db.karma_emote(ctx.guild.id, emote.id, emote_action))
         db.session.commit()
-        embed = nextcord.Embed(title=f'Emote {nextcord.Emoji(emote_id)} added to the database.')
-        await ctx.send(embed=embed, delete_after=120)
+        embed = nextcord.Embed(title=f'Emote {emote} added to the list.')
+        await ctx.send(embed=embed, delete_after=20)
+        await ctx.message.delete()
 
+    @karma_emotes.command(name='remove')
+    async def karma_emote_remove(self, ctx, emote: nextcord.Emoji):
+        existing_emote = db.session.query(db.karma_emote).filter_by(emote_id=emote.id).filter_by(guild_id=ctx.guild.id).first()
+        if existing_emote is None:
+            embed = nextcord.Embed(title='That emote is not in the list.')
+            return await ctx.send(embed=embed, delete_after=20)
+        db.session.delete(existing_emote)
+        db.session.commit()
+        embed = nextcord.Embed(title=f'Emote {emote} removed from the list.')
+        await ctx.send(embed=embed, delete_after=20)
+        await ctx.message.delete()
 
     @karma.command(name='leaderboard', aliases=['lb'])
     async def karma_leaderboard(self, ctx, global_leaderboard: str = None):
@@ -87,6 +101,10 @@ class Karma(commands.Cog):
             self.change_karma(user.id, payload.guild_id, 1) 
         elif str(payload.emoji) == store.DOWNVOTE_EMOTE:
             self.change_karma(user.id, payload.guild_id, -1)
+        elif db.session.query(db.karma_emote.emote_id).filter_by(guild_id=payload.guild_id).filter_by(action=0).first() is not None:
+            self.change_karma(user.id, payload.guild_id, 1) 
+        elif db.session.query(db.karma_emote.emote_id).filter_by(guild_id=payload.guild_id).filter_by(action=1).first() is not None:
+            self.change_karma(user.id, payload.guild_id, -1)
 
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload):
@@ -94,6 +112,10 @@ class Karma(commands.Cog):
         if str(payload.emoji) == store.UPVOTE_EMOTE:
             self.change_karma(user.id, payload.guild_id, -1) 
         elif str(payload.emoji) == store.DOWNVOTE_EMOTE:
+            self.change_karma(user.id, payload.guild_id, 1)
+        elif db.session.query(db.karma_emote.emote_id).filter_by(guild_id=payload.guild_id).filter_by(action=0).first() is not None:
+            self.change_karma(user.id, payload.guild_id, -1) 
+        elif db.session.query(db.karma_emote.emote_id).filter_by(guild_id=payload.guild_id).filter_by(action=1).first() is not None:
             self.change_karma(user.id, payload.guild_id, 1)
 
     async def check_payload(self, payload):
@@ -113,7 +135,6 @@ class Karma(commands.Cog):
         else:
             existing_user.amount += amount
         db.session.commit()
-
 
 
 def setup(bot):
