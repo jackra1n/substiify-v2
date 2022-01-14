@@ -3,6 +3,7 @@ import logging
 import nextcord
 from nextcord.ext import commands
 
+from .votes import Votes
 from utils import db, store
 
 logger = logging.getLogger(__name__)
@@ -97,26 +98,30 @@ class Karma(commands.Cog):
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
         user = await self.check_payload(payload)
-        if str(payload.emoji) == store.UPVOTE_EMOTE:
+        if payload.emoji.id in self.get_query_karma_add(payload.guild_id):
             self.change_karma(user.id, payload.guild_id, 1) 
-        elif str(payload.emoji) == store.DOWNVOTE_EMOTE:
-            self.change_karma(user.id, payload.guild_id, -1)
-        elif db.session.query(db.karma_emote.emote_id).filter_by(guild_id=payload.guild_id).filter_by(action=0).first() is not None:
-            self.change_karma(user.id, payload.guild_id, 1) 
-        elif db.session.query(db.karma_emote.emote_id).filter_by(guild_id=payload.guild_id).filter_by(action=1).first() is not None:
+        elif payload.emoji.id in self.get_query_karma_remove(payload.guild_id):
             self.change_karma(user.id, payload.guild_id, -1)
 
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload):
         user = await self.check_payload(payload)
-        if str(payload.emoji) == store.UPVOTE_EMOTE:
+        if payload.emoji.id in self.get_query_karma_add(payload.guild_id):
             self.change_karma(user.id, payload.guild_id, -1) 
-        elif str(payload.emoji) == store.DOWNVOTE_EMOTE:
+        elif payload.emoji.id in self.get_query_karma_remove(payload.guild_id):
             self.change_karma(user.id, payload.guild_id, 1)
-        elif db.session.query(db.karma_emote.emote_id).filter_by(guild_id=payload.guild_id).filter_by(action=0).first() is not None:
-            self.change_karma(user.id, payload.guild_id, -1) 
-        elif db.session.query(db.karma_emote.emote_id).filter_by(guild_id=payload.guild_id).filter_by(action=1).first() is not None:
-            self.change_karma(user.id, payload.guild_id, 1)
+
+    def get_query_karma_add(self, guild_id):
+        query = db.session.query(db.karma_emote.emote_id).filter_by(guild_id=guild_id).filter_by(action=0).all()
+        list = [ x[0] for x in query ] if query is not None else []
+        list.append(int(store.UPVOTE_EMOTE_ID))
+        return list
+
+    def get_query_karma_remove(self, guild_id):
+        query = db.session.query(db.karma_emote.emote_id).filter_by(guild_id=guild_id).filter_by(action=1).all()
+        list = [ x[0] for x in query ] if query is not None else []
+        list.append(int(store.DOWNVOTE_EMOTE_ID))
+        return list
 
     async def check_payload(self, payload):
         if payload.event_type == 'REACTION_ADD' and payload.member.bot:

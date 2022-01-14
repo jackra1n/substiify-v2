@@ -16,17 +16,11 @@ class Votes(commands.Cog):
         with open(store.SETTINGS_PATH, "r") as settings:
             self.settings = json.load(settings)
 
-    def load_vote_channels(self) -> list:
-        channel_array = []
-        for entry in db.session.query(db.vote_channels).all():
-            channel_array = np.append(channel_array, entry.channel_id)
-        return channel_array
-
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.channel.id in self.vote_channels and not message.author.bot:
-            await message.add_reaction(store.UPVOTE_EMOTE)
-            await message.add_reaction(store.DOWNVOTE_EMOTE)
+            await message.add_reaction(self.get_upvote_emote())
+            await message.add_reaction(self.get_downvote_emote())
 
     @commands.group()
     async def votes(self, ctx):
@@ -81,6 +75,19 @@ class Votes(commands.Cog):
             await ctx.send("You don't have permissions to do that", delete_after=10)
             return False
         return True
+
+    def load_vote_channels(self) -> list:
+        channel_array = []
+        for entry in db.session.query(db.vote_channels).all():
+            channel_array = np.append(channel_array, entry.channel_id)
+        return channel_array
+
+    def get_upvote_emote(self):
+        return self.bot.get_emoji(store.UPVOTE_EMOTE_ID)
+
+    def get_downvote_emote(self):
+        return self.bot.get_emoji(store.DOWNVOTE_EMOTE_ID)
+
 
 def setup(bot):
     bot.add_cog(Votes(bot))
