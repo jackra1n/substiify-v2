@@ -29,14 +29,14 @@ class Karma(commands.Cog):
 
     @karma.group(name='emotes', invoke_without_command=True)
     async def karma_emotes(self, ctx):
-        karma_emotes = db.session.query(db.karma_emote).filter_by(guild_id=ctx.guild.id).group_by(db.karma_emote.action).all()
+        karma_emotes = db.session.query(db.karma_emote).filter_by(guild_id=ctx.guild.id).order_by(db.karma_emote.action).all()
         if len(karma_emotes) == 0:
             return await ctx.send(embed=nextcord.Embed(title='No emotes found.'), delete_after=120)
         embed_string = ''
         last_action = ''
         for emote in karma_emotes:
             if emote.action != last_action:
-                embed_string += f'\n{emote.action}: '
+                embed_string += f'\n`{emote.action}:` '
                 last_action = emote.action
             embed_string += f'{self.bot.get_emoji(emote.emote_id)} '
         embed = nextcord.Embed(title=f'Karma Emotes - {ctx.guild.name}', description=embed_string)
