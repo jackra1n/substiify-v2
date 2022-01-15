@@ -74,7 +74,7 @@ class Music(commands.Cog):
     async def on_voice_state_update(self, member, before, after):
         if member.bot:
             return
-        if not self.bot.user in before.channel.members:
+        if before.channel.members is not None and self.bot.user not in before.channel.members:
             return
         users = [user for user in before.channel.members if not user.bot]
         if len(users) == 0:
