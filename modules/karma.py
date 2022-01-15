@@ -138,14 +138,14 @@ class Karma(commands.Cog):
 
     async def check_payload(self, payload):
         if payload.event_type == 'REACTION_ADD' and payload.member.bot:
-            return
+            return None
         message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
-        user = message.author
-        if user.bot:
-            return
-        if payload.member == user:
-            return
-        return user
+        if message.author.bot:
+            return None
+        user = await self.bot.fetch_user(payload.user_id)
+        if user == message.author:
+            return None
+        return message.author
 
     def change_user_karma(self, user_id, guild_id, amount):
         # check if user and guild are in the db
