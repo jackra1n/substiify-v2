@@ -131,9 +131,11 @@ class Owner(commands.Cog):
                     member_string = f"{member.display_name}"
                     if member.voice.self_stream:
                         member_string += f" 🔴"
+                    if member.voice.self_video:
+                        member_string += f" 📷"
                     if member.voice.self_deaf:
                         member_string += f" 🎧🔇"
-                    if member.voice.self_mute:
+                    elif member.voice.self_mute:
                         member_string += f" 🎤🔇"
                     members.append(member_string)
                 members_string = "\n".join(sorted(members))
