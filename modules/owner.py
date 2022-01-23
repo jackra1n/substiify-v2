@@ -129,9 +129,8 @@ class Owner(commands.Cog):
                 members = []
                 for member in vc.members:
                     member_string = f"{member.display_name}"
-                    if member.activity is not None:
-                        if member.activity.type == ActivityType.streaming:
-                            member_string += f" `[Streaming]`"
+                    if member.voice.self_stream:
+                        member_string += f" `[Streaming]`"
                     members.append(member_string)
                 members_string = "\n".join(sorted(members))
                 embed = nextcord.Embed(
