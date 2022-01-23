@@ -119,19 +119,24 @@ class Owner(commands.Cog):
     async def checkVCs(self, ctx, server_id : int):
         if server_id is None:
             return await ctx.send("Please provide a server ID to be checked", delete_after = 5)
-        await ctx.send(f"trying to get server with id `{server_id}`...", delete_after = 5)
         server = self.bot.get_guild(server_id)
-        await ctx.send(f"server is {server.name}", delete_after = 5)
+        if server is None:
+            return await ctx.send("Server not found", delete_after = 5)
         if len(server.voice_channels) == 0:
             return await ctx.send(f"No voice channels on {server.name}", delete_after = 20)
         for vc in server.voice_channels:
             if len(vc.members) > 0:
-                members = ""
+                members = []
                 for member in vc.members:
-                    members += f"{member.display_name}\n"
+                    member_string = f"{member.display_name}"
+                    if member.activity is not None:
+                        if member.activity.type == ActivityType.streaming:
+                            member_string += f" `[Streaming]`"
+                    members.append(member_string)
+                members_string = "\n".join(sorted(members))
                 embed = nextcord.Embed(
                     title = vc.name,
-                    description = members,
+                    description = members_string,
                     colour = nextcord.Colour.blurple()
                 )
                 await ctx.send(embed=embed)
