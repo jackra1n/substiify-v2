@@ -130,7 +130,11 @@ class Owner(commands.Cog):
                 for member in vc.members:
                     member_string = f"{member.display_name}"
                     if member.voice.self_stream:
-                        member_string += f" `[Streaming]`"
+                        member_string += f" 🔴"
+                    if member.voice.self_deaf:
+                        member_string += f" 🎧🔇"
+                    if member.voice.self_mute:
+                        member_string += f" 🎤🔇"
                     members.append(member_string)
                 members_string = "\n".join(sorted(members))
                 embed = nextcord.Embed(
