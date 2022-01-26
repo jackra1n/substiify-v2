@@ -46,6 +46,8 @@ class MainBot(commands.Cog):
     async def on_command_error(self, ctx, error):
         if 'is not found' in str(error) or isinstance(error, ModuleDisabledException):
             return
+        if isinstance(error, commands.CheckFailure):
+            await ctx.send(f'You do not have permission to use this command.')
         await ctx.message.add_reaction('🆘')
         logger.error(f'[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]')
 

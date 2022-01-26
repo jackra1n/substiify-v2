@@ -52,9 +52,8 @@ class Giveaway(commands.Cog):
         pass
 
     @giveaway.command()
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def create(self, ctx):
-        if not await self.has_permissions(ctx):
-            return
 
         # Ask Questions
         questions = ["Setting up your giveaway. Choose what channel you want your giveaway in?",
@@ -110,9 +109,8 @@ class Giveaway(commands.Cog):
         self.giveaway_task.start()
 
     @giveaway.command()
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def reroll(self, ctx, channel: nextcord.TextChannel, id_: int):
-        if not await self.has_permissions(ctx):
-            return
         try:
             msg = await channel.fetch_message(id_)
         except Exception as e:
@@ -132,9 +130,8 @@ class Giveaway(commands.Cog):
         await msg.edit(embed=embed)
 
     @giveaway.command()
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def stop(self, ctx, channel: nextcord.TextChannel, id_: int):
-        if not await self.has_permissions(ctx):
-            return
         try:
             msg = await channel.fetch_message(id_)
             newEmbed = nextcord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!!")
@@ -180,13 +177,6 @@ class Giveaway(commands.Cog):
         except Exception as e:
             await ctx.send("The channel or ID mentioned was incorrect")
         return msg.embeds[0].description.split("Win ")[1].split(" today!")[0]
-
-    async def has_permissions(self, ctx):
-        if not ctx.channel.permissions_for(ctx.author).manage_channels and not await self.bot.is_owner(ctx.author):
-            await ctx.send("You don't have permissions to do that", delete_after=10)
-            return False
-        return True
-
 
 def setup(bot):
     bot.add_cog(Giveaway(bot))

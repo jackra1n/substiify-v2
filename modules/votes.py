@@ -22,21 +22,19 @@ class Votes(commands.Cog):
             await message.add_reaction(self.get_upvote_emote())
             await message.add_reaction(self.get_downvote_emote())
 
-    @commands.group()
+    @commands.group(invoke_without_command=True)
     async def votes(self, ctx):
-        if ctx.invoked_subcommand is None and await self.has_permissions(ctx):
-            await ctx.message.delete()
-            if ctx.channel.id in self.vote_channels:
-                embed = nextcord.Embed(description=f'Votes are **ALREADY enabled** in {ctx.channel.mention}!', colour=0x23b40c)
-                await ctx.send(embed=embed, delete_after=10)
-            else:
-                embed = nextcord.Embed(description=f'Votes are **NOT enabled** in {ctx.channel.mention}!', colour=0xf66045)
-                await ctx.send(embed=embed, delete_after=10)
+        await ctx.message.delete()
+        if ctx.channel.id in self.vote_channels:
+            embed = nextcord.Embed(description=f'Votes are **ALREADY enabled** in {ctx.channel.mention}!', colour=0x23b40c)
+            await ctx.send(embed=embed, delete_after=10)
+        else:
+            embed = nextcord.Embed(description=f'Votes are **NOT enabled** in {ctx.channel.mention}!', colour=0xf66045)
+            await ctx.send(embed=embed, delete_after=10)
 
     @votes.command()
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def setup(self, ctx, channel: nextcord.TextChannel = None):
-        if not await self.has_permissions(ctx):
-            return
         await ctx.message.delete()
         channel = ctx.channel if channel is None else channel
         if channel.id not in self.vote_channels:
@@ -58,9 +56,8 @@ class Votes(commands.Cog):
         await ctx.send(embed=embed)
 
     @votes.command()
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def stop(self, ctx, channel: nextcord.TextChannel = None):
-        if not await self.has_permissions(ctx):
-            return
         channel = ctx.channel if channel is None else channel
         db.session.query(db.vote_channels).filter_by(server_id=ctx.guild.id).filter_by(channel_id=channel.id).delete()
         db.session.commit()
@@ -69,12 +66,6 @@ class Votes(commands.Cog):
             self.vote_channels = np.delete(self.vote_channels, index)
         await ctx.message.delete()
         await ctx.channel.send(embed=nextcord.Embed(description=f'Votes has been stopped in {channel.mention}!', colour=0xf66045))
-
-    async def has_permissions(self, ctx):
-        if not ctx.channel.permissions_for(ctx.author).manage_channels and not await self.bot.is_owner(ctx.author):
-            await ctx.send("You don't have permissions to do that", delete_after=10)
-            return False
-        return True
 
     def load_vote_channels(self) -> list:
         channel_array = []
