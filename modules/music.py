@@ -263,9 +263,12 @@ class Music(commands.Cog):
         embed = nextcord.Embed(color=nextcord.Color.blurple())
         embed.title = 'Now Playing'
         embed.description = f'[{player.current.title}]({player.current.uri})'
-        timestamp = str(datetime.timedelta(milliseconds=player.current.duration)).split(".")[0]
-        position = str(datetime.timedelta(milliseconds=player.position)).split(".")[0]
-        embed.add_field(name='Duration', value=f"{position}/{timestamp}")
+        if not player.current.stream:
+            timestamp = str(datetime.timedelta(milliseconds=player.current.duration)).split(".")[0]
+            position = str(datetime.timedelta(milliseconds=player.position)).split(".")[0]
+            embed.add_field(name='Duration', value=f"{position}/{timestamp}")
+        else:
+            embed.add_field(name='Duration', value='LIVE 🔴')
         embed.add_field(name='Requested By', value=f"<@{player.current.requester}>")
         return embed
 
