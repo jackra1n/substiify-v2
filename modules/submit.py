@@ -35,7 +35,7 @@ class Submit(commands.Cog):
         )
         embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar.url)
         message = await channel.send(embed=embed)
-        await ctx.send(f'Thank you for submitting the {submission_type}!', delete_after=15)
+        await ctx.send(f'Thank you for submitting the {submission_type}!', delete_after=30)
         await message.add_reaction(f'<{self.accept_emoji}>')
         await message.add_reaction(f'<{self.deny_emoji}>')
 
