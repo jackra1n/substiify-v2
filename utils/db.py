@@ -58,17 +58,6 @@ class active_giveaways(Base):
         self.server_id = giveaway_message.guild.id
         self.channel_id = giveaway_message.channel.id
 
-class enabled_commands(Base):
-    __tablename__ = 'enabled_commands'
-
-    id = Column(Integer, primary_key=True)
-    server_id = Column(Integer)
-    command = Column(String)
-
-    def __init__(self, server_id, command):
-        self.server_id = server_id
-        self.command = command
-
 class vote_channels(Base):
     __tablename__ = 'vote_channels'
 

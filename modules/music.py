@@ -1,7 +1,7 @@
 
-import re
 import datetime
 import random
+import re
 
 import lavalink
 import nextcord
@@ -13,6 +13,9 @@ url_rx = re.compile(r'https?://(?:www\.)?.+')
 
 
 class Music(commands.Cog):
+
+    COG_EMOJI = "🎵"
+
     def __init__(self, bot):
         self.bot = bot
         # This ensures the client isn't overwritten during cog reloads.
@@ -88,6 +91,12 @@ class Music(commands.Cog):
 
     @commands.command(aliases=['p'])
     async def play(self, ctx, *, query: str):
+        """ Plays or queues a song/playlist. Can be a YouTube URL, Soundcloud URL or a search query. 
+        
+        Examples:
+        `<<play All girls are the same Juice WRLD` - searches for a song and queues it
+        `<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
+        """
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
         query = query.strip('<>')
 
@@ -127,7 +136,9 @@ class Music(commands.Cog):
 
     @commands.command(aliases=['leave', 'stop'])
     async def disconnect(self, ctx):
-        """ Disconnects the player from the voice channel and clears its queue. """
+        """
+        Disconnects the player from the voice channel and clears its queue.
+        """
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 
         if not player.is_connected:
@@ -144,7 +155,9 @@ class Music(commands.Cog):
 
     @commands.command()
     async def skip(self, ctx):
-        """ Skips the current track. """
+        """
+        Skips the current track. If there no more tracks in the queue, disconnects the player.
+        """
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 
         if not player.is_playing:
@@ -156,14 +169,16 @@ class Music(commands.Cog):
 
     @commands.command(name="now" ,aliases=['np', 'current'])
     async def now_playing(self, ctx):
-        """ Shows info about the currently playing track. """
+        """
+        Shows info about the currently playing track.
+        """
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 
         if not player.is_connected:
             return await ctx.send('Not connected.', delete_after=10)
 
         if not player.current:
-            return await ctx.send('Nothing playing.')
+            return await ctx.send('Nothing playing.', delete_after=10)
 
         embed = self._create_current_song_embed(player)
         await ctx.send(embed=embed)
@@ -171,7 +186,9 @@ class Music(commands.Cog):
 
     @commands.command()
     async def shuffle(self, ctx):
-        """ Shuffles the queue. """
+        """
+        Randomly shuffles the queue.
+        """
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 
         if len(player.queue) < 2:
@@ -183,6 +200,9 @@ class Music(commands.Cog):
 
     @commands.group(aliases=['q'], invoke_without_command=True)
     async def queue(self, ctx):
+        """
+        Shows the queue in a paginated menu.
+        """
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 
         if len(player.queue) == 0:
@@ -219,12 +239,18 @@ class Music(commands.Cog):
 
     @queue.command(aliases=['clear'])
     async def queue_clear(self, ctx):
+        """
+        Clears the queue.
+        """
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
         player.queue.clear()
         await ctx.send('*⃣ | Queue cleared.')
 
     @commands.command()
     async def repeat(self, ctx):
+        """
+        Repeats the current track in a loop.
+        """
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 
         if not player.current:
@@ -238,7 +264,9 @@ class Music(commands.Cog):
     @commands.command()
     @commands.is_owner()
     async def players(self, ctx):
-        """ Shows all active players. """
+        """
+        Shows all active players.
+        """
         players = self.bot.lavalink.player_manager.find_all()
         players = [player for player in players if player.is_connected]
         if not players:
@@ -278,6 +306,7 @@ class Music(commands.Cog):
             embed = nextcord.Embed(colour=ctx.author.colour, timestamp=datetime.datetime.utcnow())
             embed.title = f"Queue ({len(player.queue)})"
             embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.avatar.url)
+            embed.add_field(name='Now Playing', value=f'[{player.current.title}]({player.current.uri})')
             upcoming = '\n'.join([f'`{index + 1}.` [{track.title}]({track.uri})' for index, track in enumerate(player.queue[i:i + 10], start=i)])
             embed.add_field(name="Next up", value=upcoming, inline=False)
             pages.append(embed)

@@ -1,7 +1,8 @@
 #install with "pip3 install -r requirements.txt"
 
 numpy
-nextcord
+nextcord[voice]
+nextcord[speed]
 psutil
 bs4
 lxml

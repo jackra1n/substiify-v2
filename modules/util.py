@@ -12,12 +12,14 @@ from nextcord.ext import commands
 from pytz import timezone
 from sqlalchemy import func
 
-from helper.ModulesManager import ModulesManager
 from utils import db, store
 
 logger = logging.getLogger(__name__)
 
 class Util(commands.Cog):
+
+    COG_EMOJI = "📦"
+
     def __init__(self, bot):
         self.bot = bot
         with open(store.SETTINGS_PATH, "r") as settings:
@@ -26,7 +28,9 @@ class Util(commands.Cog):
     @commands.cooldown(6, 5)
     @commands.command(aliases=['avatar'])
     async def av(self, ctx, member: nextcord.Member = None):
-        """Enlarge and view your profile picture or another member's"""
+        """
+        Enlarge and view your profile picture or another member
+        """
         await ctx.message.delete()
         member = ctx.author if member is None else member
         embed = nextcord.Embed(
@@ -40,7 +44,9 @@ class Util(commands.Cog):
     @commands.group(aliases=['c'], invoke_without_command = True)
     @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
     async def clear(self, ctx, amount: int):
-        """Clears messages within the current channel"""
+        """
+        Clears messages within the current channel.
+        """
         if ctx.message.type == MessageType.reply:
             message = ctx.message.reference.resolved
             if message:
@@ -68,7 +74,9 @@ class Util(commands.Cog):
 
     @commands.command(aliases=['dink'])
     async def ping(self, ctx):
-        """Shows ping of the bot"""
+        """
+        Shows the ping of the bot
+        """
         title = 'Pong!'
         if 'dink' in ctx.message.content.lower():
             title = 'Donk!'
@@ -76,7 +84,7 @@ class Util(commands.Cog):
         await ctx.message.delete()
         await ctx.send(embed=embed)
 
-    @commands.command()
+    @commands.command(hidden=True)
     async def specialThanks(self, ctx):
         peeople_who_helped = ["<@205704051856244736>", "<@812414532563501077>", "<@299478604809764876>", "<@291291715598286848>", "<@224618877626089483>", "<@231151428167663616>"]
         shuffle(peeople_who_helped)
@@ -89,6 +97,9 @@ class Util(commands.Cog):
 
     @commands.command()
     async def info(self, ctx):
+        """
+        Shows different technical information about the bot
+        """
         bot_time = time_up((datetime.now() - store.SCRIPT_START).total_seconds()) #uptime of the bot
         last_commit_date = subprocess.check_output(['git', 'log', '-1', '--date=format:"%Y/%m/%d"', '--format=%ad']).decode('utf-8').strip().strip('"')
         cpu_percent = psutil.cpu_percent()
@@ -114,59 +125,29 @@ class Util(commands.Cog):
         await ctx.channel.send(embed=embed)
         await ctx.message.delete()
 
-    @commands.group()
-    async def module(self, ctx):
-        pass
-
-    @module.command()
-    @commands.guild_only()
-    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def toggle(self, ctx, module):
-        await ctx.message.delete()
-        if module in ModulesManager.get_commands():
-            result = ModulesManager.toggle_module(ctx.guild.id, module)
-            await ctx.send(f'Module `{module}` has been **{result}**')
-        else:
-            await ctx.send(f'Module \'{module}\' not found', delete_after=30)
-
-    @toggle.error
-    async def command_error(self, ctx, error):
-        if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.channel.send('Argument required:')
-
-    @module.command(aliases=['list'])
-    async def module_list(self, ctx):
-        await ctx.message.delete()
-        commandStatuses = ''
-        commandNames = ''
-        for command in ModulesManager.get_commands():
-            if ModulesManager._is_enabled(ctx.guild.id, command):
-                commandStatuses += '`enabled ` <:greenTick:876177251832590348>\n'  
-            else:
-                commandStatuses += '`disabled` <:redCross:876177262813278288>\n'
-            commandNames += f'{command}\n'
-        embed = nextcord.Embed(
-            title='Module List',
-            colour=nextcord.Colour.blurple()
-        )
-        embed.add_field(name='Command', value=commandNames, inline=True)
-        embed.add_field(name='Status', value=commandStatuses, inline=True)
-        await ctx.send(embed=embed)
-
     @commands.group(name="usage", invoke_without_command=True)
     async def usage(self, ctx):
+        """
+        Shows most used commands on the server
+        """
         commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
         embed = create_command_usage_embed(commands_used_query, f"Top used commands on: **{ctx.guild.name}**")
         await ctx.send(embed=embed, delete_after=180)
 
     @usage.command(name="all")
     async def usage_all(self, ctx): 
+        """
+        Shows most used commands on all servers
+        """
         commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
         embed = create_command_usage_embed(commands_used_query, f"Top total used commands")
         await ctx.send(embed=embed, delete_after=180)
 
     @usage.command(name="servers")
     async def usage_servers(self, ctx):
+        """
+        Shows servers where the bot is used the most
+        """
         commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.server_id).order_by(func.count('*').desc()).all()
         embed = create_command_usage_embed(commands_used_query, f"Top servers used commands")
         await ctx.send(embed=embed, delete_after=180)

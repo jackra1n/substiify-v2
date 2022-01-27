@@ -1,153 +1,133 @@
-import json
-import logging
+from typing import Optional, Set
 
 import nextcord
+from nextcord import Embed
 from nextcord.ext import commands
 
-from utils import store
 
-logger = logging.getLogger(__name__)
+class Help(commands.MinimalHelpCommand):
+    """Shows help info for commands and cogs"""
 
-class Help(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        with open(store.SETTINGS_PATH, "r") as settings:
-            self.settings = json.load(settings)
-        self.prefix = self.settings['prefix']
+    def get_command_signature(self, command):
+        return f"{self.context.clean_prefix}{command.qualified_name} {command.signature}"
 
-    @commands.group(invoke_without_command = True)
-    async def help(self, ctx):
-        await ctx.message.delete()
-        embed = nextcord.Embed(
-            title=f'{self.bot.user.display_name} Command List',
-            colour = nextcord.Colour.red()
+    # help
+    async def send_bot_help(self, mapping: dict):
+        embed = await self._help_embed(
+            title="Bot Commands",
+            description=self.context.bot.description,
+            mapping=mapping,
+            set_author=True,
         )
-        categories = ['modules', 'music', 'votes', 'giveaway', 'util', 'submit', 'duel']
-        if await self.bot.is_owner(ctx.author):
-            categories.append('owner') 
-        embed.add_field(name='Available categories:', value=await self.help_string(categories))
-        embed.set_footer(text=f'Use: `{self.prefix}help <category>`')
-        await ctx.send(embed=embed)
+        self.response = await self.get_destination().send(embed=embed)
 
-    async def help_string(self, categories):
-        mainString = ''
-        for c in categories:
-            mainString += f'`{c}`'
-            if c != categories[-1]:
-                mainString += f', '
-        return mainString
+    # help <cog>
+    async def send_cog_help(self, cog: commands.Cog):
+        embed = await self.cog_help_embed(cog)
+        await self.get_destination().send(embed=embed)
 
-    @help.command()
-    async def modules(self,ctx):
-        embed = nextcord.Embed(
-            title="Modules manager",
-            description=f"Allows you to enable and disable some commands",
-            colour = nextcord.Colour.greyple()
-        )
-        embed.add_field(name="`list`",value="Shows all the modules that can be toggled and their status", inline=False)
-        embed.add_field(name="`toggle`",value="Disables or enables module depending on its current state ", inline=False)
-        embed.set_footer(text=f'Use: `{self.prefix}module <command>`')
-        await ctx.send(embed=embed, delete_after=120)
+    # help <group>
+    async def send_group_help(self, group):
+        embed = self.create_command_help_embed(group)
+        sub_commands = [c.name for c in group.commands]
+        embed.add_field(name="\u200b", value=f"```asciidoc\n= Subcommands =\n{', '.join(sub_commands)}```")
+        if len(command_chain := group.full_parent_name) > 0:
+            command_chain = group.full_parent_name + " "
+        embed.set_footer(text=f"This command has subcommands. Check their help page with {self.context.clean_prefix}help {command_chain}{group.name} <subcommand>")
+        await self.context.send(embed=embed)
 
-    @help.command()
-    async def submit(self,ctx):
-        embed = nextcord.Embed(
-            title="Submissions",
-            description=f"Submit a bug or a suggestion to improve the bot",
-            colour = nextcord.Colour.greyple()
+    async def cog_help_embed(self, cog: Optional[commands.Cog]) -> Embed:
+        if cog is None:
+            return await self._help_embed(
+                title=f"No category",
+                command_set=self.get_bot_mapping()[None]
+            )
+        emoji = getattr(cog, "COG_EMOJI", None)
+        return await self._help_embed(
+            title=f"{emoji} {cog.qualified_name}" if emoji else cog.qualified_name,
+            description=cog.description,
+            command_set=cog.get_commands()
         )
-        embed.add_field(name="`submit bug`",value=f'If you find any bugs/error you can use this command to submit the bug to the dev team. Use: `{self.prefix}submit bug <text_describing_bug>`.', inline=False)
-        embed.add_field(name="`submit suggestion`",value=f'Use this command you have any idea for improvement or change that will make something better. Use: `{self.prefix}submit suggestion <suggestion_for_change_or_improvement>`.', inline=False)
-        await ctx.send(embed=embed, delete_after=120)
 
-    @help.command()
-    async def duel(self,ctx):
-        embed = nextcord.Embed(
-            title="Duel",
-            description=f"To start a duel use command `{self.prefix}fight <userOfYourChoice>` and ping a person you want to fight. There are 3 classes and each one has different stats. There is Berserker, Tank and Wizard. ",
-            colour = nextcord.Colour.greyple()
+    # help <command>
+    async def send_command_help(self, command: commands.Command):
+        emoji = getattr(command.cog, "COG_EMOJI", None)
+        embed = await self._help_embed(
+            title=f"{emoji} {command.qualified_name}" if emoji else command.qualified_name,
+            description=command.help,
+            command_set=command.commands if isinstance(command, commands.Group) else None
         )
-        embed.add_field(name='Stats', value="```Statistics: Berserker  Tank  Wizard\n"+
-                                            "Health:       1000     1200    700\n"+
-                                            "Max Attack:   140      100     200\n"+
-                                            "Max Defense:  30       60      20\n"+
-                                            "Max Mana:     30       20      50```", inline=False)
-        embed.add_field(name='Description', value="When the duel starts you will be able to choose action you want to do. `punch`, `defend` and `end`. `punch` boosts your attack and `defend` boosts your defense. After you choose an action, you will hit the opponent and he will counter attack. If the defense is higher than the attack damage of the opponent you will block the attack. `end` makes you surrender.", inline=False)
-        await ctx.send(embed=embed, delete_after=120)
+        await self.get_destination().send(embed=embed)
 
-    @help.command()
-    async def music(self,ctx):
-        embed = nextcord.Embed(
-            title="Music",
-            description=f"Music module commands.",
-            colour = nextcord.Colour.greyple()
-        )
-        embed.add_field(name="`play`,`p [query or link]`", value='Play music or add to queue')
-        embed.add_field(name="`skip`,`next`", value='Skip currently played song')
-        embed.add_field(name="`pause`", value='Pause the song song')
-        embed.add_field(name="`resume`", value='Resume playing (when paused)')
-        embed.add_field(name="`stop`,`leave`", value='Stop playing music and leave (deletes queue)')
-        embed.add_field(name="`shuffle`", value='Shuffles palylist')
-        embed.add_field(name="`queue`, `q`", value='Shows current song queue')
-        embed.add_field(name="`q move [from_index] [to_index]`", value='Move song from one index to another')
-        embed.add_field(name="`q track/song [index]`", value='Shows info about song in queue')
-        embed.add_field(name="`now`, `currentsong`", value='Shows currently played song')
-        embed.add_field(name="`repeat [1, all, none]`", value='Repeat current song, all songs or none')
-        embed.add_field(name="`lyrics`", value='Shows lyrics of currently played song. Doesn\'t work very well as of now.')
-        await ctx.send(embed=embed, delete_after=120)
+    async def _help_embed(
+        self, title: str, description: Optional[str] = None, mapping: Optional[str] = None,
+        command_set: Optional[Set[commands.Command]] = None, set_author: bool = False
+    ) -> Embed:
+        embed = Embed(title=title)
+        if description:
+            embed.description = description
+        if set_author:
+            avatar = self.context.bot.user.avatar or self.context.bot.user.default_avatar
+            embed.set_author(name=self.context.bot.user.name, icon_url=avatar.url)
+        if command_set:
+            # show help about all commands in the set
+            filtered = await self.filter_commands(command_set, sort=True)
+            for command in filtered:
+                embed.add_field(
+                    name=self.get_command_signature(command),
+                    value=command.short_doc or "...",
+                    inline=False
+                )
+        elif mapping:
+            # add a short description of commands in each cog
+            for cog, cmds in sorted(mapping.items(), key=lambda e: len(e[1]), reverse=True):
+                cmds = [ c for c in cmds if not c.hidden ]
+                if len(cmds) > 0:
+                    cmd_list = f"```diff\n"
+                    for com in sorted(cmds, key=lambda e: e.name):
+                        prefix = "+" if await self.can_run_cmd(com) else "---"
+                        cmd_list += f"{prefix} {com}\n"
+                    cmd_list += "```"
 
-    @help.command()
-    async def giveaway(self, ctx):
-        embed = nextcord.Embed(
-            title="Giveaway",
-            colour = nextcord.Colour.greyple()
-        )
-        embed.add_field(name="`giveaway create`",value="Initializes setup for a giveaway. After this command you will be asked for more info.", inline=False)
-        embed.add_field(name="`giveaway reroll`",value=f'Allows you to "re-roll" giveaway. This function takes channel and id of the giveaway message as parameters. Example: `{self.prefix}giveaway reroll <channel_mention> <msg_id>`', inline=False)
-        await ctx.send(embed=embed, delete_after=120)
-    
-    @help.command()
-    async def votes(self,ctx):
-        embed = nextcord.Embed(
-            title="Voting system",
-            description=f"Like Reddits voting or youtubes like but for nextcordd",
-            colour = nextcord.Colour.greyple()
-        )
-        embed.add_field(name="`votes`", value=f'Tells you if the current channel has voting system enabled', inline=False)
-        embed.add_field(name="`votes setup`", value=f'Activates voting in a channel. Use: `{self.prefix}vote setup <channel_id>`. Parameter channel_id is optional. If no parameter provided voting will be enabled for the current channel.', inline=False)
-        embed.add_field(name="`votes stop`", value=f'Stops voting system. Use: `{self.prefix}vote stop <channel_id>`. Parameter channel_id is optional. If no parameter provided voting will be stopped in the current channel.', inline=False)
-        await ctx.send(embed=embed, delete_after=120)
+                    name = cog.qualified_name if cog else "No category"
+                    emoji = getattr(cog, "COG_EMOJI", None)
+                    cog_label = f"{emoji} {name}" if emoji else name
+                    embed.add_field(name=cog_label, value=cmd_list)
+        return embed
 
-    @help.command()
-    async def util(self,ctx):
-        embed = nextcord.Embed(
-            title="Util",
-            description=f"Useful commands that can help you organize your server",
-            colour = nextcord.Colour.greyple()
-        )
-        embed.add_field(name="`av`",value=f'Shows user avatar. `{self.prefix}av` shows your avatar. `{self.prefix}av <id/mention>` shows avatar of other user.', inline=False)
-        embed.add_field(name="`info`",value=f'Shows some infos about the bot like uptime, versions etc.', inline=False)
-        embed.add_field(name="`clear`",value=f'Clears last X messages in the channel. Use: `{self.prefix}clear <amount_of_messages>`', inline=False)
-        embed.add_field(name="`clear message`",value=f'Clears message with given ID. Use: `{self.prefix}clear message <message_id>`', inline=False)
-        embed.add_field(name="`ping`",value=f'Ping between bot and nextcord', inline=False)
-        await ctx.send(embed=embed, delete_after=120)
+    def create_command_help_embed(self, command):
+        command_name = command.name
+        # command path
+        if len(command.full_parent_name) > 0:
+            command_name = command.full_parent_name.replace(" ", " > ") + " > " + command_name
+        embed = nextcord.Embed(title=command_name, color=0xb74e17)
 
-    @help.command()
-    @commands.is_owner()
-    async def owner(self,ctx):
-        embed = nextcord.Embed(
-            title="Owner",
-            description=f"Commands for the bot owner",
-            colour = nextcord.Colour.greyple()
-        )
-        embed.add_field(name="`shutdown`",value=f'Shuts down the bot', inline=False)
-        embed.add_field(name="`reload`",value=f'Does git pull and reloads cogs', inline=False)
-        embed.add_field(name="`status count`",value=f'Allows you to set count of the servers in the bot status. Use: `{self.prefix}status count <number>`', inline=False)
-        embed.add_field(name="`status set`",value=f'Allows you to set completely custom bot status. Use: `{self.prefix}status set <text>`', inline=False)
-        embed.add_field(name="`status reset`",value=f'Resets the bot status to the original one.', inline=False)
-        embed.add_field(name="`version`",value=f'Set version of the bot. Use: `{self.prefix}version <version>`', inline=False)
-        embed.add_field(name="`server list`",value=f'Show the list of servers that the bot is in. Shows server name, amount of users and server id.', inline=False)
-        await ctx.send(embed=embed, delete_after=20)
+        help_msg = command.help
+        if help_msg is None:
+            help_msg = "No command information"
+
+        if command.aliases is None or len(command.aliases) == 0:
+            aliases_msg = "[n/a]"
+        else:
+            aliases_msg = ", ".join(command.aliases)
+
+        if command.usage is None:
+            usage = "[n/a]"
+        else:
+            usage = command.usage
+            if len(command.full_parent_name) > 0:
+                usage = command.full_parent_name + " " + usage
+            usage = self.context.clean_prefix + usage
+        embed.add_field(name="Info", value=help_msg.replace("{prefix}", self.context.clean_prefix), inline=False)
+        embed.add_field(name="Aliases", value=f"```asciidoc\n{aliases_msg}```")
+        embed.add_field(name="Usage", value=f"```asciidoc\n{usage}```", inline=False)
+        return embed
+
+    async def can_run_cmd(self, cmd):
+        try:
+            return await cmd.can_run(self.context)
+        except nextcord.ext.commands.CommandError:
+            return False
 
 def setup(bot):
-    bot.add_cog(Help(bot))
+    bot.help_command = Help()

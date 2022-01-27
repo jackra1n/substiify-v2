@@ -11,41 +11,14 @@ from utils import db
 
 logger = logging.getLogger(__name__)
 
-def convert(time):
-    pos = ["m", "h", "d"]
-    time_dict = {"m": 60, "h": 3600, "d": 24*3600}
-    unit = time[-1]
-    if unit not in pos:
-        return -1
-    try:
-        timeVal = int(time[:-1])
-    except Exception as e:
-        return -2
-
-    return timeVal*time_dict[unit]
-
-def create_giveaway_embed(author, prize):
-    embed = nextcord.Embed(title=":tada: Giveaway :tada:",
-                    description=f"Win **{prize}**!",
-                    colour=0x00FFFF)
-    embed.add_field(name="Hosted By:", value=author.mention)
-    return embed
-
-def winning_text(prize, winner):
-    return f'Congratulations {winner.mention}! You won **{prize}**!'
-
-def checkIfActiveGiveaways():
-    giveaways = db.session.query(db.active_giveaways).all()
-    if len(giveaways) > 0:
-        return True
-    return False
-
 class Giveaway(commands.Cog):
+
+    COG_EMOJI = "🎁"
+
     def __init__(self, bot):
         self.bot = bot
         self.cancelled = False
-        if checkIfActiveGiveaways():
-            self.giveaway_task.start()
+        self.giveaway_task.start()
 
     @commands.group()
     async def giveaway(self, ctx):
@@ -54,6 +27,10 @@ class Giveaway(commands.Cog):
     @giveaway.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def create(self, ctx):
+        """
+        Allows you to create a giveaway. Requires manage_channels permission.
+        After calling this command, you will be asked to enter the prize, the time, and the channel.
+        """
 
         # Ask Questions
         questions = ["Setting up your giveaway. Choose what channel you want your giveaway in?",
@@ -84,7 +61,7 @@ class Giveaway(commands.Cog):
             return
 
         channel = self.bot.get_channel(channel_id)
-        time = convert(answers[1])
+        time = self.convert(answers[1])
         # Check if Time is valid
         if time == -1:
             await ctx.send("The Time format was wrong")
@@ -95,7 +72,7 @@ class Giveaway(commands.Cog):
         prize = answers[2]
 
         await ctx.send(f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}")
-        embed = create_giveaway_embed(ctx.author, prize)
+        embed = self.create_giveaway_embed(ctx.author, prize)
         embed.description += "\nReact with :tada: to enter!"
         end = (datetime.now() + timedelta(seconds=time))
         end_string = end.strftime('%d.%m.%Y %H:%M')
@@ -106,11 +83,12 @@ class Giveaway(commands.Cog):
         db.session.add(db.active_giveaways(creator, end, prize, newMsg))
         db.session.commit()
 
-        self.giveaway_task.start()
-
     @giveaway.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def reroll(self, ctx, channel: nextcord.TextChannel, id_: int):
+        """
+        Allows you to reroll a giveaway if something went wrong.
+        """
         try:
             msg = await channel.fetch_message(id_)
         except Exception as e:
@@ -119,19 +97,24 @@ class Giveaway(commands.Cog):
         users = await msg.reactions[0].users().flatten()
         users.pop(users.index(self.bot.user))
         prize = await self.get_giveaway_prize(ctx, channel, id_)
-        embed = create_giveaway_embed(ctx.author, prize)
+        embed = self.create_giveaway_embed(ctx.author, prize)
         if len(users) <= 0:
             embed.set_footer(text="No one won the Giveaway")
         elif len(users) > 0:
             winner = choice(users)
             embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
-            await channel.send(winning_text(prize, winner))
-
+            await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
         await msg.edit(embed=embed)
 
     @giveaway.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def stop(self, ctx, channel: nextcord.TextChannel, id_: int):
+        """
+        Allows you to stop a giveaway. Takes the channel and the ID of the giveaway message.
+
+        Example: 
+        `<<giveaway stop #general <message id>`
+        """
         try:
             msg = await channel.fetch_message(id_)
             newEmbed = nextcord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!!")
@@ -153,7 +136,7 @@ class Giveaway(commands.Cog):
                 users = await message.reactions[0].users().flatten()
                 author = await self.bot.fetch_user(giveaway.creator_user_id)
                 prize = giveaway.prize
-                embed = create_giveaway_embed(author, prize)
+                embed = self.create_giveaway_embed(author, prize)
 
                 users.pop(users.index(self.bot.user))
                 # Check if User list is not empty
@@ -166,7 +149,7 @@ class Giveaway(commands.Cog):
                     winner = choice(users)
                     random_seed_value += 1
                     embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
-                    await channel.send(winning_text(prize, winner))
+                    await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
                 await message.edit(embed=embed)
                 db.session.query(db.active_giveaways).filter_by(message_id=message.id).delete()
                 db.session.commit()
@@ -177,6 +160,25 @@ class Giveaway(commands.Cog):
         except Exception as e:
             await ctx.send("The channel or ID mentioned was incorrect")
         return msg.embeds[0].description.split("Win ")[1].split(" today!")[0]
+
+    def convert(self, time):
+        pos = ["m", "h", "d"]
+        time_dict = {"m": 60, "h": 3600, "d": 24*3600}
+        unit = time[-1]
+        if unit not in pos:
+            return -1
+        try:
+            timeVal = int(time[:-1])
+        except Exception as e:
+            return -2
+        return timeVal*time_dict[unit]
+
+    def create_giveaway_embed(self, author, prize):
+        embed = nextcord.Embed(title=":tada: Giveaway :tada:",
+                        description=f"Win **{prize}**!",
+                        colour=0x00FFFF)
+        embed.add_field(name="Hosted By:", value=author.mention)
+        return embed
 
 def setup(bot):
     bot.add_cog(Giveaway(bot))
