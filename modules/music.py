@@ -107,7 +107,7 @@ class Music(commands.Cog):
         results = await player.node.get_tracks(query)
 
         if not results or not results['tracks']:
-            return await ctx.send('Nothing found!')
+            return await ctx.send('Nothing found!', delete_after=30)
 
         embed = nextcord.Embed(color=nextcord.Color.blurple())
 
@@ -142,15 +142,15 @@ class Music(commands.Cog):
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 
         if not player.is_connected:
-            return await ctx.send('Not connected.')
+            return await ctx.send('Not connected.', delete_after=30)
 
         if not ctx.author.voice or (player.is_connected and ctx.author.voice.channel.id != int(player.channel_id)):
-            return await ctx.send('You\'re not in my voicechannel!')
+            return await ctx.send('You\'re not in my voicechannel!', delete_after=30)
 
         player.queue.clear()
         await player.stop()
         await ctx.voice_client.disconnect(force=True)
-        await ctx.send('*⃣ | Disconnected.')
+        await ctx.send('*⃣ | Disconnected.', delete_after=30)
         await ctx.message.delete()
 
     @commands.command()
@@ -161,18 +161,21 @@ class Music(commands.Cog):
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 
         if not player.is_playing:
-            return await ctx.send('Not playing.')
+            return await ctx.send('Not playing currently.', delete_after=15)
 
         await player.skip()
-        await ctx.send('*⃣ | Skipped.', delete_after=10)
+        await ctx.send('*⃣ | Skipped.', delete_after=15)
         await ctx.message.delete()
 
-    @commands.command(aliases=['np', 'now'])
+    @commands.command(name="now" ,aliases=['np', 'current'])
     async def now_playing(self, ctx):
         """
         Shows info about the currently playing track.
         """
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+
+        if not player.is_connected:
+            return await ctx.send('Not connected.', delete_after=10)
 
         if not player.current:
             return await ctx.send('Nothing playing.', delete_after=10)
@@ -189,10 +192,10 @@ class Music(commands.Cog):
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 
         if len(player.queue) < 2:
-            return await ctx.send('Not enough tracks to shuffle.')
+            return await ctx.send('Not enough tracks to shuffle.', delete_after=15)
 
         random.shuffle(player.queue)
-        await ctx.send('*⃣ | Queue shuffled.')
+        await ctx.send('*⃣ | Queue shuffled.', delete_after=15)
         await ctx.message.delete()
 
     @commands.group(aliases=['q'], invoke_without_command=True)
@@ -203,7 +206,7 @@ class Music(commands.Cog):
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 
         if len(player.queue) == 0:
-            return await ctx.send('Nothing queued.')
+            return await ctx.send('Nothing queued.', delete_after=15)
         elif len(player.queue) == 1:
             embed = self._create_current_song_embed(player)
             return await ctx.send(embed=embed)
@@ -288,9 +291,12 @@ class Music(commands.Cog):
         embed = nextcord.Embed(color=nextcord.Color.blurple())
         embed.title = 'Now Playing'
         embed.description = f'[{player.current.title}]({player.current.uri})'
-        timestamp = str(datetime.timedelta(milliseconds=player.current.duration)).split(".")[0]
-        position = str(datetime.timedelta(milliseconds=player.position)).split(".")[0]
-        embed.add_field(name='Duration', value=f"{position}/{timestamp}")
+        if not player.current.stream:
+            timestamp = str(datetime.timedelta(milliseconds=player.current.duration)).split(".")[0]
+            position = str(datetime.timedelta(milliseconds=player.position)).split(".")[0]
+            embed.add_field(name='Duration', value=f"{position}/{timestamp}")
+        else:
+            embed.add_field(name='Duration', value='LIVE 🔴')
         embed.add_field(name='Requested By', value=f"<@{player.current.requester}>")
         return embed
 

@@ -42,34 +42,30 @@ class Util(commands.Cog):
         await ctx.channel.send(embed=embed)
 
     @commands.group(aliases=['c'], invoke_without_command = True)
-    async def clear(self, ctx, amount = None):
+    @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
+    async def clear(self, ctx, amount: int):
         """
         Clears messages within the current channel.
         """
-        if not await has_permissions_to_delete(ctx):
-            return
         if ctx.message.type == MessageType.reply:
             message = ctx.message.reference.resolved
             if message:
                 await message.delete()
                 await ctx.message.delete()
             return
-        amount = int(amount)
-        if amount <= 100:
-            await ctx.channel.purge(limit=amount + 1)
-        else:
-            await ctx.channel.send('Cannot delete more than 100 messages at a time!')
+        if amount >= 100:
+            return await ctx.channel.send('Cannot delete more than 100 messages at a time!')
+        await ctx.channel.purge(limit=amount + 1)
 
-    @clear.command()
-    async def message(self, ctx, message_id: int):
-        """
-        Clears message with the given ID
-        """
-        if not await has_permissions_to_delete(ctx):
-            return
-        await ctx.message.delete()
-        message = await ctx.fetch_message(message_id)
-        await message.delete()
+    @clear.command(aliases=['bot', 'b'])
+    @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
+    async def clear_bot(self, ctx, amount: int):
+        """Clears the bot's messages"""
+        if amount >= 100:
+            return await ctx.channel.send('Cannot delete more than 100 messages at a time!')
+        def check(message):
+            return message.author == self.bot.user
+        await ctx.channel.purge(limit=amount + 1, check=check, bulk=False)
 
     @clear.error
     async def clear_error(self, ctx, error):
@@ -194,17 +190,3 @@ def format_bytes(size: int) -> str:
         size /= power
         n += 1
     return f'{round(size, 2)}{power_labels[n]}'
-
-async def has_permissions_to_delete(ctx):
-    if not ctx.channel.permissions_for(ctx.author).manage_messages and not await ctx.bot.is_owner(ctx.author):
-        await ctx.send("You don't have permissions to do that", delete_after=10)
-        await ctx.message.delete()
-        return False
-    return True
-
-async def has_permissions_to_manage(ctx):
-    if not ctx.channel.permissions_for(ctx.author).manage_channels and not await ctx.bot.is_owner(ctx.author):
-        await ctx.send("You don't have permissions to do that", delete_after=10)
-        await ctx.message.delete()
-        return False
-    return True

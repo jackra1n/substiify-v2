@@ -25,13 +25,12 @@ class Giveaway(commands.Cog):
         pass
 
     @giveaway.command()
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def create(self, ctx):
         """
         Allows you to create a giveaway. Requires manage_channels permission.
         After calling this command, you will be asked to enter the prize, the time, and the channel.
         """
-        if not await self.has_permissions(ctx):
-            return
 
         # Ask Questions
         questions = ["Setting up your giveaway. Choose what channel you want your giveaway in?",
@@ -85,12 +84,11 @@ class Giveaway(commands.Cog):
         db.session.commit()
 
     @giveaway.command()
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def reroll(self, ctx, channel: nextcord.TextChannel, id_: int):
         """
         Allows you to reroll a giveaway if something went wrong.
         """
-        if not await self.has_permissions(ctx):
-            return
         try:
             msg = await channel.fetch_message(id_)
         except Exception as e:
@@ -109,6 +107,7 @@ class Giveaway(commands.Cog):
         await msg.edit(embed=embed)
 
     @giveaway.command()
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def stop(self, ctx, channel: nextcord.TextChannel, id_: int):
         """
         Allows you to stop a giveaway. Takes the channel and the ID of the giveaway message.
@@ -116,8 +115,6 @@ class Giveaway(commands.Cog):
         Example: 
         `<<giveaway stop #general <message id>`
         """
-        if not await self.has_permissions(ctx):
-            return
         try:
             msg = await channel.fetch_message(id_)
             newEmbed = nextcord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!!")
@@ -174,7 +171,6 @@ class Giveaway(commands.Cog):
             timeVal = int(time[:-1])
         except Exception as e:
             return -2
-
         return timeVal*time_dict[unit]
 
     def create_giveaway_embed(self, author, prize):
@@ -183,19 +179,6 @@ class Giveaway(commands.Cog):
                         colour=0x00FFFF)
         embed.add_field(name="Hosted By:", value=author.mention)
         return embed
-
-    def checkIfActiveGiveaways():
-        giveaways = db.session.query(db.active_giveaways).all()
-        if len(giveaways) > 0:
-            return True
-        return False
-
-    async def has_permissions(self, ctx):
-        if not ctx.channel.permissions_for(ctx.author).manage_channels and not await self.bot.is_owner(ctx.author):
-            await ctx.send("You don't have permissions to do that", delete_after=10)
-            return False
-        return True
-
 
 def setup(bot):
     bot.add_cog(Giveaway(bot))
