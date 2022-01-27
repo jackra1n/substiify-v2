@@ -30,7 +30,7 @@ class Help(commands.MinimalHelpCommand):
     # help <group>
     async def send_group_help(self, group):
         embed = self.create_command_help_embed(group)
-        sub_commands = [c.name for c in group.commands]
+        sub_commands = [c.name for c in group.commands if not c.hidden]
         embed.add_field(name="Subcommands", value=f"```{', '.join(sub_commands)}```")
         if len(command_chain := group.full_parent_name) > 0:
             command_chain = group.full_parent_name + " "

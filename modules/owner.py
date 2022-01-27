@@ -212,7 +212,7 @@ class Owner(commands.Cog):
         pass
 
     @commands.is_owner()
-    @server.command(aliases=['list'])
+    @server.command(name='list')
     async def server_list(self, ctx):
         """
         Lists all the servers the bot is in.
@@ -234,7 +234,7 @@ class Owner(commands.Cog):
         await ctx.send(embed=embed, delete_after=120)
 
     @commands.is_owner()
-    @server.command(aliases=['ids'])
+    @server.command(name='ids')
     async def server_ids(self, ctx):
         servers = ''
         server_ids = ''
@@ -250,7 +250,7 @@ class Owner(commands.Cog):
         await ctx.send(embed=embed, delete_after=120)
 
     @commands.is_owner()
-    @server.command(aliases=['channels'], hidden=True)
+    @server.command(name='channels', hidden=True)
     async def channel_list(self, ctx, guild_id: int):
         """
         Lists all the channels in a server.

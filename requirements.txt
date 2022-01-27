@@ -4,8 +4,6 @@ numpy
 nextcord[voice]
 nextcord[speed]
 psutil
-bs4
-lxml
 requests
 pytz
 sqlalchemy
