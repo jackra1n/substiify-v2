@@ -89,7 +89,7 @@ class Music(commands.Cog):
             guild = self.bot.get_guild(member.guild.id)
             await guild.voice_client.disconnect(force=True)
 
-    @commands.command(aliases=['p'])
+    @commands.command(aliases=['p'], usage='play <url/query>')
     async def play(self, ctx, *, query: str):
         """ Plays or queues a song/playlist. Can be a YouTube URL, Soundcloud URL or a search query. 
         
@@ -201,7 +201,7 @@ class Music(commands.Cog):
     @commands.group(aliases=['q'], invoke_without_command=True)
     async def queue(self, ctx):
         """
-        Shows the queue in a paginated menu.
+        Shows the queue in a paginated menu. Use the subcommand `clear` to clear the queue.
         """
         player = self.bot.lavalink.player_manager.get(ctx.guild.id)
 

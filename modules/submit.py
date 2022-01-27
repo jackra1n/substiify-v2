@@ -78,11 +78,16 @@ class Submit(commands.Cog):
             if self.deny_emoji in str(payload.emoji):
                 await self.send_denied_user_reply(payload, 'suggestion')
 
-    @commands.group()
+    @commands.group(aliases=['report'])
     async def submit(self, ctx):
+        """
+        Allows you to report a bug or suggest a feature or an improvement to the developer team.
+        After submitting your bug, you will be able to see if it has been accepted or denied.
+        Check out the `bug` and `suggestion` subcommands for more information.
+        """
         pass
 
-    @submit.command()
+    @submit.command(usage='bug <message>')
     @commands.cooldown(2, 900, BucketType.user)
     async def bug(self, ctx, *words: str):
         """
@@ -91,8 +96,6 @@ class Submit(commands.Cog):
 
         Example:
         `<<submit bug When I used the command `<<help` I expected to see a list of commands. But instead I got a list of bugs.`
-
-        After submitting your bug, you will be able to see if it has been accepted or denied.
         """
         sentence = " ".join(words[:])
         if len(sentence) <= 20:
@@ -101,7 +104,7 @@ class Submit(commands.Cog):
             await self.send_submission(ctx, self.bug_channel, sentence, ctx.command.name)
         await ctx.message.delete()
 
-    @submit.command()
+    @submit.command(aliases=['improvement'], usage='suggestion <message>')
     @commands.cooldown(2, 900, BucketType.user)
     async def suggestion(self, ctx, *words: str):
         """
@@ -110,8 +113,6 @@ class Submit(commands.Cog):
 
         Example:
         `<<submit suggestion I would like to be able to change the bot's prefix.`
-
-        After submitting your suggestion, you will be able to see if it has been accepted or denied.
         """
         sentence = " ".join(words[:])
         if len(sentence) <= 10:

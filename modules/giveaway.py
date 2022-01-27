@@ -20,11 +20,15 @@ class Giveaway(commands.Cog):
         self.cancelled = False
         self.giveaway_task.start()
 
-    @commands.group()
+    @commands.group(aliases=["give"])
     async def giveaway(self, ctx):
+        """
+        Allows you to create giveaways on the server.
+        If you want to create a giveaway, check the `giveaway create` command.
+        """
         pass
 
-    @giveaway.command()
+    @giveaway.command(aliases=["c"], usage="create")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def create(self, ctx):
         """
@@ -83,40 +87,37 @@ class Giveaway(commands.Cog):
         db.session.add(db.active_giveaways(creator, end, prize, newMsg))
         db.session.commit()
 
-    @giveaway.command()
+    @giveaway.command(usage="reroll <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def reroll(self, ctx, channel: nextcord.TextChannel, id_: int):
+    async def reroll(self, ctx, message_id: int):
         """
         Allows you to reroll a giveaway if something went wrong.
         """
         try:
-            msg = await channel.fetch_message(id_)
+            msg = await ctx.fetch_message(message_id)
         except Exception as e:
             await ctx.send("The channel or ID mentioned was incorrect")
             return
         users = await msg.reactions[0].users().flatten()
         users.pop(users.index(self.bot.user))
-        prize = await self.get_giveaway_prize(ctx, channel, id_)
+        prize = await self.get_giveaway_prize(ctx, message_id)
         embed = self.create_giveaway_embed(ctx.author, prize)
         if len(users) <= 0:
             embed.set_footer(text="No one won the Giveaway")
         elif len(users) > 0:
             winner = choice(users)
             embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
-            await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
+            await msg.channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
         await msg.edit(embed=embed)
 
-    @giveaway.command()
+    @giveaway.command(aliases=["cancel"], usage="stop <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def stop(self, ctx, channel: nextcord.TextChannel, id_: int):
+    async def stop(self, ctx, message_id: int):
         """
-        Allows you to stop a giveaway. Takes the channel and the ID of the giveaway message.
-
-        Example: 
-        `<<giveaway stop #general <message id>`
+        Allows you to stop a giveaway. Takes the ID of the giveaway message as an argument.
         """
         try:
-            msg = await channel.fetch_message(id_)
+            msg = await ctx.fetch_message(message_id)
             newEmbed = nextcord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!!")
             # Set Giveaway cancelled
             self.cancelled = True
@@ -154,9 +155,9 @@ class Giveaway(commands.Cog):
                 db.session.query(db.active_giveaways).filter_by(message_id=message.id).delete()
                 db.session.commit()
 
-    async def get_giveaway_prize(self, ctx, channel: nextcord.TextChannel, id_: int):
+    async def get_giveaway_prize(self, ctx, message_id: int):
         try:
-            msg = await channel.fetch_message(id_)
+            msg = await ctx.fetch_message(message_id)
         except Exception as e:
             await ctx.send("The channel or ID mentioned was incorrect")
         return msg.embeds[0].description.split("Win ")[1].split(" today!")[0]

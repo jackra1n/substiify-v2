@@ -16,7 +16,7 @@ class Duel(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command(brief='Fight someone on this server!')
+    @commands.command(aliases=['duel'], usage='duel <@user>')
     @commands.max_concurrency(1, per=BucketType.default, wait=True)
     async def fight(self, ctx, member: nextcord.Member):
         """
