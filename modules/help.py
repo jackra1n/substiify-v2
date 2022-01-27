@@ -83,9 +83,9 @@ class Help(commands.MinimalHelpCommand):
             for cog, cmds in sorted(mapping.items(), key=lambda e: len(e[1]), reverse=True):
                 cmds = [ c for c in cmds if not c.hidden ]
                 if len(cmds) > 0:
-                    cmd_list = f"```diff\n"
+                    cmd_list = f"```md\n"
                     for com in sorted(cmds, key=lambda e: e.name):
-                        prefix = "+" if await self.can_run_cmd(com) else "---"
+                        prefix = "*" if await self.can_run_cmd(com) else ">"
                         cmd_list += f"{prefix} {com}\n"
                     cmd_list += "```"
 
@@ -118,7 +118,7 @@ class Help(commands.MinimalHelpCommand):
                 usage = command.full_parent_name + " " + usage
             usage = self.context.clean_prefix + usage
 
-        embed = self._help_embed(title=command_name)
+        embed = Embed(title=command_name, color=0x1E9FE3)
         embed.add_field(name="Info", value=help_msg.replace("{prefix}", self.context.clean_prefix), inline=False)
         embed.add_field(name="Aliases", value=f"```asciidoc\n{aliases_msg}```")
         embed.add_field(name="Usage", value=f"```asciidoc\n{usage}```", inline=False)
