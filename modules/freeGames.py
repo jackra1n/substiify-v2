@@ -68,7 +68,7 @@ class FreeGames(commands.Cog):
             for game in currentFreeGames:
                 startDateStr = game.start_date.strftime('%d %B %Y')
                 endDateStr = game.end_date.strftime('%d %B %Y')
-                embed = nextcord.Embed(title=game.title, url=game.epic_store_link, colour=0x000000)
+                embed = nextcord.Embed(title=game.title, url=game.epic_store_link, color=0x000000)
                 embed.set_thumbnail(url=f"{epicGamesLogo}")
                 embed.add_field(name="Available", value=f'{startDateStr} to {endDateStr}', inline=False)
                 embed.add_field(name="Price", value=f"~~`{game.original_price}`~~ ⟶ `{game.discount_price}`", inline=False)

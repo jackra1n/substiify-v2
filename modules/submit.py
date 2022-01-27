@@ -26,7 +26,7 @@ class Submit(commands.Cog):
         embed = nextcord.Embed(
             title='Submission error',
             description=f'Your message is too short: {len(sentence)} characters',
-            colour=nextcord.Colour.red()
+            color=nextcord.Colour.red()
         )
         await ctx.send(embed=embed, delete_after=15)
 
@@ -34,7 +34,7 @@ class Submit(commands.Cog):
         embed = nextcord.Embed(
             title=f'New {submission_type} submission',
             description=f'```{sentence}```\nSubmitted by: {ctx.author.mention}',
-            colour=nextcord.Colour.red()
+            color=nextcord.Colour.red()
         )
         embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar.url)
         message = await channel.send(embed=embed)
@@ -56,7 +56,7 @@ class Submit(commands.Cog):
         new_embed = nextcord.Embed(
             title=f'{submission_type} submission',
             description=embed.description,
-            colour=nextcord.Colour.red()
+            color=nextcord.Colour.red()
         )
         await user.send(content=f'Hello {user.name}!\nYour {self.bot.user.mention} {submission_type} submission has been {action}.\n', embed=new_embed)
         await message.delete()

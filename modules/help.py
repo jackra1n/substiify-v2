@@ -63,7 +63,7 @@ class Help(commands.MinimalHelpCommand):
         self, title: str, description: Optional[str] = None, mapping: Optional[str] = None,
         command_set: Optional[Set[commands.Command]] = None, set_author: bool = False
     ) -> Embed:
-        embed = Embed(title=title)
+        embed = Embed(title=title, color=0x1E9FE3)
         if description:
             embed.description = description
         if set_author:
@@ -100,7 +100,6 @@ class Help(commands.MinimalHelpCommand):
         # command path
         if len(command.full_parent_name) > 0:
             command_name = command.full_parent_name.replace(" ", " > ") + " > " + command_name
-        embed = nextcord.Embed(title=command_name, color=0xb74e17)
 
         help_msg = command.help
         if help_msg is None:
@@ -118,6 +117,8 @@ class Help(commands.MinimalHelpCommand):
             if len(command.full_parent_name) > 0:
                 usage = command.full_parent_name + " " + usage
             usage = self.context.clean_prefix + usage
+
+        embed = self._help_embed(title=command_name)
         embed.add_field(name="Info", value=help_msg.replace("{prefix}", self.context.clean_prefix), inline=False)
         embed.add_field(name="Aliases", value=f"```asciidoc\n{aliases_msg}```")
         embed.add_field(name="Usage", value=f"```asciidoc\n{usage}```", inline=False)

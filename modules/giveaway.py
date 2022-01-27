@@ -176,7 +176,7 @@ class Giveaway(commands.Cog):
     def create_giveaway_embed(self, author, prize):
         embed = nextcord.Embed(title=":tada: Giveaway :tada:",
                         description=f"Win **{prize}**!",
-                        colour=0x00FFFF)
+                        color=0x00FFFF)
         embed.add_field(name="Hosted By:", value=author.mention)
         return embed
 

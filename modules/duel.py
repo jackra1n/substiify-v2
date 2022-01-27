@@ -55,7 +55,7 @@ class Duel(commands.Cog):
                 title='⚔️ ' + duel_authors_name + ' choose your class.',
                 description=ctx.author.mention +
                     'what class do you want to be? `berserker`, `tank` or `wizard`?',
-                colour=nextcord.Colour.red()
+                color=nextcord.Colour.red()
             )
             await ctx.channel.send(embed=embed)
 
@@ -65,7 +65,7 @@ class Duel(commands.Cog):
                 title='⚔️ ' + duel_authors_name + ' has challenged ' + challenge_member_name + ' to a fight!',
                 description=duel_authors_name + ' chose class ' + warrior1.ClassName + '. ' + member.mention +
                     ', what is your class of choice? `berserker`,`tank`, or `wizard`?\nType your choice out in chat as it is displayed!',
-                colour=nextcord.Colour.red()
+                color=nextcord.Colour.red()
             )
             await ctx.channel.send(embed=embed)
 
@@ -99,7 +99,7 @@ class Duel(commands.Cog):
             title='STOP! STOP! STOP! THE FIGHT IS OVER!!!',
             description='**' + winner.user.display_name +
                 '** wins with just `' + str(winner.Health) + ' HP` left!',
-            colour=nextcord.Colour.teal()
+            color=nextcord.Colour.teal()
         )
         await ctx.channel.send(embed=winEmbedMessage)
 

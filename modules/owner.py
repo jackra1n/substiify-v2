@@ -42,7 +42,7 @@ class Owner(commands.Cog):
         """
         Shuts down the bot. Made this in case something goes wrong.
         """
-        embed = nextcord.Embed(description=f'Shutting down...', colour=0xf66045)
+        embed = nextcord.Embed(description=f'Shutting down...', color=0xf66045)
         await ctx.send(embed=embed)
         await self.bot.close()
 
@@ -105,7 +105,7 @@ class Owner(commands.Cog):
     @commands.is_owner()
     @commands.group(invoke_without_command=True)
     async def message(self, ctx):
-        embed = nextcord.Embed(title="Current message settings", colour=0xf66045)
+        embed = nextcord.Embed(title="Current message settings", color=0xf66045)
         embed.add_field(name="Server", value=self.message_server)
         embed.add_field(name="Channel", value=self.message_channel)
         embed.add_field(name="Message", value=self.message_text)
@@ -143,7 +143,7 @@ class Owner(commands.Cog):
         text_channels = [channel for channel in channels if type(channel) == nextcord.channel.TextChannel]
         if len(channels) == 0:
             return await ctx.send("No text channels found in this server", delete_after=30)
-        embed = nextcord.Embed(title="Channels", colour=0xf66045)
+        embed = nextcord.Embed(title="Channels", color=0xf66045)
         channel_string = ""
         for index, channel in enumerate(text_channels):
             channel_string += f"{index}. {channel.name}\n"
@@ -176,7 +176,7 @@ class Owner(commands.Cog):
     async def message_send(self, ctx):
         if self.message_server is None or self.message_channel is None or self.message_text is None:
             return await ctx.send("Please set all the settings first", delete_after=30)
-        embed = nextcord.Embed(title="Message overview", colour=nextcord.Colour.blurple())
+        embed = nextcord.Embed(title="Message overview", color=nextcord.Colour.blurple())
         embed.description = "⚠️ Are you sure you want to send this message ⚠️"
         embed.add_field(name="Server", value=self.message_server)
         embed.add_field(name="Channel", value=self.message_channel)
@@ -226,7 +226,7 @@ class Owner(commands.Cog):
             owner += f'{guild.owner.mention} {guild.owner}\n'
         embed = nextcord.Embed(
             title='Server Infos',
-            colour=nextcord.Colour.blurple()
+            color=nextcord.Colour.blurple()
         )
         embed.add_field(name='Name', value=servers, inline=True)
         embed.add_field(name='Cnt', value=user_count, inline=True)
@@ -243,7 +243,7 @@ class Owner(commands.Cog):
             server_ids += f'{guild.id}\n'
         embed = nextcord.Embed(
             title='Server Ids',
-            colour=nextcord.Colour.blurple()
+            color=nextcord.Colour.blurple()
         )
         embed.add_field(name='Name', value=servers, inline=True)
         embed.add_field(name='Id', value=server_ids, inline=True)
@@ -261,7 +261,7 @@ class Owner(commands.Cog):
             channels += f'{channel.name}\n'
         embed = nextcord.Embed(
             title='Channel Infos',
-            colour=nextcord.Colour.blurple()
+            color=nextcord.Colour.blurple()
         )
         embed.add_field(name='Name', value=channels, inline=True)
         await ctx.send(embed=embed, delete_after=120)

@@ -44,7 +44,7 @@ class MainBot(commands.Cog):
         print(f'{python_version} {platform.python_version()}')
         print(f'{nextcord_version} {nextcord.__version__}')
         print(f'{system_description} {self.get_system_description()}')
-        print('='*40, '\n')
+        print('='*40)
 
         logger.info(f'{self.bot.user} is ready!')
 

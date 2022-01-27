@@ -134,8 +134,8 @@ class Music(commands.Cog):
             await player.play()
         await ctx.message.delete()
 
-    @commands.command(aliases=['leave', 'stop'])
-    async def disconnect(self, ctx):
+    @commands.command(aliases=['disconnect', 'stop'])
+    async def leave(self, ctx):
         """
         Disconnects the player from the voice channel and clears its queue.
         """
@@ -261,11 +261,11 @@ class Music(commands.Cog):
         await ctx.message.delete()
 
 
-    @commands.command()
     @commands.is_owner()
+    @commands.command(hidden=True)
     async def players(self, ctx):
         """
-        Shows all active players.
+        Shows all active players. Mostly used to check before deploying a new version.
         """
         players = self.bot.lavalink.player_manager.find_all()
         players = [player for player in players if player.is_connected]
@@ -303,7 +303,7 @@ class Music(commands.Cog):
     def _create_queue_embed_list(self, ctx, player):
         pages = []
         for i in range(0, len(player.queue), 10):
-            embed = nextcord.Embed(colour=ctx.author.colour, timestamp=datetime.datetime.utcnow())
+            embed = nextcord.Embed(color=ctx.author.colour, timestamp=datetime.datetime.utcnow())
             embed.title = f"Queue ({len(player.queue)})"
             embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.avatar.url)
             embed.add_field(name='Now Playing', value=f'[{player.current.title}]({player.current.uri})')

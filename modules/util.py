@@ -36,7 +36,7 @@ class Util(commands.Cog):
         embed = nextcord.Embed(
             title=f"{str(member.display_name)}'s avatar",
             url=member.avatar.url,
-            colour=nextcord.Colour.light_grey()
+            color=nextcord.Colour.light_grey()
         )
         embed.set_image(url=member.avatar.url)
         await ctx.channel.send(embed=embed)
@@ -117,7 +117,7 @@ class Util(commands.Cog):
 
         embed = nextcord.Embed(
             title=f'Info about {self.bot.user.display_name}',
-            description=content, colour=nextcord.Colour(0xc44c27),
+            description=content, color=nextcord.Colour(0xc44c27),
             timestamp=datetime.now(timezone("Europe/Zurich"))
         )
         embed.set_thumbnail(url=self.bot.user.avatar.url)

@@ -32,10 +32,10 @@ class Votes(commands.Cog):
         """
         await ctx.message.delete()
         if ctx.channel.id in self.vote_channels:
-            embed = nextcord.Embed(description=f'Votes are **ALREADY enabled** in {ctx.channel.mention}!', colour=0x23b40c)
+            embed = nextcord.Embed(description=f'Votes are **ALREADY enabled** in {ctx.channel.mention}!', color=0x23b40c)
             await ctx.send(embed=embed, delete_after=10)
         else:
-            embed = nextcord.Embed(description=f'Votes are **NOT enabled** in {ctx.channel.mention}!', colour=0xf66045)
+            embed = nextcord.Embed(description=f'Votes are **NOT enabled** in {ctx.channel.mention}!', color=0xf66045)
             await ctx.send(embed=embed, delete_after=10)
 
     @votes.command()
@@ -58,13 +58,13 @@ class Votes(commands.Cog):
         else:
             embed = nextcord.Embed(
                 description=f'Votes are **already active** in {ctx.channel.mention}!',
-                colour=0x23b40c
+                color=0x23b40c
             )
             await ctx.send(embed=embed, delete_after=20)
             return
         embed = nextcord.Embed(
             description=f'Votes **enabled** in {channel.mention}!',
-            colour=0x23b40c
+            color=0x23b40c
         )
         await ctx.send(embed=embed)
 
@@ -81,7 +81,7 @@ class Votes(commands.Cog):
             index = np.argwhere(self.vote_channels==channel.id)
             self.vote_channels = np.delete(self.vote_channels, index)
         await ctx.message.delete()
-        await ctx.channel.send(embed=nextcord.Embed(description=f'Votes has been stopped in {channel.mention}!', colour=0xf66045))
+        await ctx.channel.send(embed=nextcord.Embed(description=f'Votes has been stopped in {channel.mention}!', color=0xf66045))
 
     def load_vote_channels(self) -> list:
         channel_array = []
