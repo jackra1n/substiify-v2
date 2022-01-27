@@ -1,8 +1,8 @@
 import json
 import logging
 import platform
-import nextcord
 
+import nextcord
 from nextcord.ext import commands
 
 from utils import db, store

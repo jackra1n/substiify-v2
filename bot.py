@@ -4,7 +4,7 @@ import logging
 import nextcord
 from nextcord.ext import commands
 
-from utils import util, store
+from utils import store, util
 from utils.db import create_database
 
 util.prepareFiles()

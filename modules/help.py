@@ -1,7 +1,8 @@
 from typing import Optional, Set
-from nextcord.ext import commands
-from nextcord import Embed
+
 import nextcord
+from nextcord import Embed
+from nextcord.ext import commands
 
 
 class Help(commands.MinimalHelpCommand):
