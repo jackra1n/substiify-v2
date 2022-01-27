@@ -19,6 +19,7 @@ class Help(commands.MinimalHelpCommand):
             mapping=mapping,
             set_author=True,
         )
+        embed.set_footer(text=f"Use {self.context.clean_prefix}help <command / category> to get more information.")
         self.response = await self.get_destination().send(embed=embed)
 
     # help <cog>
@@ -30,10 +31,10 @@ class Help(commands.MinimalHelpCommand):
     async def send_group_help(self, group):
         embed = self.create_command_help_embed(group)
         sub_commands = [c.name for c in group.commands]
-        embed.add_field(name="\u200b", value=f"```asciidoc\n= Subcommands =\n{', '.join(sub_commands)}```")
+        embed.add_field(name="Subcommands", value=f"```{', '.join(sub_commands)}```")
         if len(command_chain := group.full_parent_name) > 0:
             command_chain = group.full_parent_name + " "
-        embed.set_footer(text=f"This command has subcommands. Check their help page with {self.context.clean_prefix}help {command_chain}{group.name} <subcommand>")
+        embed.set_footer(text=f"This command has subcommands. Check their help page with `{self.context.clean_prefix}help {command_chain}{group.name} <subcommand>`")
         await self.context.send(embed=embed)
 
     async def cog_help_embed(self, cog: Optional[commands.Cog]) -> Embed:
@@ -51,19 +52,14 @@ class Help(commands.MinimalHelpCommand):
 
     # help <command>
     async def send_command_help(self, command: commands.Command):
-        emoji = getattr(command.cog, "COG_EMOJI", None)
-        embed = await self._help_embed(
-            title=f"{emoji} {command.qualified_name}" if emoji else command.qualified_name,
-            description=command.help,
-            command_set=command.commands if isinstance(command, commands.Group) else None
-        )
+        embed = self.create_command_help_embed(command)
         await self.get_destination().send(embed=embed)
 
     async def _help_embed(
         self, title: str, description: Optional[str] = None, mapping: Optional[str] = None,
         command_set: Optional[Set[commands.Command]] = None, set_author: bool = False
     ) -> Embed:
-        embed = Embed(title=title, color=0x1E9FE3)
+        embed = Embed(title=title, color=0xE3621E)
         if description:
             embed.description = description
         if set_author:
@@ -83,9 +79,9 @@ class Help(commands.MinimalHelpCommand):
             for cog, cmds in sorted(mapping.items(), key=lambda e: len(e[1]), reverse=True):
                 cmds = [ c for c in cmds if not c.hidden ]
                 if len(cmds) > 0:
-                    cmd_list = f"```diff\n"
+                    cmd_list = f"```md\n"
                     for com in sorted(cmds, key=lambda e: e.name):
-                        prefix = "+" if await self.can_run_cmd(com) else "---"
+                        prefix = "*" if await self.can_run_cmd(com) else ">"
                         cmd_list += f"{prefix} {com}\n"
                     cmd_list += "```"
 
@@ -100,6 +96,8 @@ class Help(commands.MinimalHelpCommand):
         # command path
         if len(command.full_parent_name) > 0:
             command_name = command.full_parent_name.replace(" ", " > ") + " > " + command_name
+        emoji = getattr(command.cog, "COG_EMOJI", None)
+        command_name = f"{emoji} {command_name}" if emoji else command_name
 
         help_msg = command.help
         if help_msg is None:
@@ -118,7 +116,7 @@ class Help(commands.MinimalHelpCommand):
                 usage = command.full_parent_name + " " + usage
             usage = self.context.clean_prefix + usage
 
-        embed = self._help_embed(title=command_name)
+        embed = Embed(title=command_name, color=0xE3621E)
         embed.add_field(name="Info", value=help_msg.replace("{prefix}", self.context.clean_prefix), inline=False)
         embed.add_field(name="Aliases", value=f"```asciidoc\n{aliases_msg}```")
         embed.add_field(name="Usage", value=f"```asciidoc\n{usage}```", inline=False)

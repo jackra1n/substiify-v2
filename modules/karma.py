@@ -14,10 +14,11 @@ class Karma(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.group(invoke_without_command=True)
+    @commands.group(invoke_without_command=True, usage="karma [user]")
     async def karma(self, ctx, user: nextcord.User = None):
         """
-        Shows the karma of a user
+        Shows the karma of a user. If you dont specify a user, it will show your own.
+        If you want to know what emote reactions are used for karma, use the subcommand `karma emotes`
         """
         if user is None:
             user = ctx.author
@@ -32,10 +33,11 @@ class Karma(commands.Cog):
         await ctx.send(embed=embed, delete_after=20)
         await ctx.message.delete()
 
-    @karma.group(name='emotes', invoke_without_command=True)
+    @karma.group(name='emotes', aliases=['emote'], usage="emotes", invoke_without_command=True)
     async def karma_emotes(self, ctx):
         """
-        Shows the karma emotes of the server
+        Shows the karma emotes of the server. Emotes in the `add` category increase karma, while emotes in the `remove` category decrease karma.
+        If you want to add or remove an emote from the karma system, check the subcommand `karma emotes add` or `karma emotes remove`
         """
         karma_emotes = db.session.query(db.karma_emote).filter_by(guild_id=ctx.guild.id).order_by(db.karma_emote.action).all()
         if len(karma_emotes) == 0:
@@ -44,18 +46,18 @@ class Karma(commands.Cog):
         last_action = ''
         for emote in karma_emotes:
             if emote.action != last_action:
-                embed_string += f'\n`{emote.action}:` '
+                embed_string += f'\n`{"add" if emote.action == 0 else "remove"}:` '
                 last_action = emote.action
             embed_string += f'{self.bot.get_emoji(emote.emote_id)} '
         embed = nextcord.Embed(title=f'Karma Emotes - {ctx.guild.name}', description=embed_string)
         await ctx.send(embed=embed, delete_after=30)
         await ctx.message.delete()
 
-    @karma_emotes.command(name='add')
+    @karma_emotes.command(name='add', usage="add <emote> <action>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def karma_emote_add(self, ctx, emote: nextcord.Emoji, emote_action: int):
         """
-        Add an emote to the karma emotes for this server. Takes an emoji and an action (0 for increase, 1 for reduce karma)
+        Add an emote to the karma emotes for this server. Takes an emoji and an action (0 for add, 1 for remove karma)
         The votes from this bots Votes module automatically add karma to the user. No need to add those emotes to the emote list.
 
         Example:
@@ -81,7 +83,7 @@ class Karma(commands.Cog):
         await ctx.message.delete()
 
 
-    @karma_emotes.command(name='remove')
+    @karma_emotes.command(name='remove', aliases=['delete'], usage="remove <emote>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def karma_emote_remove(self, ctx, emote: nextcord.Emoji):
         """
@@ -97,7 +99,7 @@ class Karma(commands.Cog):
         await ctx.send(embed=embed, delete_after=20)
         await ctx.message.delete()
 
-    @karma.command(name='leaderboard', aliases=['lb'])
+    @karma.command(name='leaderboard', aliases=['lb'], usage="leaderboard")
     async def karma_leaderboard(self, ctx, global_leaderboard: str = None):
         """
         Shows users with the most karma on the server.
@@ -159,7 +161,10 @@ class Karma(commands.Cog):
     async def check_payload(self, payload):
         if payload.event_type == 'REACTION_ADD' and payload.member.bot:
             return None
-        message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        try:
+            message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        except nextcord.errors.NotFound:
+            return None
         if message.author.bot:
             return None
         user = await self.bot.fetch_user(payload.user_id)

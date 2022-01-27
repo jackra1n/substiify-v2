@@ -36,7 +36,7 @@ class Util(commands.Cog):
         embed = nextcord.Embed(
             title=f"{str(member.display_name)}'s avatar",
             url=member.avatar.url,
-            color=nextcord.Colour.light_grey()
+            color=0x1E9FE3
         )
         embed.set_image(url=member.avatar.url)
         await ctx.channel.send(embed=embed)
@@ -80,7 +80,7 @@ class Util(commands.Cog):
         title = 'Pong!'
         if 'dink' in ctx.message.content.lower():
             title = 'Donk!'
-        embed = nextcord.Embed(title=f'{title} 🏓', description=f'⏱️Ping:`{round(self.bot.latency*1000)}` ms')
+        embed = nextcord.Embed(title=f'{title} 🏓', description=f'⏱️Ping:`{round(self.bot.latency*1000)}` ms', color=0xE3621E)
         await ctx.message.delete()
         await ctx.send(embed=embed)
 
@@ -90,7 +90,8 @@ class Util(commands.Cog):
         shuffle(peeople_who_helped)
         embed = nextcord.Embed(
             title="Special thanks for any help to those people",
-            description = f" ".join(peeople_who_helped)
+            description = f" ".join(peeople_who_helped),
+            color=0xE3621E
         )
         await ctx.message.delete()
         await ctx.channel.send(embed=embed, delete_after=120)
@@ -117,7 +118,7 @@ class Util(commands.Cog):
 
         embed = nextcord.Embed(
             title=f'Info about {self.bot.user.display_name}',
-            description=content, color=nextcord.Colour(0xc44c27),
+            description=content, color=0xE3621E,
             timestamp=datetime.now(timezone("Europe/Zurich"))
         )
         embed.set_thumbnail(url=self.bot.user.avatar.url)
@@ -128,7 +129,7 @@ class Util(commands.Cog):
     @commands.group(name="usage", invoke_without_command=True)
     async def usage(self, ctx):
         """
-        Shows most used commands on the server
+        Shows a lits of most used command on the current server
         """
         commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
         embed = create_command_usage_embed(commands_used_query, f"Top used commands on: **{ctx.guild.name}**")
@@ -137,7 +138,7 @@ class Util(commands.Cog):
     @usage.command(name="all")
     async def usage_all(self, ctx): 
         """
-        Shows most used commands on all servers
+        Shows a list of most used commands on all servers
         """
         commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
         embed = create_command_usage_embed(commands_used_query, f"Top total used commands")
@@ -146,7 +147,7 @@ class Util(commands.Cog):
     @usage.command(name="servers")
     async def usage_servers(self, ctx):
         """
-        Shows servers where the bot is used the most
+        Shows a list of servers with most used commands
         """
         commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.server_id).order_by(func.count('*').desc()).all()
         embed = create_command_usage_embed(commands_used_query, f"Top servers used commands")
@@ -161,7 +162,7 @@ def create_command_usage_embed(commands_used_query, embed_title):
     for row in commands_used_query:
         commands_used += f"{row[0]}\n"
         commands_count += f"{row[1]}\n"
-    embed = nextcord.Embed(title=embed_title, color=0x00ff00)
+    embed = nextcord.Embed(title=embed_title, color=0xE3621E)
     embed.add_field(name="Command", value=commands_used, inline=True)
     embed.add_field(name="Count", value=commands_count, inline=True)
     return embed
