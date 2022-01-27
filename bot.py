@@ -17,8 +17,8 @@ with open(store.SETTINGS_PATH, "r") as settings:
 prefix = settings["prefix"]
 bot = commands.Bot(command_prefix=prefix, owner_id=276462585690193921, intents=nextcord.Intents().all())
 
-bot.remove_command('help')
 bot.load_extension("modules.mainbot")
+bot.load_extension("modules.help")
 
 if not settings['token']:
     logger.error(f'No token in {store.SETTINGS_PATH}! Please add it and try again.')

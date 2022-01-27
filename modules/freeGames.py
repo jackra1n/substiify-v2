@@ -38,12 +38,18 @@ class Game():
                 return image["url"]
 
 class FreeGames(commands.Cog):
+
+    COG_EMOJI = "🕹️"
+
     def __init__(self, bot):
         self.bot = bot
 
     @commands.cooldown(3, 30)
     @commands.command()
     async def epic(self, ctx):
+        """
+        Show all free games from Epic Games that are currently available.
+        """
         try:
             allGames = requests.get(epicStoreFreeGamesAPI).json()["data"]["Catalog"]["searchStore"]["elements"]
         except Exception as e:

@@ -7,12 +7,18 @@ from nextcord.ext import commands
 logger = logging.getLogger(__name__)
 
 class Fun(commands.Cog):
+
+    COG_EMOJI = "🎱"
+
     def __init__(self, bot):
         self.bot = bot
 
     @commands.cooldown(6, 5)
-    @commands.command(aliases=['8ball'], brief='AKA 8ball, Ask the bot a question that you dont want the answer to.')
+    @commands.command(aliases=['8ball'])
     async def eightball(self, ctx,*,question):
+        """
+        AKA 8ball, Ask the bot a question that you dont want the answer to.
+        """
         responses = ["It is certain.",
                     "It is decidedly so.",
                     "Without a doubt.",

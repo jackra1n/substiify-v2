@@ -4,14 +4,14 @@ import logging
 class CustomLogFormatter(logging.Formatter):
     """Logging Formatter to add colors and count warning / errors"""
 
-    dark_grey = "\x1b[30;1m"
-    green = "\x1b[1;32m"
-    light_blue = "\x1b[34;1m"
-    yellow = "\x1b[1;33m"
-    purple = "\x1b[1;35m"
-    red = "\x1b[1;31m"
-    bold_red = "\x1b[5m\x1b[1;31m"
-    reset = "\x1b[0m"
+    dark_grey = "\033[30;1m"
+    red = "\033[1;31m"
+    green = "\033[1;32m"
+    yellow = "\033[1;33m"
+    light_blue = "\033[34;1m"
+    purple = "\033[1;35m"
+    bold_red = "\033[5m\033[1;31m"
+    reset = "\033[0m"
 
     format_prefix = "["+green+"{asctime}"+reset+"] ["
     level_name = "{levelname:<7}"+reset+"] "

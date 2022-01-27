@@ -10,6 +10,9 @@ from utils import db, store
 logger = logging.getLogger(__name__)
 
 class Votes(commands.Cog):
+
+    COG_EMOJI = "🗳️"
+
     def __init__(self, bot):
         self.bot = bot
         self.vote_channels = np.array(self.load_vote_channels())
@@ -24,6 +27,9 @@ class Votes(commands.Cog):
 
     @commands.group()
     async def votes(self, ctx):
+        """
+        Shows if votes are enabled in the current channel
+        """
         if ctx.invoked_subcommand is None and await self.has_permissions(ctx):
             await ctx.message.delete()
             if ctx.channel.id in self.vote_channels:
@@ -35,6 +41,13 @@ class Votes(commands.Cog):
 
     @votes.command()
     async def setup(self, ctx, channel: nextcord.TextChannel = None):
+        """
+        Enables votes in the current channel. Requires Manage Channels permission.
+        After enabling votes, the bot will add the upvote and downvote emojis to every message in the channel.
+        This is good for something like a meme channel if you want to give upvotes and downvotes to the messages.
+
+        If users click the reactions user karma will be updated.
+        """
         if not await self.has_permissions(ctx):
             return
         await ctx.message.delete()
@@ -59,6 +72,9 @@ class Votes(commands.Cog):
 
     @votes.command()
     async def stop(self, ctx, channel: nextcord.TextChannel = None):
+        """
+        Disables votes in the current channel. Requires Manage Channels permission.
+        """
         if not await self.has_permissions(ctx):
             return
         channel = ctx.channel if channel is None else channel

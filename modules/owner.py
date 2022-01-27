@@ -12,6 +12,9 @@ from utils import store
 logger = logging.getLogger(__name__)
 
 class Owner(commands.Cog):
+
+    COG_EMOJI = "👑"
+
     def __init__(self, bot):
         self.bot = bot
         self.status_task.start()
@@ -29,16 +32,22 @@ class Owner(commands.Cog):
     async def status_task(self):
         await self.set_default_status()
 
+    @commands.is_owner()
     @commands.command()
     async def shutdown(self, ctx):
-        if ctx.author.id == 276462585690193921 or ctx.author.id == 205704051856244736:
-            embed = nextcord.Embed(description=f'Shutting down...', colour=0xf66045)
-            await ctx.send(embed=embed)
-            await self.bot.close()
+        """
+        Shuts down the bot. Made this in case something goes wrong.
+        """
+        embed = nextcord.Embed(description=f'Shutting down...', colour=0xf66045)
+        await ctx.send(embed=embed)
+        await self.bot.close()
 
     @commands.command()
     @commands.is_owner()
     async def reload(self, ctx):
+        """
+        Fetches the lates git commit and reloads the bot.
+        """
         await ctx.message.add_reaction('<:greenTick:876177251832590348>')
         subprocess.run(["/bin/git","pull","--no-edit"])
         try:
@@ -50,13 +59,20 @@ class Owner(commands.Cog):
         await ctx.channel.send('Reloaded all cogs', delete_after=120)
         await ctx.message.delete()
 
+    @commands.is_owner()
     @commands.group()
     async def status(self, ctx):
-        pass
+        """
+        Shows the bot's status.
+        """
+        await ctx.send(f'{self.bot.presence.activity.name}')
 
     @status.command()
     @commands.is_owner()
     async def count(self, ctx, count):
+        """
+        Sets the bot's status to a fake number of servers the bot is in.
+        """
         self.status_task.stop()
         activityName = f"{self.prefix}help | {count} servers"
         activity = Activity(type=ActivityType.listening, name=activityName)
@@ -65,6 +81,9 @@ class Owner(commands.Cog):
     @status.command()
     @commands.is_owner()
     async def set(self, ctx, *text: str):
+        """
+        Sets the bot's status to the given text.
+        """
         self.status_task.stop()
         status = " ".join(text[:])
         activity = Activity(type=ActivityType.listening, name=status)
@@ -73,16 +92,26 @@ class Owner(commands.Cog):
     @status.command()
     @commands.is_owner()
     async def reset(self, ctx):
+        """
+        Resets the bot's status to the default.
+        """
         await self.set_default_status()
         self.status_task.restart()
 
+    @commands.is_owner()
     @commands.group()
     async def server(self, ctx):
+        """
+        Shows server information.
+        """
         pass
 
     @commands.is_owner()
     @server.command(aliases=['list'])
     async def server_list(self, ctx):
+        """
+        Lists all the servers the bot is in.
+        """
         servers = ''
         user_count = ''
         owner = ''
@@ -100,8 +129,11 @@ class Owner(commands.Cog):
         await ctx.send(embed=embed, delete_after=120)
 
     @commands.is_owner()
-    @server.command(aliases=['channels'])
+    @server.command(aliases=['channels'], hidden=True)
     async def channel_list(self, ctx, guild_id: int):
+        """
+        Lists all the channels in a server.
+        """
         guild = self.bot.get_guild(guild_id)
         channels = ''
         for channel in guild.channels:
@@ -115,7 +147,7 @@ class Owner(commands.Cog):
 
 
     @commands.is_owner()
-    @commands.command()
+    @commands.command(hidden=True)
     async def checkVCs(self, ctx, server_id : int):
         if server_id is None:
             return await ctx.send("Please provide a server ID to be checked", delete_after = 5)
@@ -150,6 +182,9 @@ class Owner(commands.Cog):
     @commands.command()
     @commands.is_owner()
     async def version(self, ctx, version):
+        """
+        Sets the bot's version.
+        """
         with open(store.SETTINGS_PATH, "r") as settings:
             settings_json = json.load(settings)
         settings_json['version'] = version

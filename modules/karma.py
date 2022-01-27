@@ -3,17 +3,22 @@ import logging
 import nextcord
 from nextcord.ext import commands
 
-from .votes import Votes
 from utils import db, store
 
 logger = logging.getLogger(__name__)
 
 class Karma(commands.Cog):
+
+    COG_EMOJI = "☯️"
+
     def __init__(self, bot):
         self.bot = bot
 
     @commands.group(invoke_without_command=True)
     async def karma(self, ctx, user: nextcord.User = None):
+        """
+        Shows the karma of a user
+        """
         if user is None:
             user = ctx.author
         if user.bot:
@@ -29,6 +34,9 @@ class Karma(commands.Cog):
 
     @karma.group(name='emotes', invoke_without_command=True)
     async def karma_emotes(self, ctx):
+        """
+        Shows the karma emotes of the server
+        """
         karma_emotes = db.session.query(db.karma_emote).filter_by(guild_id=ctx.guild.id).order_by(db.karma_emote.action).all()
         if len(karma_emotes) == 0:
             return await ctx.send(embed=nextcord.Embed(title='No emotes found.'), delete_after=120)
@@ -45,6 +53,14 @@ class Karma(commands.Cog):
 
     @karma_emotes.command(name='add')
     async def karma_emote_add(self, ctx, emote: nextcord.Emoji, emote_action: int):
+        """
+        Add an emote to the karma emotes for this server. Takes an emoji and an action (0 for increase, 1 for reduce karma)
+        The votes from this bots Votes module automatically add karma to the user. No need to add those emotes to the emote list.
+
+        Example:
+        `<<karma emotes add :upvote: 0` - adds the upvote emote to list as karma increasing emote
+        `<<karma emotes add :downvote: 1` - adds the downvote emote to list as karma decreasing emote
+        """
         if not await self.has_permissions(ctx):
             return
         if emote_action not in [0, 1]:
@@ -68,6 +84,9 @@ class Karma(commands.Cog):
 
     @karma_emotes.command(name='remove')
     async def karma_emote_remove(self, ctx, emote: nextcord.Emoji):
+        """
+        Remove an emote from the karma emotes for this server.
+        """
         if not await self.has_permissions(ctx):
             return
         existing_emote = db.session.query(db.karma_emote).filter_by(emote_id=emote.id).filter_by(guild_id=ctx.guild.id).first()
@@ -82,6 +101,9 @@ class Karma(commands.Cog):
 
     @karma.command(name='leaderboard', aliases=['lb'])
     async def karma_leaderboard(self, ctx, global_leaderboard: str = None):
+        """
+        Shows users with the most karma on the server.
+        """
         embed = nextcord.Embed(title='Karma Leaderboard')
         if global_leaderboard is None:
             query = db.session.query(db.karma).filter_by(guild_id=ctx.guild.id).order_by(db.karma.amount.desc()).limit(15)

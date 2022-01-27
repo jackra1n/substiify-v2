@@ -10,12 +10,25 @@ from nextcord.ext.commands.cooldowns import BucketType
 logger = logging.getLogger(__name__)
 
 class Duel(commands.Cog):
+
+    COG_EMOJI = "⚔️"
+
     def __init__(self, bot):
         self.bot = bot
 
     @commands.command(brief='Fight someone on this server!')
     @commands.max_concurrency(1, per=BucketType.default, wait=True)
     async def fight(self, ctx, member: nextcord.Member):
+        """
+        Allows you to fight someone on this server! It's a turn based fighting game. 
+        To start the fight, you must use the command `<<fight @member` where @member is the person you want to fight.
+
+        If you and your opponent select a class, the game will start.
+        You can choose to punch, defend, or end the fight.
+
+        Classes have different stats and depending on your action, you can either deal more damage or have higher defense.
+        
+        """
         duel_authors_id = ctx.author.id
         duel_authors_name = ctx.author.display_name
         challenge_member_name = member.display_name

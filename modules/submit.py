@@ -10,6 +10,9 @@ from utils import store
 logger = logging.getLogger(__name__)
 
 class Submit(commands.Cog):
+
+    COG_EMOJI = "📝"
+
     def __init__(self, bot):
         self.bot = bot
         self.bug_channel = bot.get_channel(876412993498398740)
@@ -62,7 +65,6 @@ class Submit(commands.Cog):
     async def on_raw_reaction_add(self, payload: nextcord.RawReactionActionEvent):
         if payload.guild_id is None or payload.channel_id is None or payload.member is None or payload.message_id is None:
             return
-        # return if its the bot itself
         if payload.member.bot:
             return
         if payload.channel_id == self.bug_channel.id:
@@ -83,6 +85,15 @@ class Submit(commands.Cog):
     @submit.command()
     @commands.cooldown(2, 900, BucketType.user)
     async def bug(self, ctx, *words: str):
+        """
+        If you find a bug in the bot, use this command to submit it to the developers.
+        The best way you can help is by saying what you were doing when the bug happened and what you expected to happen.
+
+        Example:
+        `<<submit bug When I used the command `<<help` I expected to see a list of commands. But instead I got a list of bugs.`
+
+        After submitting your bug, you will be able to see if it has been accepted or denied.
+        """
         sentence = " ".join(words[:])
         if len(sentence) <= 20:
             await self.submission_error(ctx, sentence)
@@ -93,6 +104,15 @@ class Submit(commands.Cog):
     @submit.command()
     @commands.cooldown(2, 900, BucketType.user)
     async def suggestion(self, ctx, *words: str):
+        """
+        If you think something doesn't work well or something could be improved use this command to submit it to the developers.
+        You can just describe what you want it to do.
+
+        Example:
+        `<<submit suggestion I would like to be able to change the bot's prefix.`
+
+        After submitting your suggestion, you will be able to see if it has been accepted or denied.
+        """
         sentence = " ".join(words[:])
         if len(sentence) <= 10:
             await self.submission_error(ctx, sentence)
