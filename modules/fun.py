@@ -15,10 +15,10 @@ class Fun(commands.Cog):
         self.bot = bot
         self.vac_api = vacefron.Client()
 
-    @commands.group(name="meme")
+    @commands.group(name="meme", usage="meme <meme_type> ...")
     async def meme(self, ctx):
         """
-        Create a meme.
+        Allows you to create a meme from the list.
         """
         if ctx.invoked_subcommand is None:
             await ctx.send("Invalid subcommand passed.")
