@@ -8,3 +8,4 @@ requests
 pytz
 sqlalchemy
 lavalink
+vacefron.py
