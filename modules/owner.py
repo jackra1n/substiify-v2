@@ -7,7 +7,8 @@ import nextcord
 from nextcord import Activity, ActivityType
 from nextcord.ext import commands, tasks
 
-from utils import store
+from utils import store, db
+from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class Owner(commands.Cog):
         await self.set_default_status()
 
     @commands.is_owner()
-    @commands.command()
+    @commands.command(hidden=True)
     async def shutdown(self, ctx):
         """
         Shuts down the bot. Made this in case something goes wrong.
@@ -320,6 +321,45 @@ class Owner(commands.Cog):
         filenames = next(walk("modules"), (None, None, []))[2] 
         filenames.remove(path.basename(__file__))
         return [name.replace('.py','') for name in filenames]
+
+    
+    @commands.group(name="usage", invoke_without_command=True)
+    async def usage(self, ctx):
+        """
+        Shows a lits of most used command on the current server
+        """
+        commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
+        embed = create_command_usage_embed(commands_used_query, f"Top used commands on: **{ctx.guild.name}**")
+        await ctx.send(embed=embed, delete_after=180)
+
+    @usage.command(name="all")
+    async def usage_all(self, ctx): 
+        """
+        Shows a list of most used commands on all servers
+        """
+        commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
+        embed = create_command_usage_embed(commands_used_query, f"Top total used commands")
+        await ctx.send(embed=embed, delete_after=180)
+
+    @usage.command(name="servers")
+    async def usage_servers(self, ctx):
+        """
+        Shows a list of servers with most used commands
+        """
+        commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.server_id).order_by(func.count('*').desc()).all()
+        embed = create_command_usage_embed(commands_used_query, f"Top servers used commands")
+        await ctx.send(embed=embed, delete_after=180)
+
+def create_command_usage_embed(commands_used_query, embed_title):
+    commands_used = ""
+    commands_count = ""
+    for row in commands_used_query:
+        commands_used += f"{row[0]}\n"
+        commands_count += f"{row[1]}\n"
+    embed = nextcord.Embed(title=embed_title, color=0xE3621E)
+    embed.add_field(name="Command", value=commands_used, inline=True)
+    embed.add_field(name="Count", value=commands_count, inline=True)
+    return embed
 
 def setup(bot):
     bot.add_cog(Owner(bot))
