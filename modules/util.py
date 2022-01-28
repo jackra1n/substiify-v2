@@ -8,9 +8,11 @@ from random import shuffle
 import nextcord
 import psutil
 from nextcord import MessageType
-from nextcord.ext import commands
+from nextcord.ext import commands, tasks
+from nextcord.ext.commands import BucketType
+from random import choice, seed
+from datetime import datetime, timedelta
 from pytz import timezone
-from sqlalchemy import func
 
 from utils import db, store
 
@@ -22,8 +24,294 @@ class Util(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        with open(store.SETTINGS_PATH, "r") as settings:
-            self.settings = json.load(settings)
+        self.bug_channel = bot.get_channel(876412993498398740)
+        self.suggestion_channel = bot.get_channel(876413286978031676)
+        self.accept_emoji = ':greenTick:876177251832590348'
+        self.deny_emoji = ':redCross:876177262813278288'
+        self.giveaway_task.start()
+
+    @commands.group(aliases=["give"])
+    async def giveaway(self, ctx):
+        """
+        Allows you to create giveaways on the server.
+        If you want to create a giveaway, check the `giveaway create` command.
+        """
+        pass
+
+    @giveaway.command(aliases=["c"], usage="create")
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    async def create(self, ctx):
+        """
+        Allows you to create a giveaway. Requires manage_channels permission.
+        After calling this command, you will be asked to enter the prize, the time, and the channel.
+        """
+
+        # Ask Questions
+        questions = ["Setting up your giveaway. Choose what channel you want your giveaway in?",
+                     "For How long should the Giveaway be hosted ? type number followed (m|h|d). Example: `10m`",
+                     "What is the Prize?"]
+        answers = []
+
+        # Check Author
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+
+        for i, question in enumerate(questions):
+            embed = nextcord.Embed(title=f"Question {i}",
+                          description=question)
+            await ctx.send(embed=embed)
+            try:
+                message = await self.bot.wait_for('message', timeout=45, check=check)
+            except TimeoutError:
+                await ctx.send("You didn't answer the questions in Time")
+                return
+            answers.append(message.content)
+
+        # Check if Channel Id is valid
+        try:
+            channel_id = int(answers[0][2:-1])
+        except Exception as e:
+            await ctx.send(f"The Channel provided was wrong. The channel should be {ctx.channel.mention}")
+            return
+
+        channel = self.bot.get_channel(channel_id)
+        time = self.convert(answers[1])
+        # Check if Time is valid
+        if time == -1:
+            await ctx.send("The Time format was wrong")
+            return
+        elif time == -2:
+            await ctx.send("The Time was not conventional number")
+            return
+        prize = answers[2]
+
+        await ctx.send(f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}")
+        embed = self.create_giveaway_embed(ctx.author, prize)
+        embed.description += "\nReact with :tada: to enter!"
+        end = (datetime.now() + timedelta(seconds=time))
+        end_string = end.strftime('%d.%m.%Y %H:%M')
+        embed.set_footer(text=f"Giveway ends on {end_string}")
+        newMsg = await channel.send(embed=embed)
+        creator = ctx.author
+        await newMsg.add_reaction("🎉")
+        db.session.add(db.active_giveaways(creator, end, prize, newMsg))
+        db.session.commit()
+
+    @giveaway.command(usage="reroll <message_id>")
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    async def reroll(self, ctx, message_id: int):
+        """
+        Allows you to reroll a giveaway if something went wrong.
+        """
+        try:
+            msg = await ctx.fetch_message(message_id)
+        except Exception as e:
+            await ctx.send("The channel or ID mentioned was incorrect")
+            return
+        users = await msg.reactions[0].users().flatten()
+        users.pop(users.index(self.bot.user))
+        prize = await self.get_giveaway_prize(ctx, message_id)
+        embed = self.create_giveaway_embed(ctx.author, prize)
+        if len(users) <= 0:
+            embed.set_footer(text="No one won the Giveaway")
+        elif len(users) > 0:
+            winner = choice(users)
+            embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
+            await msg.channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
+        await msg.edit(embed=embed)
+
+    @giveaway.command(aliases=["cancel"], usage="stop <message_id>")
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    async def stop(self, ctx, message_id: int):
+        """
+        Allows you to stop a giveaway. Takes the ID of the giveaway message as an argument.
+        """
+        # delete giveaway from db
+        giveaway = db.session.query(db.active_giveaways).filter(db.active_giveaways.message_id == message_id).first()
+        if giveaway is None:
+            return await ctx.send("The message ID provided was wrong")
+        db.session.delete(giveaway)
+        db.session.commit()
+        msg = await ctx.fetch_message(message_id)
+        newEmbed = nextcord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!!")
+        await msg.edit(embed=newEmbed)
+
+    @tasks.loop(seconds=45.0)
+    async def giveaway_task(self):
+        giveaways = db.session.query(db.active_giveaways).all()
+        random_seed_value = datetime.now().timestamp()
+        for giveaway in giveaways:
+            if datetime.now() >= giveaway.end_date:
+                channel = self.bot.get_channel(giveaway.channel_id)
+                message = await channel.fetch_message(giveaway.message_id)
+                users = await message.reactions[0].users().flatten()
+                author = await self.bot.fetch_user(giveaway.creator_user_id)
+                prize = giveaway.prize
+                embed = self.create_giveaway_embed(author, prize)
+
+                users.pop(users.index(self.bot.user))
+                # Check if User list is not empty
+                if len(users) <= 0:
+                    embed.remove_field(0)
+                    embed.set_footer(text="No one won the Giveaway")
+                    await channel.send('No one won the Giveaway')
+                elif len(users) > 0:
+                    seed(random_seed_value)
+                    winner = choice(users)
+                    random_seed_value += 1
+                    embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
+                    await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
+                await message.edit(embed=embed)
+                db.session.query(db.active_giveaways).filter_by(message_id=message.id).delete()
+                db.session.commit()
+
+    async def get_giveaway_prize(self, ctx, message_id: int):
+        try:
+            msg = await ctx.fetch_message(message_id)
+        except Exception as e:
+            await ctx.send("The channel or ID mentioned was incorrect")
+        return msg.embeds[0].description.split("Win ")[1].split(" today!")[0]
+
+    def convert(self, time):
+        pos = ["m", "h", "d"]
+        time_dict = {"m": 60, "h": 3600, "d": 24*3600}
+        unit = time[-1]
+        if unit not in pos:
+            return -1
+        try:
+            timeVal = int(time[:-1])
+        except Exception as e:
+            return -2
+        return timeVal*time_dict[unit]
+
+    def create_giveaway_embed(self, author, prize):
+        embed = nextcord.Embed(title=":tada: Giveaway :tada:",
+                        description=f"Win **{prize}**!",
+                        color=0x00FFFF)
+        embed.add_field(name="Hosted By:", value=author.mention)
+        return embed
+
+    async def submission_error(self, ctx, sentence):
+        embed = nextcord.Embed(
+            title='Submission error',
+            description=f'Your message is too short: {len(sentence)} characters',
+            color=nextcord.Colour.red()
+        )
+        await ctx.send(embed=embed, delete_after=15)
+
+    async def send_submission(self, ctx, channel, sentence, submission_type):
+        embed = nextcord.Embed(
+            title=f'New {submission_type} submission',
+            description=f'```{sentence}```\nSubmitted by: {ctx.author.mention}',
+            color=nextcord.Colour.red()
+        )
+        embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar.url)
+        message = await channel.send(embed=embed)
+        await ctx.send(f'Thank you for submitting the {submission_type}!', delete_after=30)
+        await message.add_reaction(f'<{self.accept_emoji}>')
+        await message.add_reaction(f'<{self.deny_emoji}>')
+
+    async def send_accepted_user_reply(self, payload, submission_type):
+        await self.send_user_reply(payload, submission_type, f'**accepted** <{self.accept_emoji}>')
+
+    async def send_denied_user_reply(self, payload, submission_type):
+        await self.send_user_reply(payload, submission_type, f'**denied** <{self.deny_emoji}>')
+
+    async def send_user_reply(self, payload, submission_type, action):
+        channel = await self.bot.fetch_channel(payload.channel_id)
+        message = await channel.fetch_message(payload.message_id)
+        embed = message.embeds[0]
+        user = await self.bot.fetch_user(int(embed.footer.text))
+        new_embed = nextcord.Embed(
+            title=f'{submission_type} submission',
+            description=embed.description,
+            color=nextcord.Colour.red()
+        )
+        await user.send(content=f'Hello {user.name}!\nYour {self.bot.user.mention} {submission_type} submission has been {action}.\n', embed=new_embed)
+        await message.delete()
+
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload: nextcord.RawReactionActionEvent):
+        if payload.guild_id is None or payload.channel_id is None or payload.member is None or payload.message_id is None:
+            return
+        if payload.member.bot:
+            return
+        if payload.channel_id == self.bug_channel.id:
+            if self.accept_emoji in str(payload.emoji):
+                await self.send_accepted_user_reply(payload, 'bug')
+            if self.deny_emoji in str(payload.emoji):
+                await self.send_denied_user_reply(payload, 'bug')
+        if payload.channel_id == self.suggestion_channel.id:
+            if self.accept_emoji in str(payload.emoji):
+                await self.send_accepted_user_reply(payload, 'suggestion')
+            if self.deny_emoji in str(payload.emoji):
+                await self.send_denied_user_reply(payload, 'suggestion')
+
+    @commands.group(aliases=['report'])
+    async def submit(self, ctx):
+        """
+        Allows you to report a bug or suggest a feature or an improvement to the developer team.
+        After submitting your bug, you will be able to see if it has been accepted or denied.
+        Check out the `bug` and `suggestion` subcommands for more information.
+        """
+        pass
+
+    @submit.command(usage='bug <message>')
+    @commands.cooldown(2, 900, BucketType.user)
+    async def bug(self, ctx, *words: str):
+        """
+        If you find a bug in the bot, use this command to submit it to the developers.
+        The best way you can help is by saying what you were doing when the bug happened and what you expected to happen.
+
+        Example:
+        `<<submit bug When I used the command `<<help` I expected to see a list of commands. But instead I got a list of bugs.`
+        """
+        sentence = " ".join(words[:])
+        if len(sentence) <= 20:
+            await self.submission_error(ctx, sentence)
+        else:
+            await self.send_submission(ctx, self.bug_channel, sentence, ctx.command.name)
+        await ctx.message.delete()
+
+    @submit.command(aliases=['improvement'], usage='suggestion <message>')
+    @commands.cooldown(2, 900, BucketType.user)
+    async def suggestion(self, ctx, *words: str):
+        """
+        If you think something doesn't work well or something could be improved use this command to submit it to the developers.
+        You can just describe what you want it to do.
+
+        Example:
+        `<<submit suggestion I would like to be able to change the bot's prefix.`
+        """
+        sentence = " ".join(words[:])
+        if len(sentence) <= 10:
+            await self.submission_error(ctx, sentence)
+        else:
+            await self.send_submission(ctx, self.suggestion_channel, sentence, ctx.command.name)
+        await ctx.message.delete()
+
+    @bug.error
+    async def command_error(self, ctx, error):
+        if isinstance(error, commands.CommandOnCooldown):
+            em = nextcord.Embed(
+                title=f"Slow it down!",
+                description=f"Try again in {error.retry_after:.2f}s.",
+                color=nextcord.Colour.red())
+            await ctx.send(embed=em, delete_after=30)
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.channel.send('Missing the bug description', delete_after=30)
+
+    @suggestion.error
+    async def command_error(self, ctx, error):
+        if isinstance(error, commands.CommandOnCooldown):
+            em = nextcord.Embed(
+                title=f"Slow it down!",
+                description=f"Try again in {error.retry_after:.2f}s.",
+                color=nextcord.Colour.red())
+            await ctx.send(embed=em, delete_after=30)
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.channel.send('Missing the suggestion description', delete_after=30)
+        await ctx.message.delete()
 
     @commands.cooldown(6, 5)
     @commands.command(aliases=['avatar'])
@@ -112,7 +400,7 @@ class Util(commands.Cog):
 
         content = f'**Instance uptime:** `{bot_time}`\n' \
             f'**Version:** `{self.settings["version"]}` | **Updated:** `{last_commit_date}`\n' \
-            f'**Python:** `{platform.python_version()}` | **{nextcord.__name__}:** `{nextcord.__version__}`\n\n' \
+            f'**Python:** `{platform.python_version()}` | **nextcord:** `{nextcord.__version__}`\n\n' \
             f'**CPU:** `{cpu_percent}%` | **RAM:** `{ram_used} ({ram_percent}%)`\n\n' \
             f'**Made by:** <@{self.bot.owner_id}>' 
 
@@ -126,46 +414,6 @@ class Util(commands.Cog):
         await ctx.channel.send(embed=embed)
         await ctx.message.delete()
 
-    @commands.group(name="usage", invoke_without_command=True)
-    async def usage(self, ctx):
-        """
-        Shows a lits of most used command on the current server
-        """
-        commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
-        embed = create_command_usage_embed(commands_used_query, f"Top used commands on: **{ctx.guild.name}**")
-        await ctx.send(embed=embed, delete_after=180)
-
-    @usage.command(name="all")
-    async def usage_all(self, ctx): 
-        """
-        Shows a list of most used commands on all servers
-        """
-        commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
-        embed = create_command_usage_embed(commands_used_query, f"Top total used commands")
-        await ctx.send(embed=embed, delete_after=180)
-
-    @usage.command(name="servers")
-    async def usage_servers(self, ctx):
-        """
-        Shows a list of servers with most used commands
-        """
-        commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.server_id).order_by(func.count('*').desc()).all()
-        embed = create_command_usage_embed(commands_used_query, f"Top servers used commands")
-        await ctx.send(embed=embed, delete_after=180)
-
-def setup(bot):
-    bot.add_cog(Util(bot))
-
-def create_command_usage_embed(commands_used_query, embed_title):
-    commands_used = ""
-    commands_count = ""
-    for row in commands_used_query:
-        commands_used += f"{row[0]}\n"
-        commands_count += f"{row[1]}\n"
-    embed = nextcord.Embed(title=embed_title, color=0xE3621E)
-    embed.add_field(name="Command", value=commands_used, inline=True)
-    embed.add_field(name="Count", value=commands_count, inline=True)
-    return embed
 
 def time_up(t):
     if t <= 60:
@@ -191,3 +439,7 @@ def format_bytes(size: int) -> str:
         size /= power
         n += 1
     return f'{round(size, 2)}{power_labels[n]}'
+
+
+def setup(bot):
+    bot.add_cog(Util(bot))

@@ -18,16 +18,12 @@ class MainBot(commands.Cog):
             self.settings = json.load(settings)
         self.prefix = self.settings["prefix"]
         self.startup_extensions = [
-            "duel",
             "freeGames",
             "fun",
-            "giveaway",
             "karma",
             "music",
             "owner",
-            "submit",
-            "util",
-            "votes"
+            "util"
         ]
 
     @commands.Cog.listener()
