@@ -7,6 +7,7 @@ from random import shuffle
 
 import nextcord
 import psutil
+import asyncio
 from nextcord import MessageType
 from nextcord.ext import commands, tasks
 from nextcord.ext.commands import BucketType
@@ -57,14 +58,12 @@ class Util(commands.Cog):
             return m.author == ctx.author and m.channel == ctx.channel
 
         for i, question in enumerate(questions):
-            embed = nextcord.Embed(title=f"Question {i}",
-                          description=question)
+            embed = nextcord.Embed(title=f"Question {i}", description=question)
             await ctx.send(embed=embed)
             try:
                 message = await self.bot.wait_for('message', timeout=45, check=check)
             except TimeoutError:
-                await ctx.send("You didn't answer the questions in Time")
-                return
+                return await ctx.send("You didn't answer the questions in Time")
             answers.append(message.content)
 
         # Check if Channel Id is valid
@@ -191,6 +190,72 @@ class Util(commands.Cog):
         embed.add_field(name="Hosted By:", value=author.mention)
         return embed
 
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload: nextcord.RawReactionActionEvent):
+        if payload.guild_id is None or payload.channel_id is None or payload.member is None or payload.message_id is None:
+            return
+        if payload.member.bot:
+            return
+        if payload.channel_id == self.bug_channel.id:
+            message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+            if message.author != self.bot.user:
+                return
+            if self.accept_emoji in str(payload.emoji):
+                await self.send_accepted_user_reply(payload, 'bug')
+            if self.deny_emoji in str(payload.emoji):
+                await self.send_denied_user_reply(payload, 'bug')
+        if payload.channel_id == self.suggestion_channel.id:
+            message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+            if message.author != self.bot.user:
+                return
+            if self.accept_emoji in str(payload.emoji):
+                await self.send_accepted_user_reply(payload, 'suggestion')
+            if self.deny_emoji in str(payload.emoji):
+                await self.send_denied_user_reply(payload, 'suggestion')
+
+    @commands.group(aliases=['report'], invoke_without_command=True)
+    async def submit(self, ctx):
+        """
+        Allows you to report a bug or suggest a feature or an improvement to the developer team.
+        After submitting your bug, you will be able to see if it has been accepted or denied.
+        Check out the `bug` and `suggestion` subcommands for more information.
+        """
+        await ctx.send("Please use the `bug` or `suggestion` subcommands to submit a bug or suggestion.", delete_after=10)
+
+    @submit.command(usage='bug <message>')
+    @commands.cooldown(2, 900, BucketType.user)
+    async def bug(self, ctx, *words: str):
+        """
+        If you find a bug in the bot, use this command to submit it to the developers.
+        The best way you can help is by saying what you were doing when the bug happened and what you expected to happen.
+
+        Example:
+        `<<submit bug When I used the command `<<help` I expected to see a list of commands. But instead I got a list of bugs.`
+        """
+        sentence = " ".join(words[:])
+        if len(sentence) <= 20:
+            await self.submission_error(ctx, sentence)
+        else:
+            await self.send_submission(ctx, self.bug_channel, sentence, ctx.command.name)
+        await ctx.message.delete()
+
+    @submit.command(aliases=['improvement','better'], usage='suggestion <message>')
+    @commands.cooldown(2, 900, BucketType.user)
+    async def suggestion(self, ctx, *words: str):
+        """
+        If you think something doesn't work well or something could be improved use this command to submit it to the developers.
+        You can just describe what you want it to do.
+
+        Example:
+        `<<submit suggestion I would like to be able to change the bot's prefix.`
+        """
+        sentence = " ".join(words[:])
+        if len(sentence) <= 10:
+            await self.submission_error(ctx, sentence)
+        else:
+            await self.send_submission(ctx, self.suggestion_channel, sentence, ctx.command.name)
+        await ctx.message.delete()
+
     async def submission_error(self, ctx, sentence):
         embed = nextcord.Embed(
             title='Submission error',
@@ -203,7 +268,7 @@ class Util(commands.Cog):
         embed = nextcord.Embed(
             title=f'New {submission_type} submission',
             description=f'```{sentence}```\nSubmitted by: {ctx.author.mention}',
-            color=nextcord.Colour.red()
+            color=0x1E9FE3
         )
         embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar.url)
         message = await channel.send(embed=embed)
@@ -225,70 +290,11 @@ class Util(commands.Cog):
         new_embed = nextcord.Embed(
             title=f'{submission_type} submission',
             description=embed.description,
-            color=nextcord.Colour.red()
+            color=nextcord.Colour.red() if 'denied' in action else nextcord.Colour.green()
         )
         await user.send(content=f'Hello {user.name}!\nYour {self.bot.user.mention} {submission_type} submission has been {action}.\n', embed=new_embed)
-        await message.delete()
-
-    @commands.Cog.listener()
-    async def on_raw_reaction_add(self, payload: nextcord.RawReactionActionEvent):
-        if payload.guild_id is None or payload.channel_id is None or payload.member is None or payload.message_id is None:
-            return
-        if payload.member.bot:
-            return
-        if payload.channel_id == self.bug_channel.id:
-            if self.accept_emoji in str(payload.emoji):
-                await self.send_accepted_user_reply(payload, 'bug')
-            if self.deny_emoji in str(payload.emoji):
-                await self.send_denied_user_reply(payload, 'bug')
-        if payload.channel_id == self.suggestion_channel.id:
-            if self.accept_emoji in str(payload.emoji):
-                await self.send_accepted_user_reply(payload, 'suggestion')
-            if self.deny_emoji in str(payload.emoji):
-                await self.send_denied_user_reply(payload, 'suggestion')
-
-    @commands.group(aliases=['report'])
-    async def submit(self, ctx):
-        """
-        Allows you to report a bug or suggest a feature or an improvement to the developer team.
-        After submitting your bug, you will be able to see if it has been accepted or denied.
-        Check out the `bug` and `suggestion` subcommands for more information.
-        """
-        pass
-
-    @submit.command(usage='bug <message>')
-    @commands.cooldown(2, 900, BucketType.user)
-    async def bug(self, ctx, *words: str):
-        """
-        If you find a bug in the bot, use this command to submit it to the developers.
-        The best way you can help is by saying what you were doing when the bug happened and what you expected to happen.
-
-        Example:
-        `<<submit bug When I used the command `<<help` I expected to see a list of commands. But instead I got a list of bugs.`
-        """
-        sentence = " ".join(words[:])
-        if len(sentence) <= 20:
-            await self.submission_error(ctx, sentence)
-        else:
-            await self.send_submission(ctx, self.bug_channel, sentence, ctx.command.name)
-        await ctx.message.delete()
-
-    @submit.command(aliases=['improvement'], usage='suggestion <message>')
-    @commands.cooldown(2, 900, BucketType.user)
-    async def suggestion(self, ctx, *words: str):
-        """
-        If you think something doesn't work well or something could be improved use this command to submit it to the developers.
-        You can just describe what you want it to do.
-
-        Example:
-        `<<submit suggestion I would like to be able to change the bot's prefix.`
-        """
-        sentence = " ".join(words[:])
-        if len(sentence) <= 10:
-            await self.submission_error(ctx, sentence)
-        else:
-            await self.send_submission(ctx, self.suggestion_channel, sentence, ctx.command.name)
-        await ctx.message.delete()
+        embed.color = nextcord.Colour.red() if 'denied' in action else nextcord.Colour.green()
+        await message.edit(embed=embed)
 
     @bug.error
     async def command_error(self, ctx, error):
@@ -348,12 +354,18 @@ class Util(commands.Cog):
     @clear.command(aliases=['bot', 'b'])
     @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
     async def clear_bot(self, ctx, amount: int):
-        """Clears the bot's messages"""
-        if amount >= 100:
-            return await ctx.channel.send('Cannot delete more than 100 messages at a time!')
-        def check(message):
-            return message.author == self.bot.user
-        await ctx.channel.purge(limit=amount + 1, check=check, bulk=False)
+        """Clears the bot's messages even in DMs"""
+        messages = await ctx.channel.history(limit=amount + 1).flatten()
+        bots_messages = [m for m in messages if m.author == self.bot.user]
+
+        if len(bots_messages) <= 100 and type(ctx.channel) == nextcord.TextChannel:
+            await ctx.channel.delete_messages(bots_messages)
+
+        elif type(ctx.channel) == nextcord.DMChannel:
+            for message in bots_messages:
+                await message.delete()
+                await asyncio.sleep(0.75)
+        
 
     @clear.error
     async def clear_error(self, ctx, error):
