@@ -350,6 +350,49 @@ class Owner(commands.Cog):
         embed = create_command_usage_embed(commands_used_query, f"Top servers used commands")
         await ctx.send(embed=embed, delete_after=180)
 
+    @commands.is_owner()
+    @commands.command(name="invite")
+    async def server_invite(self, ctx, guild_id: int):
+        """
+        Creates an invite for the bot
+        """
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            return await ctx.send("Server not found", delete_after = 5)
+
+        if not guild.me.guild_permissions.create_instant_invite:
+            return await ctx.send("I don't have the permissions to create an invite on this server", delete_after = 5)
+
+        channels = await guild.fetch_channels()
+        text_channels = [channel for channel in channels if type(channel) == nextcord.channel.TextChannel and channel.permissions_for(guild.me).view_channel]
+        if len(channels) == 0:
+            return await ctx.send("No text channels found in this server", delete_after=30)
+        embed = nextcord.Embed(title="Channels", color=0xf66045)
+        channel_string = ""
+        for index, channel in enumerate(text_channels):
+            channel_string += f"{index}. {channel.name}\n"
+        embed.add_field(name="Channels", value=channel_string)
+        await ctx.send(embed=embed, delete_after=120)
+
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
+
+        try:
+            message = await self.bot.wait_for('message', timeout=60, check=check)
+        except TimeoutError:
+            return await ctx.send("You didn't answer the questions in Time", delete_after=30)
+
+        if message.content.isdigit():
+            channel = await guild.fetch_channel(text_channels[int(message.content)].id)
+            if channel is not None:
+                try:
+                    invite = await channel.create_invite(max_age=0, max_uses=1)
+                except:
+                    return await ctx.send("Failed to create invite", delete_after=30)
+                await ctx.send(f'Invite for `{guild.name}/{channel.name}`:\n{invite.url}', delete_after=30)
+            else:
+                await ctx.send("That channel doesn't exist", delete_after=30)
+
 def create_command_usage_embed(commands_used_query, embed_title):
     commands_used = ""
     commands_count = ""
