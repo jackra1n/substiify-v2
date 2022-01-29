@@ -386,7 +386,7 @@ class Owner(commands.Cog):
             channel = await guild.fetch_channel(text_channels[int(message.content)].id)
             if channel is not None:
                 try:
-                    invite = await channel.create_invite(max_age=0, max_uses=1)
+                    invite = await channel.create_invite(max_age=300, max_uses=1)
                 except:
                     return await ctx.send("Failed to create invite", delete_after=30)
                 await ctx.send(f'Invite for `{guild.name}/{channel.name}`:\n{invite.url}', delete_after=30)
