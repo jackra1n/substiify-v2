@@ -367,11 +367,10 @@ class Owner(commands.Cog):
         text_channels = [channel for channel in channels if type(channel) == nextcord.channel.TextChannel and channel.permissions_for(guild.me).view_channel]
         if len(channels) == 0:
             return await ctx.send("No text channels found in this server", delete_after=30)
-        embed = nextcord.Embed(title="Channels", color=0xf66045)
         channel_string = ""
         for index, channel in enumerate(text_channels):
             channel_string += f"{index}. {channel.name}\n"
-        embed.add_field(name="Channels", value=channel_string)
+        embed = nextcord.Embed(title="Channels", description=channel_string, color=0xf66045)
         await ctx.send(embed=embed, delete_after=120)
 
         def check(m):
