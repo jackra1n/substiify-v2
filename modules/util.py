@@ -386,7 +386,7 @@ class Util(commands.Cog):
 
     @commands.command(hidden=True)
     async def specialThanks(self, ctx):
-        peeople_who_helped = ["<@205704051856244736>", "<@812414532563501077>", "<@299478604809764876>", "<@291291715598286848>", "<@224618877626089483>", "<@231151428167663616>"]
+        peeople_who_helped = ["<@205704051856244736>", "<@812414532563501077>", "<@299478604809764876>", "<@291291715598286848>", "<@224618877626089483>", "<@231151428167663616>, <@153929916977643521>"]
         shuffle(peeople_who_helped)
         embed = nextcord.Embed(
             title="Special thanks for any help to those people",
