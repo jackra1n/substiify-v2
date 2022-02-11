@@ -420,15 +420,26 @@ class Owner(commands.Cog):
             await ctx.send(e, delete_after=30)
 
     @db_command.command(name="convert")
-    async def db_convert(self, ctx):
+    async def db_convert(self, ctx, version):
         """
         Converts the database to the specified version
         """
         try:
-            db.convert_db()
+            db.convert_db(version)
             await ctx.send("Database converted", delete_after=30)
         except Exception as e:
             await ctx.send(e, delete_after=30)
+
+    @db_command.command(name="populate")
+    async def db_populate(self, ctx):
+        """
+        Populates the database with the default values
+        """
+        # get bots servers
+        servers = self.bot.guilds
+        for server in servers:
+            db.session.add(db.discord_server(server))
+            db.session.commit()
 
 
 def create_command_usage_embed(commands_used_query, embed_title):

@@ -97,15 +97,14 @@ INSERT INTO post
     downvotes
 )
 SELECT
+    message_id,
     user_id,
     server_id,
     channel_id,
-    message_id,
     created_at,
     upvotes,
     downvotes
 FROM posts;
-
 
 DROP TABLE posts;
 DROP TABLE active_giveaways;

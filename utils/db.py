@@ -164,12 +164,12 @@ class user_rank(Base):
         self.message_rank_points = message_rank_points
 
 
-def convert_db():
+def convert_db(version):
     connection = sqlite3.connect(store.DB_PATH)
 
     cursor = connection.cursor()
 
-    sql_file = open(f'{store.RESOURCES_PATH}/db_conversion/ConvertDatabaseVersion1.sql')
+    sql_file = open(f'{store.RESOURCES_PATH}/db_conversion/ConvertDatabaseVersion{version}.sql')
     sql_as_string = sql_file.read()
     cursor.executescript(sql_as_string)
     connection.commit()
