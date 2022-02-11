@@ -1,6 +1,6 @@
 CREATE TABLE command_history_new (
-	id INTEGER CONSTRAINT command_history_pk PRIMARY KEY AUTOINCREMENT,
-	command VARCHAR,
+	id INTEGER PRIMARY KEY,
+	command TEXT,
 	date DATETIME, 
 	discord_user_id INTEGER, 
 	discord_server_id INTEGER, 
@@ -8,26 +8,26 @@ CREATE TABLE command_history_new (
 	discord_message_id INTEGER,
     CONSTRAINT fk_discord_user_id FOREIGN KEY (discord_user_id) REFERENCES discord_user(discord_user_id),
 	CONSTRAINT fk_discord_server_id FOREIGN KEY (discord_server_id) REFERENCES discord_server(discord_server_id),
-    CONSTRAINT fk_discord_channel_id FOREIGN KEY (discord_channel_id) REFERENCES discord_channel(discord_channel_id),
+    CONSTRAINT fk_discord_channel_id FOREIGN KEY (discord_channel_id) REFERENCES discord_channel(discord_channel_id)
 )
 
 INSERT INTO command_history_new
 (
-    id, 
-    command, 
-    date, 
-    discord_user_id, 
-    discord_server_id, 
-    discord_channel_id, 
+    id,
+    command,
+    date,
+    discord_user_id,
+    discord_server_id,
+    discord_channel_id,
     discord_message_id
 )
 SELECT 
-    id, 
-    command, 
-    date, 
-    discord_user_id, 
-    discord_server_id, 
-    discord_channel_id, 
+    id,
+    command,
+    date,
+    discord_user_id,
+    discord_server_id,
+    discord_channel_id,
     discord_message_id
 FROM command_history;
 
@@ -36,25 +36,25 @@ ALTER TABLE command_history_new RENAME TO command_history;
 
 
 CREATE TABLE karma_new (
-	id INTEGER CONSTRAINT karma_pk PRIMARY KEY AUTOINCREMENT,
+	id INTEGER PRIMARY KEY,
 	discord_user_id INTEGER, 
 	discord_server_id INTEGER, 
 	amount INTEGER, 
 	CONSTRAINT fk_discord_user_id FOREIGN KEY (discord_user_id) REFERENCES discord_user(discord_user_id),
-    CONSTRAINT fk_discord_server_id FOREIGN KEY (discord_server_id) REFERENCES discord_server(discord_server_id),
+    CONSTRAINT fk_discord_server_id FOREIGN KEY (discord_server_id) REFERENCES discord_server(discord_server_id)
 )
 
 INSERT INTO karma_new
 (
-    id, 
-    discord_user_id, 
-    discord_server_id, 
+    id,
+    discord_user_id,
+    discord_server_id,
     amount
 )
-SELECT 
-    id, 
-    discord_user_id, 
-    discord_server_id, 
+SELECT
+    id,
+    user_id,
+    guild_id,
     amount
 FROM karma;
 
@@ -67,18 +67,18 @@ CREATE TABLE karma_emote_new (
 	discord_emote_id INTEGER PRIMARY KEY,
 	discord_server_id INTEGER, 
 	action INTEGER, 
-	CONSTRAINT fk_discord_server_id FOREIGN KEY (discord_server_id) REFERENCES discord_server(discord_server_id),
+	CONSTRAINT fk_discord_server_id FOREIGN KEY (discord_server_id) REFERENCES discord_server(discord_server_id)
 )
 
 INSERT INTO karma_emote_new
 (
-    discord_emote_id, 
-    discord_server_id, 
+    discord_emote_id,
+    discord_server_id,
     action
 )
-SELECT 
-    discord_emote_id, 
-    discord_server_id, 
+SELECT
+    emote_id,
+    guild_id,
     action
 FROM karma_emote;
 
@@ -94,7 +94,7 @@ INSERT INTO post
     discord_channel_id,
     created_at,
     upvotes,
-    downvotes,
+    downvotes
 )
 SELECT
     user_id,
