@@ -9,7 +9,7 @@ CREATE TABLE command_history_new (
     CONSTRAINT fk_discord_user_id FOREIGN KEY (discord_user_id) REFERENCES discord_user(discord_user_id),
 	CONSTRAINT fk_discord_server_id FOREIGN KEY (discord_server_id) REFERENCES discord_server(discord_server_id),
     CONSTRAINT fk_discord_channel_id FOREIGN KEY (discord_channel_id) REFERENCES discord_channel(discord_channel_id)
-)
+);
 
 INSERT INTO command_history_new
 (
@@ -25,10 +25,10 @@ SELECT
     id,
     command,
     date,
-    discord_user_id,
-    discord_server_id,
-    discord_channel_id,
-    discord_message_id
+    user_id,
+    server_id,
+    channel_id,
+    message_id
 FROM command_history;
 
 DROP TABLE command_history;
@@ -42,7 +42,7 @@ CREATE TABLE karma_new (
 	amount INTEGER, 
 	CONSTRAINT fk_discord_user_id FOREIGN KEY (discord_user_id) REFERENCES discord_user(discord_user_id),
     CONSTRAINT fk_discord_server_id FOREIGN KEY (discord_server_id) REFERENCES discord_server(discord_server_id)
-)
+);
 
 INSERT INTO karma_new
 (
@@ -68,7 +68,7 @@ CREATE TABLE karma_emote_new (
 	discord_server_id INTEGER, 
 	action INTEGER, 
 	CONSTRAINT fk_discord_server_id FOREIGN KEY (discord_server_id) REFERENCES discord_server(discord_server_id)
-)
+);
 
 INSERT INTO karma_emote_new
 (

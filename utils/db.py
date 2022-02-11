@@ -2,10 +2,10 @@ import logging
 from datetime import datetime
 
 import nextcord
+import sqlite3
 from sqlalchemy import Column, DateTime, Integer, String, Boolean, create_engine, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.sql import text
 from pathlib import Path
 
 from utils import store
@@ -164,11 +164,16 @@ class user_rank(Base):
         self.message_rank_points = message_rank_points
 
 
-def execute_sql(sql_statement, *args):
-    connection = engine.connect()
-    result = connection.execute(sql_statement, *args)
+def convert_db():
+    connection = sqlite3.connect(store.DB_PATH)
+
+    cursor = connection.cursor()
+
+    sql_file = open(f'{store.RESOURCES_PATH}/db_conversion/ConvertDatabaseVersion1.sql')
+    sql_as_string = sql_file.read()
+    cursor.executescript(sql_as_string)
+    connection.commit()
     connection.close()
-    return result
 
 # Creates database tables if the don't exist
 def create_database():

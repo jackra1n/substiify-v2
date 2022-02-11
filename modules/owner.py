@@ -420,12 +420,12 @@ class Owner(commands.Cog):
             await ctx.send(e, delete_after=30)
 
     @db_command.command(name="convert")
-    async def db_convert(self, ctx, version):
+    async def db_convert(self, ctx):
         """
         Converts the database to the specified version
         """
         try:
-            db.convert_db(version)
+            db.convert_db()
             await ctx.send("Database converted", delete_after=30)
         except Exception as e:
             await ctx.send(e, delete_after=30)
