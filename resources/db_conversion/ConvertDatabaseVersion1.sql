@@ -63,14 +63,14 @@ ALTER TABLE karma_new RENAME TO karma;
 
 
 
-CREATE TABLE karma_emote (
+CREATE TABLE karma_emote_new (
 	discord_emote_id INTEGER PRIMARY KEY,
 	discord_server_id INTEGER, 
 	action INTEGER, 
 	CONSTRAINT fk_discord_server_id FOREIGN KEY (discord_server_id) REFERENCES discord_server(discord_server_id),
 )
 
-INSERT INTO karma_emote
+INSERT INTO karma_emote_new
 (
     discord_emote_id, 
     discord_server_id, 
