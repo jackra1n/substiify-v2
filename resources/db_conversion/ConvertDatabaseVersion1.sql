@@ -1,15 +1,14 @@
 CREATE TABLE command_history_new (
-	id INTEGER NOT NULL, 
-	command VARCHAR, 
+	id INTEGER CONSTRAINT command_history_pk PRIMARY KEY AUTOINCREMENT,
+	command VARCHAR,
 	date DATETIME, 
 	discord_user_id INTEGER, 
 	discord_server_id INTEGER, 
 	discord_channel_id INTEGER, 
-	discord_message_id INTEGER, 
-	PRIMARY KEY (id), 
-	FOREIGN KEY(discord_user_id) REFERENCES discord_user (discord_user_id), 
-	FOREIGN KEY(discord_server_id) REFERENCES discord_server (discord_server_id), 
-	FOREIGN KEY(discord_channel_id) REFERENCES discord_channel (discord_channel_id)
+	discord_message_id INTEGER,
+    CONSTRAINT fk_discord_user_id FOREIGN KEY (discord_user_id) REFERENCES discord_user(discord_user_id),
+	CONSTRAINT fk_discord_server_id FOREIGN KEY (discord_server_id) REFERENCES discord_server(discord_server_id),
+    CONSTRAINT fk_discord_channel_id FOREIGN KEY (discord_channel_id) REFERENCES discord_channel(discord_channel_id),
 )
 
 INSERT INTO command_history_new
@@ -37,13 +36,12 @@ ALTER TABLE command_history_new RENAME TO command_history;
 
 
 CREATE TABLE karma_new (
-	id INTEGER NOT NULL, 
+	id INTEGER CONSTRAINT karma_pk PRIMARY KEY AUTOINCREMENT,
 	discord_user_id INTEGER, 
 	discord_server_id INTEGER, 
 	amount INTEGER, 
-	PRIMARY KEY (id), 
-	FOREIGN KEY(discord_user_id) REFERENCES discord_user (discord_user_id), 
-	FOREIGN KEY(discord_server_id) REFERENCES discord_server (discord_server_id)
+	CONSTRAINT fk_discord_user_id FOREIGN KEY (discord_user_id) REFERENCES discord_user(discord_user_id),
+    CONSTRAINT fk_discord_server_id FOREIGN KEY (discord_server_id) REFERENCES discord_server(discord_server_id),
 )
 
 INSERT INTO karma_new
@@ -66,11 +64,10 @@ ALTER TABLE karma_new RENAME TO karma;
 
 
 CREATE TABLE karma_emote (
-	discord_emote_id INTEGER NOT NULL, 
+	discord_emote_id INTEGER PRIMARY KEY,
 	discord_server_id INTEGER, 
 	action INTEGER, 
-	PRIMARY KEY (discord_emote_id), 
-	FOREIGN KEY(discord_server_id) REFERENCES discord_server (discord_server_id)
+	CONSTRAINT fk_discord_server_id FOREIGN KEY (discord_server_id) REFERENCES discord_server(discord_server_id),
 )
 
 INSERT INTO karma_emote
