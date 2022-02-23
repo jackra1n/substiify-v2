@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+from sqlalchemy import alias
 
 import nextcord
 from nextcord.ext import commands
@@ -202,6 +203,21 @@ class Karma(commands.Cog):
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
+    @commands.group(name='casino', aliases=['c'], invoke_without_command=True)
+    async def casino(self, ctx):
+        pass
+
+    @casino.command(name='open', aliases=['o'], usage="open <question> <option1> <option2>")
+    @commands.cooldown(1, 15)
+    async def casino_open(self, ctx, question, op_a, op_b):
+        await ctx.message.delete()
+        embed = nextcord.Embed(description=f'Opening casino, hold on a sec...')
+        kasino_message = await ctx.send(embed=embed)
+
+
+        self.create_casino(ctx, question, op_a, op_b)
+
+
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
         user = await self.check_payload(payload)
@@ -237,6 +253,17 @@ class Karma(commands.Cog):
         list = [ x[0] for x in query ] if query is not None else []
         list.append(int(store.DOWNVOTE_EMOTE_ID))
         return list
+
+    def create_casino(self, ctx, question, op_a, op_b):
+        if db.session.query(db.discord_server).filter_by(discord_server_id=ctx.guild.id).first() is None:
+            db.session.add(db.discord_server(ctx.guild.id))
+        if db.session.query(db.discord_channel).filter_by(discord_channel_id=ctx.channel.id).first() is None:
+            db.session.add(db.discord_channel(ctx.channel.id))
+        if db.session.query(db.discord_user).filter_by(discord_user_id=ctx.author.id).first() is None:
+            db.session.add(db.discord_user(ctx.author.id))
+        casino = db.casino(ctx.author.id, question, op_a, op_b)
+        db.session.add(casino)
+        db.session.commit()
 
     async def check_payload(self, payload):
         if payload.event_type == 'REACTION_ADD' and payload.member.bot:

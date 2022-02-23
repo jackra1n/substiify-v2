@@ -6,7 +6,6 @@ import sqlite3
 from sqlalchemy import Column, DateTime, Integer, String, Boolean, create_engine, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from pathlib import Path
 
 from utils import store
 
@@ -40,7 +39,7 @@ class discord_channel(Base):
     def __init__(self, channel: nextcord.TextChannel):
         self.discord_channel_id = channel.id
         self.channel_name = channel.name
-        self.discord_server_id = channel.guild_id
+        self.discord_server_id = channel.guild.id
         self.parent_discord_channel_id = channel.category_id if channel.category else None
 
 
@@ -58,7 +57,7 @@ class discord_user(Base):
         self.discord_user_id = user.id
         self.username = user.name
         self.discriminator = user.discriminator
-        self.avatar = user.avatar.url
+        self.avatar = user.avatar.url if user.avatar else None
         self.is_bot = user.bot
         self.nickname = user.display_name
 
@@ -75,7 +74,7 @@ class command_history(Base):
     discord_message_id = Column(Integer)
 
     def __init__(self, ctx):
-        self.command = ctx.command.root_parent if ctx.command.root_parent else ctx.command
+        self.command = ctx.command.root_parent.qualified_name if ctx.command.root_parent else ctx.command.qualified_name
         self.discord_user_id = ctx.author.id
         self.discord_message_id = ctx.message.id
         self.discord_server_id = ctx.message.guild.id if ctx.guild else None
@@ -163,6 +162,41 @@ class user_rank(Base):
         self.vc_rank_points = vc_rank_points
         self.message_rank_points = message_rank_points
 
+class casino(Base):
+    __tablename__ = 'casino'
+
+    id = Column(Integer, primary_key=True)
+    question = Column(String)
+    option_1 = Column(String)
+    option_2 = Column(String)
+    discord_server_id = Column(Integer, ForeignKey('discord_server.discord_server_id'))
+    discord_channel_id = Column(Integer, ForeignKey('discord_channel.discord_channel_id'))
+    discord_message_id = Column(Integer)
+    locked = Column(Boolean, default=False)
+
+    def __init__(self, question, option_1, option_2, message):
+        self.question = question
+        self.option_1 = option_1
+        self.option_2 = option_2
+        self.discord_server_id = message.guild.id
+        self.discord_channel_id = message.channel.id
+        self.discord_message_id = message.id
+
+class casino_bet(Base):
+    __tablename__ = 'casino_bet'
+
+    id = Column(Integer, primary_key=True)
+    casino_id = Column(Integer, ForeignKey('casino.id'))
+    discord_user_id = Column(Integer, ForeignKey('discord_user.discord_user_id'))
+    option = Column(Integer)
+    amount = Column(Integer)
+
+    def __init__(self, casino_id, user, option, amount):
+        self.casino_id = casino_id
+        self.discord_user_id = user.id
+        self.option = option
+        self.amount = amount
+
 
 def convert_db(version):
     connection = sqlite3.connect(store.DB_PATH)
@@ -177,7 +211,4 @@ def convert_db(version):
 
 # Creates database tables if the don't exist
 def create_database():
-    if not Path(store.DB_PATH).is_file():
-        Base.metadata.create_all(engine)
-    else:
-        logger.warning(f'Database already exists at {store.DB_PATH}')
+    Base.metadata.create_all(engine)

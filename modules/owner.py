@@ -400,6 +400,7 @@ class Owner(commands.Cog):
         """
         pass
 
+    @commands.is_owner()
     @db_command.command(name="create")
     async def db_create(self, ctx):
         """
@@ -408,6 +409,7 @@ class Owner(commands.Cog):
         db.Base.metadata.create_all(db.engine)
         await ctx.send("Database created", delete_after=30)
 
+    @commands.is_owner()
     @db_command.command(name="execute")
     async def db_execute(self, ctx, *, query):
         """
@@ -419,6 +421,7 @@ class Owner(commands.Cog):
         except Exception as e:
             await ctx.send(e, delete_after=30)
 
+    @commands.is_owner()
     @db_command.command(name="convert")
     async def db_convert(self, ctx, version):
         """
@@ -430,16 +433,32 @@ class Owner(commands.Cog):
         except Exception as e:
             await ctx.send(e, delete_after=30)
 
+    @commands.is_owner()
     @db_command.command(name="populate")
     async def db_populate(self, ctx):
         """
         Populates the database with the default values
         """
-        # get bots servers
         servers = self.bot.guilds
         for server in servers:
-            db.session.add(db.discord_server(server))
-            db.session.commit()
+            if db.session.query(db.discord_server).filter_by(discord_server_id=server.id).first() is None:
+                db.session.add(db.discord_server(server))
+                for channel in server.channels:
+                    db.session.add(db.discord_channel(channel))
+        db.session.commit()
+        for post in db.session.query(db.post).group_by(db.post.discord_user_id).all():
+            if db.session.query(db.discord_user).filter_by(discord_user_id=post.discord_user_id).first() is None:
+                discord_user = await self.bot.fetch_user(post.discord_user_id)
+                print(f"fetched user: {discord_user}...")
+                db.session.add(db.discord_user(discord_user))
+        db.session.commit()
+        for command in db.session.query(db.command_history).group_by(db.command_history.discord_user_id).all():
+            if db.session.query(db.discord_user).filter_by(discord_user_id=command.discord_user_id).first() is None:
+                discord_user = await self.bot.fetch_user(command.discord_user_id)
+                db.session.add(db.discord_user(discord_user))
+        db.session.commit()
+        await ctx.send("Database populated", delete_after=30)
+
 
 
 def create_command_usage_embed(commands_used_query, embed_title):
