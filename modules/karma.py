@@ -50,7 +50,7 @@ class Karma(commands.Cog):
         channel = ctx.channel if channel is None else channel
         if channel.id not in self.vote_channels:
             self.vote_channels = np.append(self.vote_channels, channel.id)
-        vote_channel = db.session.query(db.discord_channel).filter_by(channel_id=channel.id).filter_by(upvote=True).first()
+        vote_channel = db.session.query(db.discord_channel).filter_by(discord_channel_id=channel.id).filter_by(upvote=True).first()
         if vote_channel is None:
             vote_channel.upvote = True
             db.session.commit()
@@ -74,7 +74,7 @@ class Karma(commands.Cog):
         Disables votes in the current channel. Requires Manage Channels permission.
         """
         channel = ctx.channel if channel is None else channel
-        db.session.query(db.discord_channel).filter_by(channel_id=channel.id).filter_by(upvote=True).delete()
+        db.session.query(db.discord_channel).filter_by(discord_channel_id=channel.id).filter_by(upvote=True).delete()
         db.session.commit()
         if channel.id in self.vote_channels:
             index = np.argwhere(self.vote_channels==channel.id)
@@ -105,7 +105,7 @@ class Karma(commands.Cog):
             user = ctx.author
         if user.bot:
             return
-        user_karma = db.session.query(db.karma).filter_by(user_id=user.id).filter_by(guild_id=ctx.guild.id).first()
+        user_karma = db.session.query(db.karma).filter_by(discord_user_id=user.id).filter_by(discord_server_id=ctx.guild.id).first()
         if user_karma is None:
             user_karma = 0
         else:
@@ -208,66 +208,26 @@ class Karma(commands.Cog):
         await ctx.send_help(ctx.command)
 
     @casino.command(name='open', aliases=['o'], usage="open <question> <option1> <option2>")
-    @commands.cooldown(1, 15)
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def casino_open(self, ctx, question, op_a, op_b):
 
         casino = await self.add_casino(ctx, question, op_a, op_b)
         await self.update_casino(casino.id)
         await ctx.message.delete()
 
+    @casino.command(name='close', usage="close <casino_id> <winning_option>")
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    async def casino_close(self, ctx, casino_id: int, winner: int):
+        if db.session.query(db.casino).filter_by(id=casino_id).first().locked:
+            return await ctx.send(f'Casino with ID {casino_id} is already closed.')
 
-    async def add_casino(self, ctx, question, option_1, option_2):
-        if db.session.query(db.discord_server).filter_by(discord_server_id=ctx.guild.id).first() is None:
-            db.session.add(db.discord_server(ctx.guild))
-        if db.session.query(db.discord_channel).filter_by(discord_channel_id=ctx.channel.id).first() is None:
-            db.session.add(db.discord_channel(ctx.channel))
-        if db.session.query(db.discord_user).filter_by(discord_user_id=ctx.author.id).first() is None:
-            db.session.add(db.discord_user(ctx.author))
-
-        to_embed = nextcord.Embed(description="Opening kasino, hold on tight...")
-        casino_msg = await ctx.send(embed=to_embed)
         
-        casino = db.casino(question, option_1, option_2, casino_msg)
-        db.session.add(casino)
-        db.session.commit()
 
-        return casino
 
-    async def update_casino(self, casino_id):
-
-        casino = db.session.query(db.casino).filter_by(id=casino_id).first()
-
-        kasino_msg = await (await self.bot.fetch_channel(casino.discord_channel_id)).fetch_message(casino.discord_message_id)
-
-        # FIGURE OUT AMOUNTS AND ODDS
-        qry = db.session.query(func.sum(db.casino_bet.amount).label("total_amount"))
-        aAmount = qry.filter_by(id=casino_id).filter_by(option='1').first().total_amount
-        bAmount = qry.filter_by(id=casino_id).filter_by(option='2').first().total_amount
-        aAmount = 0 if aAmount is None else aAmount
-        bAmount = 0 if bAmount is None else bAmount
-        if aAmount != 0:
-            aOdds = float(aAmount + bAmount) / aAmount
-        else:
-            aOdds = 1.0
-        if bAmount != 0:
-            bOdds = float(aAmount + bAmount) / bAmount
-        else:
-            bOdds = 1.0
-
-        # CREATE MESSAGE
-        to_embed = nextcord.Embed(
-            title=f'{"[LOCKED] " if casino.locked else ""}:game_die: {casino.question}',
-            description=f'{"The kasino is locked! No more bets are taken in. Time to wait and see..." if casino.locked else f"The kasino has been opened! Place your bets using `-bet {casino.id} <amount> <1 or 2>`"}',
-            color=nextcord.Colour.from_rgb(52, 79, 235)
-        )
-        to_embed.set_footer(text=f'On the table: {aAmount + bAmount} Karma | ID: {casino.id}')
-        to_embed.set_thumbnail(url='https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif')
-        to_embed.add_field(name=f'**1:** {casino.option_1}',
-                           value=f'**Odds:** 1:{round(aOdds, 2)}\n**Pool:** {aAmount} Karma')
-        to_embed.add_field(name=f'**2:** {casino.option_2}',
-                           value=f'**Odds:** 1:{round(bOdds, 2)}\n**Pool:** {bAmount} Karma')
-
-        await kasino_msg.edit(embed=to_embed)
+    @casino.command(name='bet', usage="close <casino_id>")
+    async def casino_bet(self, ctx, casino_id: int, amount: int, option: int):
+        pass
+        
 
 
     @commands.Cog.listener()
@@ -331,7 +291,7 @@ class Karma(commands.Cog):
 
     async def change_post_upvotes(self, payload, amount):
         message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
-        existing_post = db.session.query(db.post).filter_by(message_id=message.id).first()
+        existing_post = db.session.query(db.post).filter_by(discord_message_id=message.id).first()
         if existing_post is None:
             db.session.add(db.post(message=message, upvotes=amount, downvotes=0))
         else:
@@ -340,12 +300,63 @@ class Karma(commands.Cog):
 
     async def change_post_downvotes(self, payload, amount):
         message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
-        existing_post = db.session.query(db.post).filter_by(message_id=message.id).first()
+        existing_post = db.session.query(db.post).filter_by(discord_message_id=message.id).first()
         if existing_post is None:
             db.session.add(db.post(message=message, upvotes=0, downvotes=amount))
         else:
             existing_post.downvotes += amount
         db.session.commit()
+
+    async def add_casino(self, ctx, question, option_1, option_2):
+        if db.session.query(db.discord_server).filter_by(discord_server_id=ctx.guild.id).first() is None:
+            db.session.add(db.discord_server(ctx.guild))
+        if db.session.query(db.discord_channel).filter_by(discord_channel_id=ctx.channel.id).first() is None:
+            db.session.add(db.discord_channel(ctx.channel))
+        if db.session.query(db.discord_user).filter_by(discord_user_id=ctx.author.id).first() is None:
+            db.session.add(db.discord_user(ctx.author))
+
+        to_embed = nextcord.Embed(description="Opening kasino, hold on tight...")
+        casino_msg = await ctx.send(embed=to_embed)
+        
+        casino = db.casino(question, option_1, option_2, casino_msg)
+        db.session.add(casino)
+        db.session.commit()
+
+        return casino
+
+    async def update_casino(self, casino_id):
+        casino = db.session.query(db.casino).filter_by(id=casino_id).first()
+        kasino_msg = await (await self.bot.fetch_channel(casino.discord_channel_id)).fetch_message(casino.discord_message_id)
+
+        # FIGURE OUT AMOUNTS AND ODDS
+        qry = db.session.query(func.sum(db.casino_bet.amount).label("total_amount"))
+        aAmount = qry.filter_by(id=casino_id).filter_by(option='1').first().total_amount
+        bAmount = qry.filter_by(id=casino_id).filter_by(option='2').first().total_amount
+        aAmount = 0 if aAmount is None else aAmount
+        bAmount = 0 if bAmount is None else bAmount
+        if aAmount != 0:
+            aOdds = float(aAmount + bAmount) / aAmount
+        else:
+            aOdds = 1.0
+        if bAmount != 0:
+            bOdds = float(aAmount + bAmount) / bAmount
+        else:
+            bOdds = 1.0
+
+        # CREATE MESSAGE
+        to_embed = nextcord.Embed(
+            title=f'{"[LOCKED] " if casino.locked else ""}:game_die: {casino.question}',
+            description=f'{"The kasino is locked! No more bets are taken in. Time to wait and see..." if casino.locked else f"The kasino has been opened! Place your bets using `-bet {casino.id} <amount> <1 or 2>`"}',
+            color=nextcord.Colour.from_rgb(52, 79, 235)
+        )
+        to_embed.set_footer(text=f'On the table: {aAmount + bAmount} Karma | ID: {casino.id}')
+        to_embed.set_thumbnail(url='https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif')
+        to_embed.add_field(name=f'**1:** {casino.option_1}',
+                           value=f'**Odds:** 1:{round(aOdds, 2)}\n**Pool:** {aAmount} Karma')
+        to_embed.add_field(name=f'**2:** {casino.option_2}',
+                           value=f'**Odds:** 1:{round(bOdds, 2)}\n**Pool:** {bAmount} Karma')
+
+        await kasino_msg.edit(embed=to_embed)
 
 def setup(bot):
     bot.add_cog(Karma(bot))

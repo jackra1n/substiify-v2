@@ -161,7 +161,7 @@ class Util(commands.Cog):
                     embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
                     await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
                 await message.edit(embed=embed)
-                db.session.query(db.giveaway).filter_by(message_id=message.id).delete()
+                db.session.query(db.giveaway).filter_by(discord_message_id=message.id).delete()
                 db.session.commit()
 
     async def get_giveaway_prize(self, ctx, message_id: int):

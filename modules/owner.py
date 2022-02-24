@@ -328,7 +328,7 @@ class Owner(commands.Cog):
         """
         Shows a lits of most used command on the current server
         """
-        commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
+        commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(discord_server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
         embed = create_command_usage_embed(commands_used_query, f"Top used commands on: **{ctx.guild.name}**")
         await ctx.send(embed=embed, delete_after=180)
 
