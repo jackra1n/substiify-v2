@@ -114,6 +114,45 @@ class Karma(commands.Cog):
         await ctx.send(embed=embed, delete_after=120)
         await ctx.message.delete()
 
+    @karma.command(name="donate", aliases=["wiretransfer", "wt"], usage="karma donate <amount> <user>")
+    async def karma_donate(self, ctx, amount: int, user: nextcord.User):
+        """
+        Donates karma to another user.
+        """
+        if user.bot:
+            return await ctx.send(embed=nextcord.Embed(description=f'You can\'t donate to bots!', color=0xf66045))
+        if amount <= 0:
+            return await ctx.send(embed=nextcord.Embed(description=f'You cannot donate {amount} karma!', color=0xf66045))
+        donator_karma = db.session.query(db.karma).filter_by(discord_user_id=ctx.author.id).filter_by(discord_server_id=ctx.guild.id).first()
+        if donator_karma is None:
+            return await ctx.send(embed=nextcord.Embed(description=f'You don\'t have any karma!', color=0xf66045))
+        if donator_karma.amount < amount:
+            return await ctx.send(embed=nextcord.Embed(description=f'You don\'t have enough karma!', color=0xf66045))
+        # check if user is a member of the server
+        if user not in ctx.guild.members:
+            return await ctx.send(embed=nextcord.Embed(description=f'`{user}` is not a member of this server!', color=0xf66045))
+        user_karma = db.session.query(db.karma).filter_by(discord_user_id=user.id).filter_by(discord_server_id=ctx.guild.id).first()
+        if user_karma is None:
+            user_karma = db.karma(user.id, ctx.guild.id, amount)
+            db.session.add(user_karma)
+        else:
+            user_karma.amount += amount
+        donator_karma.amount -= amount
+        db.session.commit()
+        embed = nextcord.Embed(description=f'{ctx.author.mention} has donated {amount} karma to {user.mention}!', color=0x23b40c)
+        await ctx.send(embed=embed)
+        await ctx.message.delete()
+
+    @karma_donate.error
+    async def karma_donate_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send(embed=nextcord.Embed(description=f'You didn\'t specify a user to donate to!', color=0xf66045))
+            await ctx.message.delete()
+        elif isinstance(error, commands.BadArgument):
+            await ctx.send(embed=nextcord.Embed(description=f'`{error.args[0]}` is not a valid user!', color=0xf66045))
+            await ctx.message.delete()
+
+
     @karma.group(name='emotes', aliases=['emote'], usage="emotes", invoke_without_command=True)
     async def karma_emotes(self, ctx):
         """
@@ -221,14 +260,42 @@ class Karma(commands.Cog):
         if db.session.query(db.casino).filter_by(id=casino_id).first().locked:
             return await ctx.send(f'Casino with ID {casino_id} is already closed.')
 
+    @casino.command(name='lock', usage="lock <casino_id>")
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    async def casino_lock(self, ctx, casino_id: int):
+        if not self.is_casino_open(casino_id):
+            return await ctx.author.send(f'Casino with ID `{casino_id}` does not exist.')
+        if db.session.query(db.casino).filter_by(id=casino_id).first().locked:
+            return await ctx.author.send(f'Casino with ID `{casino_id}` is already locked.')
+
+        self.lock_casino(casino_id)
+        await self.update_casino(casino_id)
+        await ctx.message.delete()
+
+    @casino.command(name='bet', usage="bet <casino_id> <amount> <option>")
+    async def casino_bet(self, ctx, casino_id: int, amount, option: int):
+        if not self.is_casino_open(casino_id):
+            return await ctx.send(f'Casino with ID `{casino_id}` is not open.')
+        better_karma = db.session.query(db.karma).filter_by(discord_user_id=ctx.author.id).filter_by(discord_server_id=ctx.guild.id).first()
+        if better_karma is None:
+            return await ctx.send(f'You do not have any karma.')
+        if better_karma.amount < amount:
+            return await ctx.send(f'You do not have enough karma.')
+        if option not in [1, 2]:
+            return await ctx.send(f'Option must be 1 or 2.')
+        
         
 
 
-    @casino.command(name='bet', usage="close <casino_id>")
-    async def casino_bet(self, ctx, casino_id: int, amount: int, option: int):
-        pass
-        
-
+    @casino.command(name='list', aliases=['l'], usage="list")
+    async def casino_list(self, ctx):
+        embed = nextcord.Embed(title='Open Casinos')
+        embed_casinos = ''
+        for entry in db.session.query(db.casino).filter_by(discord_server_id=ctx.guild.id).filter_by(locked=False).all():
+            embed_casinos += f'{entry.id} - {entry.question}\n'
+        embed.description = embed_casinos
+        await ctx.send(embed=embed)
+        await ctx.message.delete()
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
@@ -256,15 +323,15 @@ class Karma(commands.Cog):
 
     def get_query_karma_add(self, guild_id):
         query = db.session.query(db.karma_emote.discord_emote_id).filter_by(discord_server_id=guild_id).filter_by(action=0).all()
-        list = [ x[0] for x in query ] if query is not None else []
-        list.append(int(store.UPVOTE_EMOTE_ID))
-        return list
+        emote_list = [ x[0] for x in query ] if query is not None else []
+        emote_list.append(int(store.UPVOTE_EMOTE_ID))
+        return emote_list
 
     def get_query_karma_remove(self, guild_id):
         query = db.session.query(db.karma_emote.discord_emote_id).filter_by(discord_server_id=guild_id).filter_by(action=1).all()
-        list = [ x[0] for x in query ] if query is not None else []
-        list.append(int(store.DOWNVOTE_EMOTE_ID))
-        return list
+        emote_list = [ x[0] for x in query ] if query is not None else []
+        emote_list.append(int(store.DOWNVOTE_EMOTE_ID))
+        return emote_list
 
     async def check_payload(self, payload):
         if payload.event_type == 'REACTION_ADD' and payload.member.bot:
@@ -324,6 +391,13 @@ class Karma(commands.Cog):
 
         return casino
 
+    def is_casino_open(self, casino_id):
+        return db.session.query(db.casino).filter_by(id=casino_id).first() is not None
+
+    def lock_casino(self, casino_id):
+        db.session.query(db.casino).filter_by(id=casino_id).update({'locked': True})
+        db.session.commit()
+
     async def update_casino(self, casino_id):
         casino = db.session.query(db.casino).filter_by(id=casino_id).first()
         kasino_msg = await (await self.bot.fetch_channel(casino.discord_channel_id)).fetch_message(casino.discord_message_id)
@@ -346,7 +420,7 @@ class Karma(commands.Cog):
         # CREATE MESSAGE
         to_embed = nextcord.Embed(
             title=f'{"[LOCKED] " if casino.locked else ""}:game_die: {casino.question}',
-            description=f'{"The kasino is locked! No more bets are taken in. Time to wait and see..." if casino.locked else f"The kasino has been opened! Place your bets using `-bet {casino.id} <amount> <1 or 2>`"}',
+            description=f'{"The kasino is locked! No more bets are taken in. Time to wait and see..." if casino.locked else f"The kasino has been opened! Place your bets using `{self.bot.command_prefix}bet {casino.id} <amount> <1 or 2>`"}',
             color=nextcord.Colour.from_rgb(52, 79, 235)
         )
         to_embed.set_footer(text=f'On the table: {aAmount + bAmount} Karma | ID: {casino.id}')
