@@ -162,8 +162,8 @@ class user_rank(Base):
         self.vc_rank_points = vc_rank_points
         self.message_rank_points = message_rank_points
 
-class casino(Base):
-    __tablename__ = 'casino'
+class kasino(Base):
+    __tablename__ = 'kasino'
 
     id = Column(Integer, primary_key=True)
     question = Column(String)
@@ -173,6 +173,7 @@ class casino(Base):
     discord_channel_id = Column(Integer, ForeignKey('discord_channel.discord_channel_id'))
     discord_message_id = Column(Integer)
     locked = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now())
 
     def __init__(self, question, option_1, option_2, message):
         self.question = question
@@ -182,20 +183,20 @@ class casino(Base):
         self.discord_channel_id = message.channel.id
         self.discord_message_id = message.id
 
-class casino_bet(Base):
-    __tablename__ = 'casino_bet'
+class kasino_bet(Base):
+    __tablename__ = 'kasino_bet'
 
     id = Column(Integer, primary_key=True)
-    casino_id = Column(Integer, ForeignKey('casino.id'))
+    kasino_id = Column(Integer, ForeignKey('kasino.id'))
     discord_user_id = Column(Integer, ForeignKey('discord_user.discord_user_id'))
-    option = Column(Integer)
     amount = Column(Integer)
+    option = Column(Integer)
 
-    def __init__(self, casino_id, user, option, amount):
-        self.casino_id = casino_id
-        self.discord_user_id = user.id
-        self.option = option
+    def __init__(self, kasino_id, user_id, amount, option):
+        self.kasino_id = kasino_id
+        self.discord_user_id = user_id
         self.amount = amount
+        self.option = option
 
 
 def convert_db(version):

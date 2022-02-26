@@ -149,7 +149,7 @@ class Karma(commands.Cog):
             await ctx.send(embed=nextcord.Embed(description=f'You didn\'t specify a user to donate to!', color=0xf66045))
             await ctx.message.delete()
         elif isinstance(error, commands.BadArgument):
-            await ctx.send(embed=nextcord.Embed(description=f'`{error.args[0]}` is not a valid user!', color=0xf66045))
+            await ctx.send(embed=nextcord.Embed(description=f'Wrong command usage! Command usage is `{self.bot.command_prefix}karma donate <amount> <user>`', color=0xf66045))
             await ctx.message.delete()
 
 
@@ -242,59 +242,133 @@ class Karma(commands.Cog):
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
-    @commands.group(name='casino', aliases=['cas'], invoke_without_command=True)
-    async def casino(self, ctx):
+    @commands.group(name='kasino', aliases=['cas'], invoke_without_command=True)
+    async def kasino(self, ctx):
         await ctx.send_help(ctx.command)
 
-    @casino.command(name='open', aliases=['o'], usage="open <question> <option1> <option2>")
+    @kasino.command(name='open', aliases=['o'], usage="open \"<question>\" \"<option1>\" \"<option2>\"")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def casino_open(self, ctx, question, op_a, op_b):
+    async def kasino_open(self, ctx, question, op_a, op_b):
 
-        casino = await self.add_casino(ctx, question, op_a, op_b)
-        await self.update_casino(casino.id)
+        await ctx.message.delete()
+        kasino = await self.add_kasino(ctx, question, op_a, op_b)
+        await self.update_kasino(kasino.id)
+
+    @kasino.command(name='close', usage="close <kasino_id> <winning_option>")
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    async def kasino_close(self, ctx, kasino_id: int, winner: int):
+        author_img = ctx.author.avatar.url
+
+        
+        if not self.is_kasino_open(kasino_id):
+            return await ctx.author.send(f'kasino with ID {kasino_id} is not open.')
+
+        if winner == 3:
+            await self.abort_kasino(kasino_id)
+        elif winner in [1, 2]:
+            await self.win_kasino(kasino_id, winner)
+        else:
+            return await ctx.author.send(f'Winner has to be 1, 2 or 3 (abort)')
+
+        await self.send_conclusion(ctx, kasino_id, winner, ctx.author, author_img)
+        await self.remove_kasino(kasino_id)
         await ctx.message.delete()
 
-    @casino.command(name='close', usage="close <casino_id> <winning_option>")
-    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def casino_close(self, ctx, casino_id: int, winner: int):
-        if db.session.query(db.casino).filter_by(id=casino_id).first().locked:
-            return await ctx.send(f'Casino with ID {casino_id} is already closed.')
 
-    @casino.command(name='lock', usage="lock <casino_id>")
+    @kasino.command(name='lock', usage="lock <kasino_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def casino_lock(self, ctx, casino_id: int):
-        if not self.is_casino_open(casino_id):
-            return await ctx.author.send(f'Casino with ID `{casino_id}` does not exist.')
-        if db.session.query(db.casino).filter_by(id=casino_id).first().locked:
-            return await ctx.author.send(f'Casino with ID `{casino_id}` is already locked.')
+    async def kasino_lock(self, ctx, kasino_id: int):
+        if not self.is_kasino_open(kasino_id):
+            return await ctx.author.send(f'kasino with ID `{kasino_id}` does not exist.')
+        if db.session.query(db.kasino).filter_by(id=kasino_id).first().locked:
+            return await ctx.author.send(f'kasino with ID `{kasino_id}` is already locked.')
 
-        self.lock_casino(casino_id)
-        await self.update_casino(casino_id)
+        self.lock_kasino(kasino_id)
+        await self.update_kasino(kasino_id)
         await ctx.message.delete()
 
-    @casino.command(name='bet', usage="bet <casino_id> <amount> <option>")
-    async def casino_bet(self, ctx, casino_id: int, amount, option: int):
-        if not self.is_casino_open(casino_id):
-            return await ctx.send(f'Casino with ID `{casino_id}` is not open.')
+    @kasino.command(name='bet', usage="bet <kasino_id> <amount> <option>")
+    async def kasino_bet(self, ctx, kasino_id: int, amount, option: int):
+        await ctx.message.delete()
+        if not self.is_kasino_open(kasino_id):
+            return await ctx.send(f'kasino with ID `{kasino_id}` is not open.')
         better_karma = db.session.query(db.karma).filter_by(discord_user_id=ctx.author.id).filter_by(discord_server_id=ctx.guild.id).first()
         if better_karma is None:
             return await ctx.send(f'You do not have any karma.')
-        if better_karma.amount < amount:
-            return await ctx.send(f'You do not have enough karma.')
+
         if option not in [1, 2]:
-            return await ctx.send(f'Option must be 1 or 2.')
-        
-        
+            output = nextcord.Embed(
+                title=f'Wrong usage. Correct usage is `{self.bot.command_prefix}kasino bet <kasino_id> <amount> <1 or 2>`',
+                color=nextcord.Colour.from_rgb(209, 25, 25)
+            )
+            return await ctx.author.send(embed=output)
+        if amount == "all":
+            amount = self.get_user_karma(ctx.author.id, ctx.guild.id)
+        else:
+            amount = int(amount)
+        if better_karma.amount < amount:
+            output = nextcord.Embed(
+                title=f'You don\'t have that much karma. Your karma: {better_karma.amount}',
+                color=nextcord.Colour.from_rgb(209, 25, 25)
+            )
+            return await ctx.author.send(embed=output)
+
+        if not self.is_kasino_open(kasino_id):
+            output = nextcord.Embed(
+                title=f'kasino with ID {kasino_id} is not open.',
+                color=nextcord.Colour.from_rgb(209, 25, 25)
+            )
+            return await ctx.author.send(embed=output)
+
+        if self.is_kasino_locked(kasino_id):
+            output = nextcord.Embed(
+                title=f'kasino with ID {kasino_id} is locked.',
+                color=nextcord.Colour.from_rgb(209, 25, 25)
+            )
+            return await ctx.author.send(embed=output)
+            
+        if amount < 1:
+            output = nextcord.Embed(
+                title='You tried to bet < 1 karma! Silly you!',
+                color=nextcord.Colour.from_rgb(209, 25, 25)
+            )
+            return await ctx.author.send(embed=output)
+
+        if self.has_user_bet(kasino_id, ctx.author.id):
+            if not self.is_same_bet_option(kasino_id, ctx.author.id, option):
+                output = nextcord.Embed(
+                    title=f'You can\'t change your choice on the bet with id {kasino_id}. No chickening out!',
+                    color=nextcord.Colour.from_rgb(209, 25, 25)
+                )
+                return await ctx.author.send(embed=output)
+            total_bet = self.increase_bet(kasino_id, ctx.author.id, ctx.guild.id, amount)
+            output = nextcord.Embed(
+                title=f'**Successfully increased bet on option {option}, on kasino with ID {kasino_id} for {amount} karma! Total bet is now: {total_bet} Karma**',
+                color=nextcord.Colour.from_rgb(52, 79, 235),
+                description=f'Remaining karma: {better_karma.amount}'
+            )
+            await ctx.author.send(embed=output)
+        else:
+            self.add_bet(kasino_id, ctx.author.id, ctx.guild.id, amount, option)
+            user_karma = self.get_user_karma(ctx.author.id, ctx.guild.id)
+            output = nextcord.Embed(
+                title=f'**Successfully added bet on option {option}, on kasino with ID {kasino_id} for {amount} karma! Total bet is now: {amount} Karma**',
+                color=nextcord.Colour.from_rgb(52, 79, 235),
+                description=f'Your remaining karma: {user_karma}'
+            )
+            await ctx.author.send(embed=output)
+        await self.update_kasino(kasino_id)
 
 
-    @casino.command(name='list', aliases=['l'], usage="list")
-    async def casino_list(self, ctx):
-        embed = nextcord.Embed(title='Open Casinos')
-        embed_casinos = ''
-        for entry in db.session.query(db.casino).filter_by(discord_server_id=ctx.guild.id).filter_by(locked=False).all():
-            embed_casinos += f'{entry.id} - {entry.question}\n'
-        embed.description = embed_casinos
-        await ctx.send(embed=embed)
+    @kasino.command(name='list', aliases=['l'], usage="list")
+    async def kasino_list(self, ctx):
+        embed = nextcord.Embed(title='Open kasinos')
+        embed_kasinos = ''
+        for entry in db.session.query(db.kasino).filter_by(discord_server_id=ctx.guild.id).filter_by(locked=False).all():
+            embed_kasinos += f'{entry.id} - {entry.question}\n'
+        embed_kasinos = "No open kasinos found." if embed_kasinos == '' else embed_kasinos
+        embed.description = embed_kasinos
+        await ctx.send(embed=embed, delete_after=300)
         await ctx.message.delete()
 
     @commands.Cog.listener()
@@ -347,6 +421,14 @@ class Karma(commands.Cog):
             return None
         return message.author
 
+    def get_user_karma(self, user_id: int, server_id: int):
+        karma = db.session.query(db.karma).filter_by(discord_user_id=user_id).filter_by(discord_server_id=server_id).first()
+        if karma is None:
+            db.session.add(db.karma(discord_user_id=user_id, discord_server_id=server_id, amount=0))
+            db.session.commit()
+            return 0
+        return karma.amount
+
     def change_user_karma(self, user_id, guild_id, amount):
         # check if user and guild are in the db
         existing_user = db.session.query(db.karma).filter_by(discord_user_id=user_id).filter_by(discord_server_id=guild_id).first()
@@ -374,7 +456,40 @@ class Karma(commands.Cog):
             existing_post.downvotes += amount
         db.session.commit()
 
-    async def add_casino(self, ctx, question, option_1, option_2):
+    async def send_conclusion(self, ctx, kasino_id, winner, author, author_img):
+        kasino = db.session.query(db.kasino).filter_by(id=kasino_id).first()
+        qry = db.session.query(func.sum(db.kasino_bet.amount).label("total_amount"))
+        total_karma = qry.filter_by(kasino_id=kasino_id).first().total_amount
+        to_embed = None
+
+        if winner == 1:
+            to_embed = nextcord.Embed(
+                title=f':tada: "{kasino.option_1}" was correct! :tada:',
+                description=f'Question: {kasino.question}\nIf you\'ve chosen 1, you\'ve just won karma!\nDistributed to the winners: **{total_karma} Karma**',
+                color=nextcord.Colour.from_rgb(52, 79, 235)
+            )
+        elif winner == 2:
+            to_embed = nextcord.Embed(
+                title=f':tada: "{kasino.option_2}" was correct! :tada:',
+                description=f'Question: {kasino.question}\nIf you\'ve chosen 2, you\'ve just won karma!\nDistributed to the winners: **{total_karma} Karma**',
+                color=nextcord.Colour.from_rgb(52, 79, 235)
+            )
+        elif winner == 3:
+            to_embed = nextcord.Embed(
+                title=f':game_die: "{kasino.question}" has been cancelled.',
+                description=f'Amount bet will be refunded to each user.\nReturned: {total_karma} Karma',
+                color=nextcord.Colour.from_rgb(52, 79, 235)
+            )
+
+        to_embed.set_footer(
+            text=f'as decided by {author}',
+            icon_url=author_img
+        )
+        to_embed.set_thumbnail(url='https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif')
+        await ctx.send(embed=to_embed)
+        return
+
+    async def add_kasino(self, ctx, question, option_1, option_2):
         if db.session.query(db.discord_server).filter_by(discord_server_id=ctx.guild.id).first() is None:
             db.session.add(db.discord_server(ctx.guild))
         if db.session.query(db.discord_channel).filter_by(discord_channel_id=ctx.channel.id).first() is None:
@@ -383,31 +498,118 @@ class Karma(commands.Cog):
             db.session.add(db.discord_user(ctx.author))
 
         to_embed = nextcord.Embed(description="Opening kasino, hold on tight...")
-        casino_msg = await ctx.send(embed=to_embed)
+        kasino_msg = await ctx.send(embed=to_embed)
         
-        casino = db.casino(question, option_1, option_2, casino_msg)
-        db.session.add(casino)
+        kasino = db.kasino(question, option_1, option_2, kasino_msg)
+        db.session.add(kasino)
+        db.session.commit()
+        return kasino
+
+    async def remove_kasino(self, kasino_id):
+        kasino = db.session.query(db.kasino).filter_by(id=kasino_id).first()
+        if kasino is None:
+            return
+        kasino_msg = await (await self.bot.fetch_channel(kasino.discord_channel_id)).fetch_message(kasino.discord_message_id)
+        await kasino_msg.delete()
+        db.session.delete(kasino)
+        bets = db.session.query(db.kasino_bet).filter_by(kasino_id=kasino_id).all()
+        for bet in bets:
+            db.session.delete(bet)
         db.session.commit()
 
-        return casino
+    def has_user_bet(self, kasino_id: int, user_id: int):
+        return db.session.query(db.kasino_bet).filter_by(discord_user_id=user_id).filter_by(kasino_id=kasino_id).first() is not None
 
-    def is_casino_open(self, casino_id):
-        return db.session.query(db.casino).filter_by(id=casino_id).first() is not None
+    def is_same_bet_option(self, kasino_id: int, user_id: int, option: int):
+        return db.session.query(db.kasino_bet).filter_by(discord_user_id=user_id).filter_by(kasino_id=kasino_id).first().option == option
 
-    def lock_casino(self, casino_id):
-        db.session.query(db.casino).filter_by(id=casino_id).update({'locked': True})
+    def add_bet(self, kasino_id: int, user_id: int, server_id: int, amount: int, option: int):
+        db.session.add(db.kasino_bet(kasino_id, user_id, amount, option))
+        user_karma = db.session.query(db.karma).filter_by(discord_user_id=user_id).filter_by(discord_server_id=server_id).first()
+        user_karma.amount -= amount
         db.session.commit()
 
-    async def update_casino(self, casino_id):
-        casino = db.session.query(db.casino).filter_by(id=casino_id).first()
-        kasino_msg = await (await self.bot.fetch_channel(casino.discord_channel_id)).fetch_message(casino.discord_message_id)
+    def increase_bet(self, kasino_id: int, user_id: int, server_id: int, increase_amount: int):
+        existing_bet = db.session.query(db.kasino_bet).filter_by(discord_user_id=user_id).filter_by(kasino_id=kasino_id).first()
+        existing_bet.amount += increase_amount
+        user_karma = db.session.query(db.karma).filter_by(discord_user_id=user_id).filter_by(discord_server_id=server_id).first()
+        user_karma.amount -= increase_amount
+        db.session.commit()
+        return existing_bet.amount
+
+    def is_kasino_open(self, kasino_id: int):
+        return db.session.query(db.kasino).filter_by(id=kasino_id).first() is not None
+
+    def is_kasino_locked(self, kasino_id: int):
+        return db.session.query(db.kasino).filter_by(id=kasino_id).first().locked
+
+    def lock_kasino(self, kasino_id: int):
+        db.session.query(db.kasino).filter_by(id=kasino_id).update({'locked': True})
+        db.session.commit()
+    
+    async def abort_kasino(self, kasino_id: int):
+        bets = db.session.query(db.kasino_bet, db.kasino).join(db.kasino, db.kasino.id == db.kasino_bet.kasino_id).filter_by(kasino_id=kasino_id).all()
+        kasino_question = db.session.query(db.kasino).filter_by(id=kasino_id).first().question
+        for bet in bets:
+            self.change_user_karma(bet.discord_user_id, bet.discord_server_id, bet.amount)
+            user_karma = self.get_user_karma(bet.discord_user_id, bet.discord_server_id)
+            output = nextcord.Embed(
+                title=f'**You\'ve been refunded {bet.amount} karma.**',
+                color=nextcord.Colour.from_rgb(52, 79, 235),
+                description=f'Question was: {kasino_question}\n'
+                            f'Remaining karma: {user_karma}'
+            )
+            await (await self.bot.fetch_user(bet.discord_user_id)).send(embed=output)
+        return True
+
+    async def win_kasino(self, kasino_id: int, winning_option: int):
+        qry = db.session.query(db.kasino_bet, db.kasino).join(db.kasino, db.kasino.id == db.kasino_bet.kasino_id)
+        winners = qry.filter(db.kasino_bet.kasino_id==kasino_id).filter(db.kasino_bet.option==winning_option).all()
+        losers = qry.filter(db.kasino_bet.kasino_id==kasino_id).filter(db.kasino_bet.option != winning_option).all()
+        qry = db.session.query(func.sum(db.kasino_bet.amount).label("total_amount"))
+        total_winner_karma = qry.filter_by(kasino_id=kasino_id).filter_by(option=winning_option).first().total_amount
+        total_kasino_karma = qry.filter_by(kasino_id=kasino_id).first().total_amount
+        question = db.session.query(db.kasino).filter_by(id=kasino_id).first().question
+
+        if total_winner_karma is None:
+            total_winner_karma = 0
+
+        for bet in winners:
+            win_ratio = bet[0].amount / total_winner_karma
+            win_amount = round(win_ratio * total_kasino_karma)
+
+            self.change_user_karma(bet[0].discord_user_id, bet[1].discord_server_id, win_amount)
+            user_karma = self.get_user_karma(bet[0].discord_user_id, bet[1].discord_server_id)
+            output = nextcord.Embed(
+                title=f':tada: **You\'ve won {win_amount} karma!** :tada:',
+                color=nextcord.Colour.from_rgb(66, 186, 50),
+                description=f'(Of which {bet[0].amount} you put down on the table)\n'
+                            f'Question was: {question}\n'
+                            f'New karma balance: {user_karma}'
+            )
+            await (await self.bot.fetch_user(bet[0].discord_user_id)).send(embed=output)
+        for bet in losers:
+            user_karma = self.get_user_karma(bet[0].discord_user_id, bet[1].discord_server_id)
+            output = nextcord.Embed(
+                title=f':chart_with_downwards_trend: **You\'ve unfortunately lost {bet[0].amount} karma...** :chart_with_downwards_trend:',
+                color=nextcord.Colour.from_rgb(209, 25, 25),
+                description=f'Question was: {question}\n'
+                            f'New karma balance: {user_karma}'
+            )
+            await (await self.bot.fetch_user(bet[0].discord_user_id)).send(embed=output)
+        db.session.commit()
+
+    async def update_kasino(self, kasino_id: int):
+        kasino = db.session.query(db.kasino).filter_by(id=kasino_id).first()
+        kasino_msg = await (await self.bot.fetch_channel(kasino.discord_channel_id)).fetch_message(kasino.discord_message_id)
 
         # FIGURE OUT AMOUNTS AND ODDS
-        qry = db.session.query(func.sum(db.casino_bet.amount).label("total_amount"))
-        aAmount = qry.filter_by(id=casino_id).filter_by(option='1').first().total_amount
-        bAmount = qry.filter_by(id=casino_id).filter_by(option='2').first().total_amount
+        qry = db.session.query(func.sum(db.kasino_bet.amount).label("total_amount"))
+        aAmount = qry.filter_by(kasino_id=kasino_id).filter_by(option='1').first().total_amount
+        bAmount = qry.filter_by(kasino_id=kasino_id).filter_by(option='2').first().total_amount
         aAmount = 0 if aAmount is None else aAmount
         bAmount = 0 if bAmount is None else bAmount
+
         if aAmount != 0:
             aOdds = float(aAmount + bAmount) / aAmount
         else:
@@ -418,16 +620,19 @@ class Karma(commands.Cog):
             bOdds = 1.0
 
         # CREATE MESSAGE
+        description = f"The kasino has been opened! Place your bets using `{self.bot.command_prefix}kasino bet {kasino.id} <amount> <1 or 2>`"
+        if kasino.locked: 
+            description = f'The kasino is locked! No more bets are taken in. Time to wait and see...'
         to_embed = nextcord.Embed(
-            title=f'{"[LOCKED] " if casino.locked else ""}:game_die: {casino.question}',
-            description=f'{"The kasino is locked! No more bets are taken in. Time to wait and see..." if casino.locked else f"The kasino has been opened! Place your bets using `{self.bot.command_prefix}bet {casino.id} <amount> <1 or 2>`"}',
+            title=f'{"[LOCKED] " if kasino.locked else ""}:game_die: {kasino.question}',
+            description=description,
             color=nextcord.Colour.from_rgb(52, 79, 235)
         )
-        to_embed.set_footer(text=f'On the table: {aAmount + bAmount} Karma | ID: {casino.id}')
+        to_embed.set_footer(text=f'On the table: {aAmount + bAmount} Karma | ID: {kasino.id}')
         to_embed.set_thumbnail(url='https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif')
-        to_embed.add_field(name=f'**1:** {casino.option_1}',
+        to_embed.add_field(name=f'**1:** {kasino.option_1}',
                            value=f'**Odds:** 1:{round(aOdds, 2)}\n**Pool:** {aAmount} Karma')
-        to_embed.add_field(name=f'**2:** {casino.option_2}',
+        to_embed.add_field(name=f'**2:** {kasino.option_2}',
                            value=f'**Odds:** 1:{round(bOdds, 2)}\n**Pool:** {bAmount} Karma')
 
         await kasino_msg.edit(embed=to_embed)
