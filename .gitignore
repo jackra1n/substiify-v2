@@ -141,5 +141,6 @@ cython_debug/
 # substiify custom
 data/main.sqlite
 data/settings.json
+data/backups/
 
 logs/

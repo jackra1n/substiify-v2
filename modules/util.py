@@ -93,7 +93,7 @@ class Util(commands.Cog):
         newMsg = await channel.send(embed=embed)
         creator = ctx.author
         await newMsg.add_reaction("🎉")
-        db.session.add(db.active_giveaways(creator, end, prize, newMsg))
+        db.session.add(db.giveaway(creator, end, prize, newMsg))
         db.session.commit()
 
     @giveaway.command(usage="reroll <message_id>")
@@ -126,7 +126,7 @@ class Util(commands.Cog):
         Allows you to stop a giveaway. Takes the ID of the giveaway message as an argument.
         """
         # delete giveaway from db
-        giveaway = db.session.query(db.active_giveaways).filter(db.active_giveaways.message_id == message_id).first()
+        giveaway = db.session.query(db.giveaway).filter(db.giveaway.discord_message_id == message_id).first()
         if giveaway is None:
             return await ctx.send("The message ID provided was wrong")
         db.session.delete(giveaway)
@@ -137,7 +137,7 @@ class Util(commands.Cog):
 
     @tasks.loop(seconds=45.0)
     async def giveaway_task(self):
-        giveaways = db.session.query(db.active_giveaways).all()
+        giveaways = db.session.query(db.giveaway).all()
         random_seed_value = datetime.now().timestamp()
         for giveaway in giveaways:
             if datetime.now() >= giveaway.end_date:
@@ -161,7 +161,7 @@ class Util(commands.Cog):
                     embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
                     await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
                 await message.edit(embed=embed)
-                db.session.query(db.active_giveaways).filter_by(message_id=message.id).delete()
+                db.session.query(db.giveaway).filter_by(discord_message_id=message.id).delete()
                 db.session.commit()
 
     async def get_giveaway_prize(self, ctx, message_id: int):
