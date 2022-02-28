@@ -2,7 +2,7 @@ import shutil
 import logging
 import numpy as np
 from sqlalchemy.sql import func
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import nextcord
@@ -244,6 +244,84 @@ class Karma(commands.Cog):
         embed.add_field(name='Karma', value=embed_karma)        
         await ctx.send(embed=embed)
         await ctx.message.delete()
+
+
+    @commands.command(aliases=['plb'], usage="postlb")
+    async def postlb(self, ctx):
+        """
+        Posts the leaderboard of the most upvoted posts.
+        """
+        query = db.session.query(db.post, db.discord_user).join(db.post, db.post.discord_user_id == db.discord_user.discord_user_id).filter_by(discord_server_id=ctx.guild.id)
+
+        async with ctx.typing():
+            posts = query.order_by(db.post.upvotes.desc()).limit(5)
+            monthly_posts = query.filter(db.post.created_at > datetime.now() - timedelta(days=30)).order_by(db.post.upvotes.desc()).limit(5)
+            weekly_posts = query.filter(db.post.created_at > datetime.now() - timedelta(days=7)).order_by(db.post.upvotes.desc()).limit(5)
+
+            all_board = await self.create_post_leaderboard(posts)
+            month_board = await self.create_post_leaderboard(monthly_posts)
+            week_board = await self.create_post_leaderboard(weekly_posts)
+        
+        embed = nextcord.Embed(title='Top Messages')
+        embed.set_thumbnail(url=ctx.guild.icon.url)
+        embed.add_field(name='Top 5 All Time', value=all_board, inline=False)
+        embed.add_field(name='Top 5 This Month', value=month_board, inline=False)
+        embed.add_field(name='Top 5 This Week', value=week_board, inline=False)
+        await ctx.send(embed=embed)
+
+    @commands.command(name='checkpost', aliases=['cp'], usage="checkpost <post id>")
+    @commands.is_owner()
+    async def check_post(self, ctx, post_id):
+        """
+        Checks if a post exists.
+        """
+        post = db.session.query(db.post).filter_by(discord_server_id=ctx.guild.id).filter_by(discord_message_id=post_id).first()
+        if post is None:
+            embed = nextcord.Embed(title='That post does not exist.')
+            return await ctx.send(embed=embed, delete_after=30)
+        query = db.session.query(db.karma_emote).filter_by(discord_server_id=ctx.guild.id)
+
+        server_upvote_emotes = query.filter_by(action=0).all()
+        server_downvote_emotes = query.filter_by(action=1).all()
+
+        server_upvote_emotes_ids = [emote.discord_emote_id for emote in server_upvote_emotes]
+        server_downvote_emotes_ids = [emote.discord_emote_id for emote in server_downvote_emotes]
+
+        channel = await self.bot.fetch_channel(post.discord_channel_id)
+        message = await channel.fetch_message(post.discord_message_id)
+
+        upvote_reactions = 0
+        downvote_reactions = 0
+        for reaction in message.reactions:
+            if isinstance(reaction.emoji, nextcord.Emoji) or isinstance(reaction.emoji, nextcord.PartialEmoji):
+                if reaction.emoji.id in server_upvote_emotes_ids:
+                    upvote_reactions += reaction.count-1
+                if reaction.emoji.id in server_downvote_emotes_ids:
+                    downvote_reactions += reaction.count-1            
+
+        old_upvotes = post.upvotes
+        old_downvotes = post.downvotes
+
+        embed_string = f'Old post upvotes: {old_upvotes}, Old post downvotes: {old_downvotes}\nRechecked post upvotes: {upvote_reactions}, Rechecked post downvotes: {downvote_reactions}'
+
+        embed = nextcord.Embed(title=f'Post {post_id} check', description=embed_string)
+        await ctx.send(embed=embed, delete_after=60)
+        await ctx.message.delete()
+        post.upvotes = upvote_reactions
+        post.downvotes = downvote_reactions
+        db.session.commit()
+
+
+    async def create_post_leaderboard(self, posts_query):
+        leaderboard = ''
+        for index, post in enumerate(posts_query, start=1):
+            jump_url = self.create_message_url(post[0].discord_server_id, post[0].discord_channel_id, post[0].discord_message_id)
+            leaderboard += f'**{index}.** [{post[1].username} ({post[0].upvotes})]({jump_url})\n'
+        return leaderboard if len(leaderboard) > 0 else 'No posts found.'
+
+    def create_message_url(self, server_id, channel_id, message_id):
+        return f'https://discordapp.com/channels/{server_id}/{channel_id}/{message_id}'
+
 
     @commands.group(name='kasino', aliases=['kas'], invoke_without_command=True)
     async def kasino(self, ctx):
