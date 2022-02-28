@@ -23,8 +23,8 @@ def prepareFiles():
 
     default_settings = {
         "token": "",
-        "version": "0.6",
-        "prefix": ";"
+        "version": "0.85.0",
+        "prefix": "<<",
     }
 
     # Create 'logs' folder if it doesn't exist

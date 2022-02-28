@@ -328,27 +328,55 @@ class Owner(commands.Cog):
         """
         Shows a lits of most used command on the current server
         """
-        commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(discord_server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
-        embed = create_command_usage_embed(commands_used_query, f"Top used commands on: **{ctx.guild.name}**")
+        commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(discord_server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).limit(10).all()
+        embed = create_command_usage_embed(commands_used_query, f"Top 10 used commands on: **{ctx.guild.name}**")
         await ctx.send(embed=embed, delete_after=180)
+        await ctx.message.delete()
 
     @usage.command(name="all")
     async def usage_all(self, ctx): 
         """
         Shows a list of most used commands on all servers
         """
-        commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.command).order_by(func.count('*').desc()).all()
-        embed = create_command_usage_embed(commands_used_query, f"Top total used commands")
+        commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.command).order_by(func.count('*').desc()).limit(10).all()
+        embed = create_command_usage_embed(commands_used_query, f"Top 10 total used commands")
         await ctx.send(embed=embed, delete_after=180)
+        await ctx.message.delete()
+
+    @usage.command(name="last")
+    @commands.is_owner()
+    async def usage_last(self, ctx, amount: int = 10):
+        """
+        Shows a list of most used commands on the last server
+        """
+        commands_used_query = db.session.query(db.command_history, db.discord_user).join(db.command_history, db.command_history.discord_user_id == db.discord_user.discord_user_id).filter_by(discord_server_id=ctx.guild.id).order_by(db.command_history.date.desc()).limit(amount).all()
+        commands_used = ""
+        for command in commands_used_query:
+            formated_date = command[0].date.strftime("%d/%m/%Y %H:%M:%S")
+            commands_used += f"`{command[0].command}` used by `{command[1].username}` at {formated_date}\n"
+        embed = nextcord.Embed(title=f"Top {amount} used commands on: **{ctx.guild.name}**", color=0xE3621E)
+        embed.description = commands_used
+        await ctx.send(embed=embed, delete_after=60)
+        await ctx.message.delete()
 
     @usage.command(name="servers")
+    @commands.is_owner()
     async def usage_servers(self, ctx):
         """
         Shows a list of servers with most used commands
         """
-        commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.discord_server_id).order_by(func.count('*').desc()).all()
-        embed = create_command_usage_embed(commands_used_query, f"Top servers used commands")
-        await ctx.send(embed=embed, delete_after=180)
+        commands_used_query = db.session.query(db.command_history.discord_server_id, db.discord_server, func.count('*')).join(db.command_history, db.command_history.discord_server_id == db.discord_server.discord_server_id).group_by(db.command_history.discord_server_id).order_by(func.count('*').desc()).all()
+        commands_used = ""
+        commands_count = ""
+        for row in commands_used_query:
+
+            commands_used += f"`{row[1].server_name}`\n"
+            commands_count += f"{row[2]}\n"
+        embed = nextcord.Embed(title="Top servers used commands", color=0xE3621E)
+        embed.add_field(name="Command", value=commands_used, inline=True)
+        embed.add_field(name="Count", value=commands_count, inline=True)
+        await ctx.send(embed=embed, delete_after=30)
+        await ctx.message.delete()
 
     @commands.is_owner()
     @commands.command(name="invite")
@@ -465,7 +493,7 @@ def create_command_usage_embed(commands_used_query, embed_title):
     commands_used = ""
     commands_count = ""
     for row in commands_used_query:
-        commands_used += f"{row[0]}\n"
+        commands_used += f"`{row[0]}`\n"
         commands_count += f"{row[1]}\n"
     embed = nextcord.Embed(title=embed_title, color=0xE3621E)
     embed.add_field(name="Command", value=commands_used, inline=True)
