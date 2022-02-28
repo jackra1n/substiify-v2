@@ -2,7 +2,7 @@ import shutil
 import logging
 import numpy as np
 from sqlalchemy.sql import func
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import nextcord
@@ -244,6 +244,43 @@ class Karma(commands.Cog):
         embed.add_field(name='Karma', value=embed_karma)        
         await ctx.send(embed=embed)
         await ctx.message.delete()
+
+
+    @commands.command(aliases=['plb'], usage="postlb")
+    async def postlb(self, ctx):
+        """
+        Posts the karma leaderboard to the
+        """
+        posts = db.session.query(db.post).filter_by(discord_server_id=ctx.guild.id).order_by(db.post.upvotes.desc()).limit(5)
+        all_board = ''
+        for index, post in enumerate(posts, start=1):
+            message = await ctx.guild.get_channel(post.discord_channel_id).fetch_message(post.discord_message_id)
+            message_content = message.content[:20] if len(message.content) > 0 else "Message"
+            all_board += f'**{index}.** [{message_content}...]({message.jump_url}) | by {message.author.name}({post.upvotes})\n'
+
+        month_board = ''
+        posts = db.session.query(db.post).filter_by(discord_server_id=ctx.guild.id).filter(db.post.created_at > datetime.now() - timedelta(days=30)).order_by(db.post.upvotes.desc()).limit(5)
+        for index, post in enumerate(posts, start=1):
+            message = await ctx.guild.get_channel(post.discord_channel_id).fetch_message(post.discord_message_id)
+            message_content = message.content[:20] if len(message.content) > 0 else "Message"
+            month_board += f'**{index}.** [{message_content}...]({message.jump_url}) | by {message.author.name}({post.upvotes})\n'
+
+        week_board = ''
+        posts = db.session.query(db.post).filter_by(discord_server_id=ctx.guild.id).filter(db.post.created_at > datetime.now() - timedelta(days=7)).order_by(db.post.upvotes.desc()).limit(5)
+        for index, post in enumerate(posts, start=1):
+            message = await ctx.guild.get_channel(post.discord_channel_id).fetch_message(post.discord_message_id)
+            message_content = message.content[:20] if len(message.content) > 0 else "Message"
+            week_board += f'**{index}.** [{message_content}...]({message.jump_url}) | by {message.author.name}({post.upvotes})\n'
+        
+        embed = nextcord.Embed(title='Top Messages')
+        embed.set_thumbnail(url=ctx.guild.icon.url)
+        embed.add_field(name='Top 5 All Time', value=all_board, inline=False)
+        embed.add_field(name='Top 5 This Month', value=month_board, inline=False)
+        embed.add_field(name='Top 5 This Week', value=week_board, inline=False)
+        await ctx.send(embed=embed)
+
+
+
 
     @commands.group(name='kasino', aliases=['kas'], invoke_without_command=True)
     async def kasino(self, ctx):

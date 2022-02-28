@@ -141,29 +141,30 @@ class Util(commands.Cog):
         giveaways = db.session.query(db.giveaway).all()
         random_seed_value = datetime.now().timestamp()
         for giveaway in giveaways:
-            if datetime.now() >= giveaway.end_date:
-                channel = self.bot.get_channel(giveaway.channel_id)
-                message = await channel.fetch_message(giveaway.message_id)
-                users = await message.reactions[0].users().flatten()
-                author = await self.bot.fetch_user(giveaway.creator_user_id)
-                prize = giveaway.prize
-                embed = self.create_giveaway_embed(author, prize)
+            if datetime.now() < giveaway.end_date:
+                return
+            channel = self.bot.get_channel(giveaway.channel_id)
+            message = await channel.fetch_message(giveaway.message_id)
+            users = await message.reactions[0].users().flatten()
+            author = await self.bot.fetch_user(giveaway.creator_user_id)
+            prize = giveaway.prize
+            embed = self.create_giveaway_embed(author, prize)
 
-                users.pop(users.index(self.bot.user))
-                # Check if User list is not empty
-                if len(users) <= 0:
-                    embed.remove_field(0)
-                    embed.set_footer(text="No one won the Giveaway")
-                    await channel.send('No one won the Giveaway')
-                elif len(users) > 0:
-                    seed(random_seed_value)
-                    winner = choice(users)
-                    random_seed_value += 1
-                    embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
-                    await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
-                await message.edit(embed=embed)
-                db.session.query(db.giveaway).filter_by(discord_message_id=message.id).delete()
-                db.session.commit()
+            users.pop(users.index(self.bot.user))
+            # Check if User list is not empty
+            if len(users) <= 0:
+                embed.remove_field(0)
+                embed.set_footer(text="No one won the Giveaway")
+                await channel.send('No one won the Giveaway')
+            elif len(users) > 0:
+                seed(random_seed_value)
+                winner = choice(users)
+                random_seed_value += 1
+                embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
+                await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
+            await message.edit(embed=embed)
+            db.session.query(db.giveaway).filter_by(discord_message_id=message.id).delete()
+            db.session.commit()
 
     async def get_giveaway_prize(self, ctx, message_id: int):
         try:
