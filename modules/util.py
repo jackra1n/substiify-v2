@@ -86,9 +86,10 @@ class Util(commands.Cog):
 
         await ctx.send(f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}")
         embed = self.create_giveaway_embed(ctx.author, prize)
-        embed.description += "\nReact with :tada: to enter!"
         end = (datetime.now() + timedelta(seconds=time))
         end_string = end.strftime('%d.%m.%Y %H:%M')
+        embed.description += f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
+        
         embed.set_footer(text=f"Giveway ends on {end_string}")
         newMsg = await channel.send(embed=embed)
         creator = ctx.author
