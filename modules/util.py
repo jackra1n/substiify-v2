@@ -339,7 +339,7 @@ class Util(commands.Cog):
 
     @commands.group(aliases=['c'], invoke_without_command = True)
     @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
-    async def clear(self, ctx, amount: int):
+    async def clear(self, ctx, amount: int = None):
         """
         Clears messages within the current channel.
         """
@@ -349,6 +349,8 @@ class Util(commands.Cog):
                 await message.delete()
                 await ctx.message.delete()
             return
+        if amount is None:
+            return await ctx.send(f'Please specify the amount of messages to delete.', delete_after=15)
         if amount >= 100:
             return await ctx.channel.send('Cannot delete more than 100 messages at a time!')
         await ctx.channel.purge(limit=amount + 1)
