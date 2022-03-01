@@ -302,14 +302,20 @@ class Karma(commands.Cog):
         old_upvotes = post.upvotes
         old_downvotes = post.downvotes
 
-        embed_string = f'Old post upvotes: {old_upvotes}, Old post downvotes: {old_downvotes}\nRechecked post upvotes: {upvote_reactions}, Rechecked post downvotes: {downvote_reactions}'
+        karma_difference = (old_upvotes - upvote_reactions) + (old_downvotes - downvote_reactions)
+        user_karma = db.session.query(db.karma).filter_by(discord_server_id=ctx.guild.id).filter_by(discord_user_id=post.discord_user_id).first()
+        user_karma.amount += karma_difference
+
+        post.upvotes = upvote_reactions
+        post.downvotes = downvote_reactions
+        db.session.commit()
+
+        embed_string = f'Old post upvotes: {old_upvotes}, Old post downvotes: {old_downvotes}\nRechecked post upvotes: {upvote_reactions}, Rechecked post downvotes: {downvote_reactions}\nKarma difference: {karma_difference}'
 
         embed = nextcord.Embed(title=f'Post {post_id} check', description=embed_string)
         await ctx.send(embed=embed, delete_after=60)
         await ctx.message.delete()
-        post.upvotes = upvote_reactions
-        post.downvotes = downvote_reactions
-        db.session.commit()
+
 
 
     async def create_post_leaderboard(self, posts_query):
