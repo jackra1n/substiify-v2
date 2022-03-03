@@ -14,6 +14,7 @@ from nextcord.ext.commands import BucketType
 from random import choice, seed
 from datetime import datetime, timedelta
 from pytz import timezone
+from asyncio import TimeoutError
 
 from utils import db, store
 
@@ -39,13 +40,20 @@ class Util(commands.Cog):
         """
         pass
 
-    @giveaway.command(aliases=["c"], usage="create")
+    @giveaway.command(aliases=["c"], usage="create [hosted_by]")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def create(self, ctx):
+    async def create(self, ctx, hosted_by: nextcord.Member = None):
         """
         Allows you to create a giveaway. Requires manage_channels permission.
+        If you want to change the author of the giveaway that will be displayed in the message,
+        specify the optional parameter `hosted_by`.
         After calling this command, you will be asked to enter the prize, the time, and the channel.
         """
+        if hosted_by is None:
+            hosted_by = ctx.author
+        if hosted_by.bot:
+            await ctx.send("Sorry. Bots cannot host giveaways. You will be set as the host", delete_after=15)
+            hosted_by = ctx.author
 
         # Ask Questions
         questions = ["Setting up your giveaway. Choose what channel you want your giveaway in?",
@@ -59,12 +67,18 @@ class Util(commands.Cog):
 
         for i, question in enumerate(questions):
             embed = nextcord.Embed(title=f"Question {i}", description=question)
-            await ctx.send(embed=embed)
+            question_message = await ctx.send(embed=embed)
             try:
                 message = await self.bot.wait_for('message', timeout=45, check=check)
             except TimeoutError:
-                return await ctx.send("You didn't answer the questions in Time")
+                await question_message.delete()
+                return await ctx.send("You didn't answer the questions in Time", delete_after=60)
             answers.append(message.content)
+            await question_message.delete()
+            try:
+                await message.delete()
+            except:
+                pass
 
         # Check if Channel Id is valid
         try:
@@ -85,16 +99,15 @@ class Util(commands.Cog):
         prize = answers[2]
 
         await ctx.send(f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}")
-        embed = self.create_giveaway_embed(ctx.author, prize)
+        embed = self.create_giveaway_embed(hosted_by, prize)
         end = (datetime.now() + timedelta(seconds=time))
         end_string = end.strftime('%d.%m.%Y %H:%M')
         embed.description += f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
         
         embed.set_footer(text=f"Giveway ends on {end_string}")
         newMsg = await channel.send(embed=embed)
-        creator = ctx.author
         await newMsg.add_reaction("🎉")
-        db.session.add(db.giveaway(creator, end, prize, newMsg))
+        db.session.add(db.giveaway(hosted_by, end, prize, newMsg))
         db.session.commit()
 
     @giveaway.command(usage="reroll <message_id>")
@@ -143,10 +156,15 @@ class Util(commands.Cog):
         for giveaway in giveaways:
             if datetime.now() < giveaway.end_date:
                 return
-            channel = self.bot.get_channel(giveaway.channel_id)
-            message = await channel.fetch_message(giveaway.message_id)
+            channel = self.bot.get_channel(giveaway.discord_channel_id)
+            try:
+                message = await channel.fetch_message(giveaway.discord_message_id)
+            except nextcord.NotFound as e:
+                db.session.delete(giveaway)
+                db.session.commit()
+                return await channel.send("Could not find the giveaway message! Deleting the giveaway.", delete_after=180)
             users = await message.reactions[0].users().flatten()
-            author = await self.bot.fetch_user(giveaway.creator_user_id)
+            author = await self.bot.fetch_user(giveaway.discord_user_id)
             prize = giveaway.prize
             embed = self.create_giveaway_embed(author, prize)
 
