@@ -45,9 +45,11 @@ class Util(commands.Cog):
     async def create(self, ctx, hosted_by: nextcord.Member = None):
         """
         Allows you to create a giveaway. Requires manage_channels permission.
-        If you want to change the author of the giveaway that will be displayed in the message,
-        specify the optional parameter `hosted_by`.
         After calling this command, you will be asked to enter the prize, the time, and the channel.
+        To set the host of the giveaway, specify the optional parameter `hosted_by`.
+
+        Example: 
+        `<<giveaway create` or `<<giveaway create @user`
         """
         if hosted_by is None:
             hosted_by = ctx.author
