@@ -10,7 +10,7 @@ import wavelink
 from nextcord.ext import commands
 from wavelink.ext import spotify
 
-from utils import store
+from utils import store, db
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +48,11 @@ class Music(commands.Cog):
         """Event fired when a track ends."""
         if not player.queue.is_empty:
             partial = player.queue.get()
+            requester = partial.requester
             if not isinstance(partial, wavelink.PartialTrack):
                 partial = wavelink.PartialTrack(query=partial, cls=wavelink.YouTubeTrack)
             track = await player.play(partial)
-            track.requester = partial.requester
+            track.requester = requester
 
     async def cog_before_invoke(self, ctx):
         """ Command before-invoke handler. """
@@ -67,7 +68,7 @@ class Music(commands.Cog):
         """ This check ensures that the bot and command author are in the same voicechannel. """
         player = wavelink.NodePool.get_node().get_player(ctx.guild)
         
-        if ctx.command.name in ['players']:
+        if ctx.command.name in ['players','cleanup']:
             return True
 
         if ctx.command.name in ['queue','now_playing']:
@@ -110,14 +111,20 @@ class Music(commands.Cog):
 
         elif not url_rx.match(search):
             # Get the results for the search from Lavalink.
-            track = await wavelink.YouTubeTrack.search(query=search, return_first=True)
+            try:
+                track = await wavelink.YouTubeTrack.search(query=search, return_first=True)
+            except IndexError as e:
+                await ctx.message.delete()
+                return await ctx.send("No results found.", delete_after=15)
+            # Seems like should be this instead of try except
             if track is None:
-                return await ctx.reply("No results found.")
+                await ctx.message.delete()
+                return await ctx.send("No results found.", delete_after=15)
+            track.requester = ctx.author
             if not player.is_playing():
                 await player.play(track)
             else:
                 player.queue.put(track)
-            track.requester = ctx.author
             embed.title = 'Track Enqueued'
             embed.description = f'[{track.title}]({track.uri})'
 
@@ -135,8 +142,11 @@ class Music(commands.Cog):
             embed.title = 'Playlist Enqueued'
             embed.description = f'{playlist.name} - {len(playlist.tracks)} tracks'
 
+        server = db.session.query(db.discord_server).filter_by(discord_server_id=ctx.guild.id).first()
+        delete_after = 60 if server.music_cleanup else None
+        
         await ctx.message.delete()
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, delete_after=delete_after)
 
     async def queue_spotify(self, decoded, player, requester):
         embed = nextcord.Embed(color=nextcord.Color.blurple())
@@ -207,8 +217,11 @@ class Music(commands.Cog):
         if not player.is_playing():
             return await ctx.send('Nothing playing.', delete_after=10)
 
+        server = db.session.query(db.discord_server).filter_by(discord_server_id=ctx.guild.id).first()
+        delete_after = 60 if server.music_cleanup else None
+
         embed = self._create_current_song_embed(player)
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, delete_after=delete_after)
         await ctx.message.delete()
 
     @now_playing.error
@@ -284,23 +297,8 @@ class Music(commands.Cog):
         """
         player = wavelink.NodePool.get_node().get_player(ctx.guild)
         player.queue.clear()
-        await ctx.send('*⃣ | Queue cleared.')
+        await ctx.send('*⃣ | Queue cleared.', delete_after=30)
         await ctx.message.delete()
-
-    @commands.command()
-    async def repeat(self, ctx):
-        """
-        Repeats the current track in a loop.
-        """
-        player = wavelink.NodePool.get_node().get_player(ctx.guild)
-
-        if not player.current:
-            return await ctx.send('Nothing playing.')
-
-        player.repeat = not player.repeat
-        await ctx.send(f'*⃣ | Repeat is now {player.repeat}.')
-        await ctx.message.delete()
-
 
     @commands.is_owner()
     @commands.command(hidden=True)
@@ -316,9 +314,7 @@ class Music(commands.Cog):
         # get server names by id
         server_names = []
         for player in players:
-            server = await self.bot.fetch_guild(player.guild_id)
-            if server:
-                server_names.append(server.name)
+            server_names.append(player.guild.name)
 
         embed = nextcord.Embed(color=nextcord.Color.blurple())
         embed.title = 'Active players'
@@ -326,6 +322,37 @@ class Music(commands.Cog):
         await ctx.send(embed=embed, delete_after=60)
         await ctx.message.delete()
 
+    @commands.command()
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    async def cleanup(self, ctx, enable: bool = None):
+        """
+        Enables/disables the auto-cleanup of the music queue messages that appear after queueing a new song.
+        """
+        server = db.get_discord_server(ctx.guild)
+
+        if enable is None:
+            embed = self.create_song_cleanup_embed(enable, server)
+            return await ctx.send(embed=embed)
+
+        server.music_cleanup = enable
+        db.session.commit()
+        
+        embed = self.create_song_cleanup_embed(enable, server)
+        await ctx.send(embed=embed)
+        await ctx.message.delete()
+
+    def create_song_cleanup_embed(self, enable, server):
+        embed = nextcord.Embed(color=nextcord.Color.red())
+        if enable or server.music_cleanup:
+            embed = nextcord.Embed(color=nextcord.Color.green())
+        if server.music_cleanup:
+            status_string = '`enabled` <:greenTick:876177251832590348>'
+        else:
+            status_string = '`disabled` <:redCross:876177262813278288>'
+        embed.title = 'Cleanup status'
+        embed.description = f'Song messages auto-cleanup is {status_string}.'
+        embed.set_footer(text = f'Use `{self.bot.command_prefix}cleanup <enable/disable>` to toggle.')
+        return embed
     
     def _create_current_song_embed(self, player):
         embed = nextcord.Embed(color=nextcord.Color.blurple())

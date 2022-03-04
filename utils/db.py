@@ -22,6 +22,7 @@ class discord_server(Base):
 
     discord_server_id = Column(Integer, primary_key=True)
     server_name = Column(String)
+    music_cleanup = Column(Boolean, default=False)
 
     def __init__(self, server: nextcord.Guild):
         self.discord_server_id = server.id
@@ -198,6 +199,14 @@ class kasino_bet(Base):
         self.discord_user_id = user_id
         self.amount = amount
         self.option = option
+
+def get_discord_server(server: nextcord.Guild):
+    server = session.query(discord_server).filter_by(discord_server_id=server.id).first()
+    if server is None:
+        server = discord_server(server)
+        session.add(server)
+        session.commit()
+    return server
 
 
 def convert_db(version):
