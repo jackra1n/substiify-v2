@@ -6,9 +6,9 @@ from os import path, walk
 import nextcord
 from nextcord import Activity, ActivityType
 from nextcord.ext import commands, tasks
-
-from utils import store, db
 from sqlalchemy import func
+
+from utils import db, store
 
 logger = logging.getLogger(__name__)
 

@@ -1,9 +1,10 @@
 import logging
+import sqlite3
 from datetime import datetime
 
 import nextcord
-import sqlite3
-from sqlalchemy import Column, DateTime, Integer, String, Boolean, create_engine, ForeignKey
+from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, String,
+                        create_engine)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
