@@ -25,6 +25,8 @@ def prepareFiles():
         "token": "",
         "version": "0.85.0",
         "prefix": "<<",
+        "spotify_client_id": "",
+        "spotify_client_secret": ""
     }
 
     # Create 'logs' folder if it doesn't exist

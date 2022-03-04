@@ -1,13 +1,18 @@
 
 import datetime
+import json
+import logging
 import random
 import re
 
-import lavalink
 import nextcord
+import wavelink
 from nextcord.ext import commands
+from wavelink.ext import spotify
 
-from helper.LavalinkVoiceClient import LavalinkVoiceClient
+from utils import store
+
+logger = logging.getLogger(__name__)
 
 url_rx = re.compile(r'https?://(?:www\.)?.+')
 
@@ -18,16 +23,35 @@ class Music(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        # This ensures the client isn't overwritten during cog reloads.
-        if not hasattr(bot, 'lavalink'):
-            bot.lavalink = lavalink.Client(bot.user.id)
-            bot.lavalink.add_node('127.0.0.1', 2333, 'youshallnotpass', 'eu', 'default-node')
+        with open(store.SETTINGS_PATH, "r") as settings:
+            self.settings_json = json.load(settings)
+        bot.loop.create_task(self.connect_nodes())
 
-        lavalink.add_event_hook(self.track_hook)
+    async def connect_nodes(self):
+        await self.bot.wait_until_ready()
+        spotify_client_id = self.settings_json['spotify_client_id']
+        spotify_client_secret = self.settings_json['spotify_client_secret']
+        if not spotify_client_id or not spotify_client_secret:
+            logger.warning("Spotify client id or secret not found. Spotify support disabled.")
+            spotify_client = None
+        else: 
+            spotify_client = spotify.SpotifyClient(client_id=spotify_client_id, client_secret=spotify_client_secret)
+        await wavelink.NodePool.create_node(bot=self.bot, host='0.0.0.0', port=2333, password='youshallnotpass', spotify_client=spotify_client)
 
-    def cog_unload(self):
-        """ Cog unload handler. This removes any event hooks that were registered. """
-        self.bot.lavalink._event_hooks.clear()
+    @commands.Cog.listener()
+    async def on_wavelink_node_ready(self, node: wavelink.Node):
+        """Event fired when a node has finished connecting."""
+        logger.info(f'Node: <{node.identifier}> is ready!')
+
+    @commands.Cog.listener()
+    async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
+        """Event fired when a track ends."""
+        if not player.queue.is_empty:
+            partial = player.queue.get()
+            if not isinstance(partial, wavelink.PartialTrack):
+                partial = wavelink.PartialTrack(query=partial, cls=wavelink.YouTubeTrack)
+            track = await player.play(partial)
+            track.requester = partial.requester
 
     async def cog_before_invoke(self, ctx):
         """ Command before-invoke handler. """
@@ -38,21 +62,25 @@ class Music(commands.Cog):
 
         return guild_check
 
-    async def cog_command_error(self, ctx, error):
-        if isinstance(error, commands.CommandInvokeError):
-            await ctx.send(error.original)
 
     async def ensure_voice(self, ctx):
         """ This check ensures that the bot and command author are in the same voicechannel. """
-        if ctx.command.name in ('players','queue','now_playing',):
+        player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        
+        if ctx.command.name in ['players']:
             return True
-        player = self.bot.lavalink.player_manager.create(ctx.guild.id, endpoint=str(ctx.guild.region))
-        should_connect = ctx.command.name in ('play',)
+
+        if ctx.command.name in ['queue','now_playing']:
+            if not player:
+                raise commands.CommandInvokeError('No player found.')
+            return True
+
+        should_connect = ctx.command.name in ['play']
 
         if not ctx.author.voice or not ctx.author.voice.channel:
             raise commands.CommandInvokeError('Join a voicechannel first.')
 
-        if not player.is_connected:
+        if not player:
             if not should_connect:
                 raise commands.CommandInvokeError('Not connected.')
 
@@ -61,95 +89,94 @@ class Music(commands.Cog):
             if not permissions.connect or not permissions.speak:
                 raise commands.CommandInvokeError('I need the `CONNECT` and `SPEAK` permissions.')
 
-            player.store('channel', ctx.channel.id)
-            await ctx.author.voice.channel.connect(cls=LavalinkVoiceClient)
-        else:
-            if int(player.channel_id) != ctx.author.voice.channel.id:
-                raise commands.CommandInvokeError('You need to be in my voicechannel.')
-
-    async def track_hook(self, event):
-        if isinstance(event, lavalink.events.QueueEndEvent):
-            guild_id = int(event.player.guild_id)
-            guild = self.bot.get_guild(guild_id)
-            await guild.voice_client.disconnect(force=True)
-
-    @commands.Cog.listener()
-    async def on_voice_state_update(self, member, before, after):
-        if member.bot:
-            return
-        if before.channel is None:
-            return
-        if self.bot.user not in before.channel.members:
-            return
-        users = [user for user in before.channel.members if not user.bot]
-        if len(users) == 0:
-            player = self.bot.lavalink.player_manager.get(member.guild.id)
-            player.queue.clear()
-            await player.stop()
-            guild = self.bot.get_guild(member.guild.id)
-            await guild.voice_client.disconnect(force=True)
+            await ctx.author.voice.channel.connect(cls=wavelink.Player)
 
     @commands.command(aliases=['p'], usage='play <url/query>')
-    async def play(self, ctx, *, query: str):
+    async def play(self, ctx, *, search: str):
         """ Plays or queues a song/playlist. Can be a YouTube URL, Soundcloud URL or a search query. 
         
         Examples:
         `<<play All girls are the same Juice WRLD` - searches for a song and queues it
         `<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
         """
-        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
-        query = query.strip('<>')
-
-        if not url_rx.match(query):
-            query = f'ytsearch:{query}'
-
-        # Get the results for the query from Lavalink.
-        results = await player.node.get_tracks(query)
-
-        if not results or not results['tracks']:
-            return await ctx.send('Nothing found!', delete_after=30)
+        player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        search = search.strip('<>')
 
         embed = nextcord.Embed(color=nextcord.Color.blurple())
+        if (decoded := spotify.decode_url(search)) is not None:
+            if decoded["type"] is spotify.SpotifySearchType.unusable:
+                return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
+            embed = await self.queue_spotify(decoded, player, ctx.author)
 
-        if results['loadType'] == 'PLAYLIST_LOADED':
-            tracks = results['tracks']
-
-            for track in tracks:
-                # Add all of the tracks from the playlist to the queue.
-                player.add(requester=ctx.author.id, track=track)
-
-            embed.title = 'Playlist Enqueued!'
-            embed.description = f'{results["playlistInfo"]["name"]} - {len(tracks)} tracks'
-        else:
-            track = results['tracks'][0]
+        elif not url_rx.match(search):
+            # Get the results for the search from Lavalink.
+            track = await wavelink.YouTubeTrack.search(query=search, return_first=True)
+            if track is None:
+                return await ctx.reply("No results found.")
+            if not player.is_playing():
+                await player.play(track)
+            else:
+                player.queue.put(track)
+            track.requester = ctx.author
             embed.title = 'Track Enqueued'
-            embed.description = f'[{track["info"]["title"]}]({track["info"]["uri"]})'
+            embed.description = f'[{track.title}]({track.uri})'
 
-            track = lavalink.models.AudioTrack(track, ctx.author.id, recommended=True)
-            player.add(requester=ctx.author.id, track=track)
+        else:
+            playlist = await wavelink.NodePool.get_node().get_playlist(wavelink.YouTubePlaylist, search)
+            if playlist is None:
+                return await ctx.reply("No results found.", delete_after=30)
+            for track in playlist.tracks:
+                partial = wavelink.PartialTrack(query=track.title)
+                partial.requester = ctx.author
+                player.queue.put(partial)
+            if not player.is_playing():
+                track = await player.play(await player.queue.get_wait())
+                track.requester = ctx.author
+            embed.title = 'Playlist Enqueued'
+            embed.description = f'{playlist.name} - {len(playlist.tracks)} tracks'
 
+        await ctx.message.delete()
         await ctx.send(embed=embed)
 
-        if not player.is_playing:
-            await player.play()
-        await ctx.message.delete()
+    async def queue_spotify(self, decoded, player, requester):
+        embed = nextcord.Embed(color=nextcord.Color.blurple())
+        if decoded["type"] in (spotify.SpotifySearchType.playlist, spotify.SpotifySearchType.album):
+            tracks_count = 0
+            async for partial in spotify.SpotifyTrack.iterator(query=decoded["id"], partial_tracks=True, type=decoded["type"]):
+                partial.requester = requester
+                player.queue.put(partial)
+                tracks_count += 1
+            embed.title = 'Playlist Enqueued'
+            embed.description = f'{tracks_count} tracks'
+            if not player.is_playing():
+                track = await player.play(await player.queue.get_wait())
+                embed.description += f'\nNow playing: [{track.title}]({track.uri})'
+        else:
+            track = await spotify.SpotifyTrack.search(query=decoded["id"], return_first=True)
+            track.requester = requester
+            if not player.is_playing():
+                await player.play(track)
+            else:
+                player.queue.put(track)
+            embed.title = 'Track Enqueued'
+            embed.description = f'[{track.title}]({track.uri})'
+        return embed
 
     @commands.command(aliases=['disconnect', 'stop'])
     async def leave(self, ctx):
         """
         Disconnects the player from the voice channel and clears its queue.
         """
-        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+        player = wavelink.NodePool.get_node().get_player(ctx.guild)
 
-        if not player.is_connected:
+        if not player.is_connected():
             return await ctx.send('Not connected.', delete_after=30)
 
-        if not ctx.author.voice or (player.is_connected and ctx.author.voice.channel.id != int(player.channel_id)):
+        if not ctx.author.voice:
             return await ctx.send('You\'re not in my voicechannel!', delete_after=30)
 
         player.queue.clear()
-        await player.stop()
-        await ctx.voice_client.disconnect(force=True)
+        await player.disconnect()
         await ctx.send('*⃣ | Disconnected.', delete_after=30)
         await ctx.message.delete()
 
@@ -158,12 +185,12 @@ class Music(commands.Cog):
         """
         Skips the current track. If there no more tracks in the queue, disconnects the player.
         """
-        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+        player = wavelink.NodePool.get_node().get_player(ctx.guild)
 
-        if not player.is_playing:
+        if not player.is_playing():
             return await ctx.send('Not playing currently.', delete_after=15)
 
-        await player.skip()
+        await player.stop()
         await ctx.send('*⃣ | Skipped.', delete_after=15)
         await ctx.message.delete()
 
@@ -172,29 +199,36 @@ class Music(commands.Cog):
         """
         Shows info about the currently playing track.
         """
-        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+        player = wavelink.NodePool.get_node().get_player(ctx.guild)
 
-        if not player.is_connected:
+        if not player.is_connected():
             return await ctx.send('Not connected.', delete_after=10)
 
-        if not player.current:
+        if not player.is_playing():
             return await ctx.send('Nothing playing.', delete_after=10)
 
         embed = self._create_current_song_embed(player)
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
+    @now_playing.error
+    async def now_playing_error(self, ctx, error):
+        if isinstance(error, commands.CommandInvokeError):
+            if "Not connected." in error.original:
+                await ctx.send('No player found', delete_after=30)
+                await ctx.message.delete()
+
     @commands.command()
     async def shuffle(self, ctx):
         """
         Randomly shuffles the queue.
         """
-        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+        player = wavelink.NodePool.get_node().get_player(ctx.guild)
 
         if len(player.queue) < 2:
             return await ctx.send('Not enough tracks to shuffle.', delete_after=15)
 
-        random.shuffle(player.queue)
+        random.shuffle(player.queue._queue)
         await ctx.send('*⃣ | Queue shuffled.', delete_after=15)
         await ctx.message.delete()
 
@@ -203,14 +237,12 @@ class Music(commands.Cog):
         """
         Shows the queue in a paginated menu. Use the subcommand `clear` to clear the queue.
         """
-        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
-
-        if len(player.queue) == 0:
-            return await ctx.send('Nothing queued.', delete_after=15)
-        elif len(player.queue) == 1:
+        player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        await ctx.message.delete()
+        if len(player.queue) < 1:
+            await ctx.send('Nothing queued.', delete_after=15)
             embed = self._create_current_song_embed(player)
             return await ctx.send(embed=embed)
-        await ctx.message.delete()
 
         current_page = 0
         queue_pages = self._create_queue_embed_list(ctx, player)
@@ -234,24 +266,33 @@ class Music(commands.Cog):
             elif str(reaction.emoji) == "⏭":
                 if current_page != len(queue_pages) - 1:
                     current_page += 1
+                
             await queue_message.remove_reaction(reaction.emoji, user)
             await queue_message.edit(embed=queue_pages[current_page])
+
+    @queue.error
+    async def queue_error(self, ctx, error):
+        if isinstance(error, commands.CommandInvokeError):
+            if "Not connected." in error.original:
+                await ctx.send('No player found', delete_after=30)
+                await ctx.message.delete()
 
     @queue.command(aliases=['clear'])
     async def queue_clear(self, ctx):
         """
         Clears the queue.
         """
-        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+        player = wavelink.NodePool.get_node().get_player(ctx.guild)
         player.queue.clear()
         await ctx.send('*⃣ | Queue cleared.')
+        await ctx.message.delete()
 
     @commands.command()
     async def repeat(self, ctx):
         """
         Repeats the current track in a loop.
         """
-        player = self.bot.lavalink.player_manager.get(ctx.guild.id)
+        player = wavelink.NodePool.get_node().get_player(ctx.guild)
 
         if not player.current:
             return await ctx.send('Nothing playing.')
@@ -267,8 +308,7 @@ class Music(commands.Cog):
         """
         Shows all active players. Mostly used to check before deploying a new version.
         """
-        players = self.bot.lavalink.player_manager.find_all()
-        players = [player for player in players if player.is_connected]
+        players = wavelink.NodePool.get_node().players
         if not players:
             await ctx.message.delete()
             return await ctx.send('No players found.', delete_after=15)
@@ -290,24 +330,32 @@ class Music(commands.Cog):
     def _create_current_song_embed(self, player):
         embed = nextcord.Embed(color=nextcord.Color.blurple())
         embed.title = 'Now Playing'
-        embed.description = f'[{player.current.title}]({player.current.uri})'
-        if not player.current.stream:
-            timestamp = str(datetime.timedelta(milliseconds=player.current.duration)).split(".")[0]
-            position = str(datetime.timedelta(milliseconds=player.position)).split(".")[0]
+        embed.description = f'[{player.track.title}]({player.track.uri})'
+        if not player.track.is_stream():
+            timestamp = str(datetime.timedelta(seconds=player.track.duration)).split(".")[0]
+            position = str(datetime.timedelta(seconds=player.position)).split(".")[0]
             embed.add_field(name='Duration', value=f"{position}/{timestamp}")
         else:
             embed.add_field(name='Duration', value='LIVE 🔴')
-        embed.add_field(name='Requested By', value=f"<@{player.current.requester}>")
+        embed.add_field(name='Requested By', value=f"{player.track.requester.mention}")
         return embed
 
     def _create_queue_embed_list(self, ctx, player):
+        songs_array = []
+        for song in player.queue:
+            try:
+                songs_array.append(song)
+            except IndexError:
+                break
+
         pages = []
-        for i in range(0, len(player.queue), 10):
+        for i in range(0, player.queue.count, 10):
             embed = nextcord.Embed(color=ctx.author.colour, timestamp=datetime.datetime.utcnow())
-            embed.title = f"Queue ({len(player.queue)})"
+            embed.title = f"Queue ({player.queue.count})"
+            embed.add_field(name='Now Playing', value=f'[{player.track.title}]({player.track.uri})')
             embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.avatar.url)
-            embed.add_field(name='Now Playing', value=f'[{player.current.title}]({player.current.uri})')
-            upcoming = '\n'.join([f'`{index + 1}.` [{track.title}]({track.uri})' for index, track in enumerate(player.queue[i:i + 10], start=i)])
+
+            upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(songs_array[i:i+10], start=i)])
             embed.add_field(name="Next up", value=upcoming, inline=False)
             pages.append(embed)
         return pages
