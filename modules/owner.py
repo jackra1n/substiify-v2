@@ -104,7 +104,7 @@ class Owner(commands.Cog):
         self.status_task.restart()
 
     @commands.is_owner()
-    @commands.group(invoke_without_command=True)
+    @commands.group(invoke_without_command=True, hidden=True)
     async def message(self, ctx):
         embed = nextcord.Embed(title="Current message settings", color=0xf66045)
         embed.add_field(name="Server", value=self.message_server)
@@ -379,7 +379,7 @@ class Owner(commands.Cog):
         await ctx.message.delete()
 
     @commands.is_owner()
-    @commands.command(name="invite")
+    @commands.command(name="invite", hidden=True)
     async def server_invite(self, ctx, guild_id: int):
         """
         Creates an invite for the bot
@@ -421,7 +421,7 @@ class Owner(commands.Cog):
                 await ctx.send("That channel doesn't exist", delete_after=30)
 
     @commands.is_owner()
-    @commands.group(name="db", invoke_without_command=True)
+    @commands.group(name="db", invoke_without_command=True, hidden=True)
     async def db_command(self, ctx):
         """
         Database commands

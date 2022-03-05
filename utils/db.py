@@ -208,6 +208,14 @@ def get_discord_server(server: nextcord.Guild):
         session.commit()
     return server
 
+def get_discord_channel(channel: nextcord.TextChannel):
+    db_channel = session.query(discord_channel).filter_by(discord_channel_id=channel.id).first()
+    if db_channel is None:
+        db_channel = discord_channel(channel)
+        session.add(db_channel)
+        session.commit()
+    return db_channel
+
 
 def convert_db(version):
     connection = sqlite3.connect(store.DB_PATH)

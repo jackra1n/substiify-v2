@@ -53,8 +53,8 @@ class Karma(commands.Cog):
         channel = ctx.channel if channel is None else channel
         if channel.id not in self.vote_channels:
             self.vote_channels = np.append(self.vote_channels, channel.id)
-        vote_channel = db.session.query(db.discord_channel).filter_by(discord_channel_id=channel.id).filter_by(upvote=True).first()
-        if vote_channel is None:
+        vote_channel = db.get_discord_channel(channel)
+        if not vote_channel.upvote:
             vote_channel.upvote = True
             db.session.commit()
         else:
@@ -88,7 +88,7 @@ class Karma(commands.Cog):
     def load_vote_channels(self) -> list:
         channel_array = []
         for entry in db.session.query(db.discord_channel).filter_by(upvote=True).all():
-            channel_array = np.append(channel_array, entry.channel_id)
+            channel_array = np.append(channel_array, entry.discord_channel_id)
         return channel_array
 
     def get_upvote_emote(self):
