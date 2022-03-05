@@ -53,6 +53,9 @@ class Music(commands.Cog):
                 partial = wavelink.PartialTrack(query=partial, cls=wavelink.YouTubeTrack)
             track = await player.play(partial)
             track.requester = requester
+        else:
+            await player.stop()
+
 
     async def cog_before_invoke(self, ctx):
         """ Command before-invoke handler. """
@@ -79,7 +82,7 @@ class Music(commands.Cog):
         should_connect = ctx.command.name in ['play']
 
         if not ctx.author.voice or not ctx.author.voice.channel:
-            raise commands.CommandInvokeError('Join a voicechannel first.')
+            raise commands.CommandInvokeError('You are not in a voice channel.')
 
         if not player:
             if not should_connect:
@@ -182,13 +185,20 @@ class Music(commands.Cog):
         if not player.is_connected():
             return await ctx.send('Not connected.', delete_after=30)
 
-        if not ctx.author.voice:
+        if ctx.author.voice.channel != player.channel:
             return await ctx.send('You\'re not in my voicechannel!', delete_after=30)
 
         player.queue.clear()
         await player.disconnect()
         await ctx.send('*⃣ | Disconnected.', delete_after=30)
         await ctx.message.delete()
+
+    @leave.error
+    async def leave_error(self, ctx, error):
+        if isinstance(error, commands.CommandInvokeError):
+            if "You are not in a voice channel." in error.original:
+                await ctx.send(f'{error.original}', delete_after=30)
+                await ctx.message.delete()
 
     @commands.command()
     async def skip(self, ctx):
@@ -210,6 +220,7 @@ class Music(commands.Cog):
         Shows info about the currently playing track.
         """
         player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        await ctx.message.delete()
 
         if not player.is_connected():
             return await ctx.send('Not connected.', delete_after=10)
@@ -222,7 +233,6 @@ class Music(commands.Cog):
 
         embed = self._create_current_song_embed(player)
         await ctx.send(embed=embed, delete_after=delete_after)
-        await ctx.message.delete()
 
     @now_playing.error
     async def now_playing_error(self, ctx, error):
