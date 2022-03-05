@@ -222,7 +222,7 @@ class Karma(commands.Cog):
         await ctx.send(embed=embed, delete_after=30)
         await ctx.message.delete()
 
-    @karma.command(name='leaderboard', aliases=['lb'], usage="leaderboard")
+    @karma.command(name='leaderboard', aliases=['lb','leaderbord'], usage="leaderboard")
     async def karma_leaderboard(self, ctx, global_leaderboard: str = None):
         """
         Shows users with the most karma on the server.
