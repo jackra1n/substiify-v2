@@ -1,4 +1,5 @@
 
+import asyncio
 import datetime
 import json
 import logging
@@ -37,6 +38,25 @@ class Music(commands.Cog):
         else: 
             spotify_client = spotify.SpotifyClient(client_id=spotify_client_id, client_secret=spotify_client_secret)
         await wavelink.NodePool.create_node(bot=self.bot, host='0.0.0.0', port=2333, password='youshallnotpass', spotify_client=spotify_client)
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+    
+        if not member.id == self.bot.user.id:
+            return
+
+        elif before.channel is None:
+            voice = after.channel.guild.voice_client
+            time = 0
+            while True:
+                await asyncio.sleep(1)
+                time = time + 1
+                if voice.is_playing() and not voice.is_paused():
+                    time = 0
+                if time == 300:
+                    await voice.disconnect()
+                if not voice.is_connected():
+                    break
 
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
