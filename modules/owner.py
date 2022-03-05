@@ -70,7 +70,7 @@ class Owner(commands.Cog):
         """
         Shows the bot's status.
         """
-        await ctx.send(f'{self.bot.presence.activity.name}')
+        pass
 
     @commands.is_owner()
     @status.command()

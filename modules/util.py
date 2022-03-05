@@ -31,12 +31,13 @@ class Util(commands.Cog):
         self.giveaway_task.start()
 
     @commands.group(aliases=["give"])
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def giveaway(self, ctx):
         """
         Allows you to create giveaways on the server.
         If you want to create a giveaway, check the `giveaway create` command.
         """
-        pass
+        await ctx.send_help(ctx.command)
 
     @giveaway.command(aliases=["c"], usage="create [hosted_by]")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -87,7 +88,9 @@ class Util(commands.Cog):
             await ctx.send(f"The Channel provided was wrong. The channel should be {ctx.channel.mention}")
             return
 
-        channel = self.bot.get_channel(channel_id)
+        channel = await self.bot.fetch_channel(channel_id)
+        if not channel.permissions_for(ctx.me).send_messages:
+            return await ctx.send("I don't have permission to send messages in that channel", delete_after=60)
         time = self.convert(answers[1])
         # Check if Time is valid
         if time == -1:

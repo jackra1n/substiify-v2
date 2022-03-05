@@ -14,7 +14,7 @@ from utils import store, db
 
 logger = logging.getLogger(__name__)
 
-url_rx = re.compile(r'https?://(?:www\.)?.+')
+URL_REGEX = r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))"
 
 
 class Music(commands.Cog):
@@ -71,8 +71,8 @@ class Music(commands.Cog):
         if ctx.command.name in ['players','cleanup']:
             return True
 
-        if ctx.command.name in ['queue','now_playing']:
-            if not player:
+        if ctx.command.name in ['queue','now']:
+            if player is None:
                 raise commands.CommandInvokeError('No player found.')
             return True
 
@@ -109,7 +109,21 @@ class Music(commands.Cog):
                 return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
             embed = await self.queue_spotify(decoded, player, ctx.author)
 
-        elif not url_rx.match(search):
+        elif re.match(URL_REGEX, search) and 'list=' in search:
+            playlist = await wavelink.NodePool.get_node().get_playlist(wavelink.YouTubePlaylist, search)
+            if playlist is None:
+                return await ctx.reply("No results found.", delete_after=30)
+            for track in playlist.tracks:
+                partial = wavelink.PartialTrack(query=track.title)
+                partial.requester = ctx.author
+                player.queue.put(partial)
+            if not player.is_playing():
+                track = await player.play(await player.queue.get_wait())
+                track.requester = ctx.author
+            embed.title = 'Playlist Enqueued'
+            embed.description = f'{playlist.name} - {len(playlist.tracks)} tracks'
+
+        else:
             # Get the results for the search from Lavalink.
             try:
                 track = await wavelink.YouTubeTrack.search(query=search, return_first=True)
@@ -127,20 +141,6 @@ class Music(commands.Cog):
                 player.queue.put(track)
             embed.title = 'Track Enqueued'
             embed.description = f'[{track.title}]({track.uri})'
-
-        else:
-            playlist = await wavelink.NodePool.get_node().get_playlist(wavelink.YouTubePlaylist, search)
-            if playlist is None:
-                return await ctx.reply("No results found.", delete_after=30)
-            for track in playlist.tracks:
-                partial = wavelink.PartialTrack(query=track.title)
-                partial.requester = ctx.author
-                player.queue.put(partial)
-            if not player.is_playing():
-                track = await player.play(await player.queue.get_wait())
-                track.requester = ctx.author
-            embed.title = 'Playlist Enqueued'
-            embed.description = f'{playlist.name} - {len(playlist.tracks)} tracks'
 
         server = db.session.query(db.discord_server).filter_by(discord_server_id=ctx.guild.id).first()
         delete_after = 60 if server.music_cleanup else None
@@ -227,7 +227,7 @@ class Music(commands.Cog):
     @now_playing.error
     async def now_playing_error(self, ctx, error):
         if isinstance(error, commands.CommandInvokeError):
-            if "Not connected." in error.original:
+            if "No player found." in error.original:
                 await ctx.send('No player found', delete_after=30)
                 await ctx.message.delete()
 
@@ -286,7 +286,7 @@ class Music(commands.Cog):
     @queue.error
     async def queue_error(self, ctx, error):
         if isinstance(error, commands.CommandInvokeError):
-            if "Not connected." in error.original:
+            if "No player found." in error.original:
                 await ctx.send('No player found', delete_after=30)
                 await ctx.message.delete()
 
@@ -364,7 +364,7 @@ class Music(commands.Cog):
             embed.add_field(name='Duration', value=f"{position}/{timestamp}")
         else:
             embed.add_field(name='Duration', value='LIVE 🔴')
-        embed.add_field(name='Requested By', value=f"{player.track.requester.mention}")
+        embed.add_field(name='Queued By', value=f"{player.track.requester.mention}")
         return embed
 
     def _create_queue_embed_list(self, ctx, player):
@@ -380,7 +380,7 @@ class Music(commands.Cog):
             embed = nextcord.Embed(color=ctx.author.colour, timestamp=datetime.datetime.utcnow())
             embed.title = f"Queue ({player.queue.count})"
             embed.add_field(name='Now Playing', value=f'[{player.track.title}]({player.track.uri})')
-            embed.set_footer(text=f"Requested by {ctx.author.display_name}", icon_url=ctx.author.avatar.url)
+            embed.set_footer(text=f"Queued by {ctx.author.display_name}", icon_url=ctx.author.avatar.url)
 
             upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(songs_array[i:i+10], start=i)])
             embed.add_field(name="Next up", value=upcoming, inline=False)
