@@ -18,7 +18,7 @@ class MainBot(commands.Cog):
             self.settings = json.load(settings)
         self.prefix = self.settings["prefix"]
         self.startup_extensions = [
-            "freeGames",
+            "free_games",
             "fun",
             "karma",
             "music",
