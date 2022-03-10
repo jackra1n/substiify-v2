@@ -4,8 +4,7 @@ numpy
 nextcord[voice]
 nextcord[speed]
 psutil
-requests
 pytz
 sqlalchemy
-lavalink
+wavelink >= 1.2.0
 vacefron.py

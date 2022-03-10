@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 
 import nextcord
-import requests
+import aiohttp
 from nextcord.ext import commands
 
 logger = logging.getLogger(__name__)
@@ -14,27 +14,31 @@ class Game():
     def __init__(self, game_info_json: str) -> None:
         self.title = game_info_json["title"]
         self.start_date = datetime.strptime(game_info_json["effectiveDate"].split('T')[0], "%Y-%m-%d")
-        self.end_date = self.get_end_date(game_info_json)
+        self.end_date = self._create_end_date(game_info_json)
         self.original_price = game_info_json["price"]["totalPrice"]["fmtPrice"]["originalPrice"]
-        self.discount_price = self.get_discount_price(game_info_json["price"])
-        self.cover_image_url = self.get__thumbnail(game_info_json["keyImages"])
-        self.epic_store_link = f'https://www.epicgames.com/store/en-US/p/{game_info_json["productSlug"]}'
+        self.discount_price = self._create_discount_price(game_info_json["price"])
+        self.cover_image_url = self._create_thumbnail(game_info_json["keyImages"])
+        self.epic_store_link = self._create_store_link(game_info_json)
 
-    def get_end_date(self, game_info_json: str) -> datetime:
-        if game_info_json["promotions"] is not None:
-            date_str = game_info_json["promotions"]["promotionalOffers"][0]["promotionalOffers"][0]["endDate"]
-            return datetime.strptime(date_str.split('T')[0], "%Y-%m-%d")
-        logger.info("Couldn't create free epic game. 'promotions' is 'None'")
+    def _create_store_link(self, game_info_json: str) -> str:
+        product_string = game_info_json["productSlug"]
+        if product_string is None:
+            product_string = game_info_json["urlSlug"]
+        return f'https://www.epicgames.com/store/en-US/p/{product_string}'
 
-    def get_discount_price(self, game_price_str: str) -> str:
+    def _create_end_date(self, game_info_json: str) -> datetime:
+        date_str = game_info_json["promotions"]["promotionalOffers"][0]["promotionalOffers"][0]["endDate"]
+        return datetime.strptime(date_str.split('T')[0], "%Y-%m-%d")
+
+    def _create_discount_price(self, game_price_str: str) -> str:
         discount_price = game_price_str["totalPrice"]["fmtPrice"]["discountPrice"]
         if discount_price == "0":
             return "Free"
         return discount_price
 
-    def get__thumbnail(self, key_images: str) -> str:
+    def _create_thumbnail(self, key_images: str) -> str:
         for image in key_images:
-            if image["type"] == 'Thumbnail':
+            if image["type"] == 'OfferImageWide':
                 return image["url"]
 
 class FreeGames(commands.Cog):
@@ -50,19 +54,30 @@ class FreeGames(commands.Cog):
         """
         Show all free games from Epic Games that are currently available.
         """
+        all_games = ''
         try:
-            all_games = requests.get(EPIC_STORE_FREE_GAMES_API).json()["data"]["Catalog"]["searchStore"]["elements"]
+            async with aiohttp.ClientSession() as session:
+                async with session.get(EPIC_STORE_FREE_GAMES_API) as response:
+                    json_response = await response.json()
+                    all_games = json_response["data"]["Catalog"]["searchStore"]["elements"]
         except Exception as e:
             logger.error(f'Error while getting list of all Epic games: {e}')
 
         current_free_games = []
         for game in all_games:
-            if datetime.strptime(game["effectiveDate"].split('T')[0], "%Y-%m-%d") <= datetime.now() and game["promotions"]:
-                try:    
-                    game = Game(game)
-                    current_free_games.append(game)
-                except Exception as e:
-                    logger.error(f'Error while creating \'Game\' object: {e}')
+            # Check if game has promotions
+            if game["promotions"] is None:
+                continue
+            # Check if game is free
+            if game["price"]["totalPrice"]["fmtPrice"]["discountPrice"] != "0":
+                continue
+            # Check if the game is currently free
+            if datetime.strptime(game["effectiveDate"].split('T')[0], "%Y-%m-%d") > datetime.now():
+                continue
+            try:    
+                current_free_games.append(Game(game))
+            except Exception as e:
+                logger.error(f'Error while creating \'Game\' object: {e}')
 
         try:
             for game in current_free_games:
