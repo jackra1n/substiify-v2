@@ -301,20 +301,31 @@ class Owner(commands.Cog):
                 await ctx.send(embed=embed)
         await ctx.message.delete()
 
-    @commands.command()
+    @commands.group()
     @commands.is_owner()
-    async def version(self, ctx, version):
+    async def version(self, ctx):
         """
         Sets the bot's version.
         """
+
+    @version.command(name='minor')
+    @commands.is_owner()
+    async def version_minor(self, ctx, version: int):
+        """
+        Sets the minor version.
+        """
+        await self._set_version(ctx, 'minor', version)
+
+    async def _set_version(self, ctx, version, value):
         with open(store.SETTINGS_PATH, "r") as settings:
             settings_json = json.load(settings)
-        settings_json['version'] = version
+        settings_json['version'][version] = value
+        settings_json['last_update'] = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8').strip()
         with open(store.SETTINGS_PATH, "w") as settings:
             json.dump(settings_json, settings, indent=2)
         if ctx.channel.permissions_for(ctx.guild.me).manage_messages:
             await ctx.message.delete()
-        embed = nextcord.Embed(description=f'Version has been set to {version}')
+        embed = nextcord.Embed(description=f'{version} version has been set to {value}')
         await ctx.send(embed=embed, delete_after=10)
 
     def get_modules(self):
@@ -369,7 +380,6 @@ class Owner(commands.Cog):
         commands_used = ""
         commands_count = ""
         for row in commands_used_query:
-
             commands_used += f"`{row[1].server_name}`\n"
             commands_count += f"{row[2]}\n"
         embed = nextcord.Embed(title="Top servers used commands", color=0xE3621E)
@@ -471,8 +481,8 @@ class Owner(commands.Cog):
         for server in servers:
             if db.session.query(db.discord_server).filter_by(discord_server_id=server.id).first() is None:
                 db.session.add(db.discord_server(server))
-                for channel in server.channels:
-                    db.session.add(db.discord_channel(channel))
+            for channel in server.channels:
+                db.session.add(db.discord_channel(channel))
         db.session.commit()
         for post in db.session.query(db.post).group_by(db.post.discord_user_id).all():
             if db.session.query(db.discord_user).filter_by(discord_user_id=post.discord_user_id).first() is None:

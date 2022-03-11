@@ -1,10 +1,9 @@
 #install with "pip3 install -r requirements.txt"
 
-numpy
 nextcord[voice]
 nextcord[speed]
 psutil
 pytz
 sqlalchemy
-wavelink >= 1.2.0
+wavelink >= 1.2.1
 vacefron.py

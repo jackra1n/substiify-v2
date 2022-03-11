@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import nextcord
-import numpy as np
 from nextcord.ext import commands
 from sqlalchemy.sql import func
 
@@ -18,7 +17,7 @@ class Karma(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.vote_channels = np.array(self.load_vote_channels())
+        self.vote_channels = self.load_vote_channels()
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -52,7 +51,7 @@ class Karma(commands.Cog):
         await ctx.message.delete()
         channel = ctx.channel if channel is None else channel
         if channel.id not in self.vote_channels:
-            self.vote_channels = np.append(self.vote_channels, channel.id)
+            self.vote_channels = self.vote_channels.append(channel.id)
         vote_channel = db.get_discord_channel(channel)
         if not vote_channel.upvote:
             vote_channel.upvote = True
@@ -80,16 +79,13 @@ class Karma(commands.Cog):
         db.session.query(db.discord_channel).filter_by(discord_channel_id=channel.id).filter_by(upvote=True).delete()
         db.session.commit()
         if channel.id in self.vote_channels:
-            index = np.argwhere(self.vote_channels==channel.id)
-            self.vote_channels = np.delete(self.vote_channels, index)
+            self.vote_channels.remove(channel.id)
         await ctx.message.delete()
         await ctx.channel.send(embed=nextcord.Embed(description=f'Votes has been stopped in {channel.mention}!', color=0xf66045))
 
     def load_vote_channels(self) -> list:
-        channel_array = []
-        for entry in db.session.query(db.discord_channel).filter_by(upvote=True).all():
-            channel_array = np.append(channel_array, entry.discord_channel_id)
-        return channel_array
+        query = db.session.query(db.discord_channel).filter_by(upvote=True).all()
+        return [ x.discord_channel_id for x in query ] if query is not None else []
 
     def get_upvote_emote(self):
         return self.bot.get_emoji(store.UPVOTE_EMOTE_ID)

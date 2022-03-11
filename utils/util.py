@@ -23,7 +23,12 @@ def prepareFiles():
 
     default_settings = {
         "token": "",
-        "version": "0.85.0",
+        "version": 
+        {
+            "major": "0",
+            "minor": "87",
+        },
+        "last_update": "",
         "prefix": "<<",
         "spotify_client_id": "",
         "spotify_client_secret": ""

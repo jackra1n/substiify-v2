@@ -434,9 +434,12 @@ class Util(commands.Cog):
         ram_percent = psutil.virtual_memory().percent
         with open(store.SETTINGS_PATH, "r") as settings:
             self.settings = json.load(settings)
+        ver = self.settings['version']
+        patch = subprocess.check_output(['git', 'rev-list', f'{self.settings["last_update"]}..HEAD', '--count']).decode('utf-8').strip()
+        bot_version = f"{ver['major']}.{ver['minor']}.{patch}"
 
         content = f'**Instance uptime:** `{bot_time}`\n' \
-            f'**Version:** `{self.settings["version"]}` | **Updated:** `{last_commit_date}`\n' \
+            f'**Version:** `{bot_version}` | **Updated:** `{last_commit_date}`\n' \
             f'**Python:** `{platform.python_version()}` | **nextcord:** `{nextcord.__version__}`\n\n' \
             f'**CPU:** `{cpu_percent}%` | **RAM:** `{ram_used} ({ram_percent}%)`\n\n' \
             f'**Made by:** <@{self.bot.owner_id}>' 
