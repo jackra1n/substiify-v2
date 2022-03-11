@@ -234,14 +234,10 @@ class Karma(commands.Cog):
             query = db.session.query(db.karma).order_by(db.karma.amount.desc()).limit(15)
         if len(query.all()) == 0:
             embed.description = 'No users have any karma.'
-        embed_users = ''
-        embed_karma = ''
-        for entry in query:
+        embed.description = ''
+        for index, entry in enumerate(query, start=1):
             user = await self.bot.fetch_user(entry.discord_user_id)
-            embed_users += f'{user.mention}\n'
-            embed_karma += f'{entry.amount}\n'
-        embed.add_field(name='Users', value=embed_users)
-        embed.add_field(name='Karma', value=embed_karma)        
+            embed.description += f'`{str(index).rjust(2)}.` | `{entry.amount}` - {user.mention}\n'
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
