@@ -203,10 +203,10 @@ class kasino_bet(Base):
 def get_discord_server(server: nextcord.Guild):
     db_server = session.query(discord_server).filter_by(discord_server_id=server.id).first()
     if db_server is None:
-        server = discord_server(server)
-        session.add(server)
+        db_server = discord_server(server)
+        session.add(db_server)
         session.commit()
-    return server
+    return db_server
 
 def get_discord_channel(channel: nextcord.TextChannel):
     db_channel = session.query(discord_channel).filter_by(discord_channel_id=channel.id).first()
