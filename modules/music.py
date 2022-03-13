@@ -165,7 +165,7 @@ class Music(commands.Cog):
             embed.title = 'Track Enqueued'
             embed.description = f'[{track.title}]({track.uri})'
 
-        server = db.session.query(db.discord_server).filter_by(discord_server_id=ctx.guild.id).first()
+        server = db.get_discord_server(ctx.guild)
         delete_after = 60 if server.music_cleanup else None
         
         await ctx.message.delete()
@@ -248,11 +248,8 @@ class Music(commands.Cog):
         if not player.is_playing():
             return await ctx.send('Nothing playing.', delete_after=10)
 
-        server = db.session.query(db.discord_server).filter_by(discord_server_id=ctx.guild.id).first()
-        delete_after = 60 if server.music_cleanup else None
-
         embed = self._create_current_song_embed(player)
-        await ctx.send(embed=embed, delete_after=delete_after)
+        await ctx.send(embed=embed, delete_after=60)
 
     @now_playing.error
     async def now_playing_error(self, ctx, error):
