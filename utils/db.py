@@ -201,8 +201,8 @@ class kasino_bet(Base):
         self.option = option
 
 def get_discord_server(server: nextcord.Guild):
-    server = session.query(discord_server).filter_by(discord_server_id=server.id).first()
-    if server is None:
+    db_server = session.query(discord_server).filter_by(discord_server_id=server.id).first()
+    if db_server is None:
         server = discord_server(server)
         session.add(server)
         session.commit()
