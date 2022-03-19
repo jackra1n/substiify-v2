@@ -337,7 +337,7 @@ class Fun(commands.Cog):
     async def calculateDamage(self, ctx, warrior1, warrior2, damage):
         hit_response = ['cRaZyy', 'pOwerful', 'DEADLY', 'dangerous', 'deathly', 'l33t', 'amazing']
         if damage <= 0:
-            await ctx.channel.send("**" + warrior2.user.display_name + "** blocked the attack!")
+            await ctx.channel.send("**" + warrior2.user.display_name.strip('<>') + "** blocked the attack!")
         else:
             await ctx.channel.send('**' + warrior1.user.display_name.strip('<>') + '** lands a ' + random.choice(
                 hit_response) + ' hit on **' + warrior2.user.display_name.strip('<>') + '** dealing `' + str(damage) + '` damage!')
