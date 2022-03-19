@@ -339,11 +339,11 @@ class Fun(commands.Cog):
         if damage <= 0:
             await ctx.channel.send("**" + warrior2.user.display_name + "** blocked the attack!")
         else:
-            await ctx.channel.send('**' + warrior1.user.display_name + '** lands a ' + random.choice(
-                hit_response) + ' hit on **' + warrior2.user.display_name + '** dealing `' + str(damage) + '` damage!')
+            await ctx.channel.send('**' + warrior1.user.display_name.strip('<>') + '** lands a ' + random.choice(
+                hit_response) + ' hit on **' + warrior2.user.display_name.strip('<>') + '** dealing `' + str(damage) + '` damage!')
             warrior2.Health -= damage
             await ctx.channel.send(
-                '**' + warrior2.user.display_name + '**  is left with `' + str(warrior2.Health) + '` health!')
+                '**' + warrior2.user.display_name.strip('<>') + '**  is left with `' + str(warrior2.Health) + '` health!')
 
     @fight.error
     async def fight_error(self, ctx, error):
