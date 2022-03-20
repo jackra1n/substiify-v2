@@ -113,8 +113,6 @@ class Music(commands.Cog):
             if not permissions.connect or not permissions.speak:
                 raise commands.CommandInvokeError('I need the `CONNECT` and `SPEAK` permissions.')
 
-            await ctx.author.voice.channel.connect(cls=wavelink.Player)
-
     @commands.command(aliases=['p'], usage='play <url/query>')
     async def play(self, ctx, *, search: str):
         """ Plays or queues a song/playlist. Can be a YouTube URL, Soundcloud URL or a search query. 
@@ -123,6 +121,7 @@ class Music(commands.Cog):
         `<<play All girls are the same Juice WRLD` - searches for a song and queues it
         `<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
         """
+        await ctx.author.voice.channel.connect(cls=wavelink.Player)
         player = wavelink.NodePool.get_node().get_player(ctx.guild)
         search = search.strip('<>')
 
@@ -170,6 +169,11 @@ class Music(commands.Cog):
         
         await ctx.message.delete()
         await ctx.send(embed=embed, delete_after=delete_after)
+
+    @play.error
+    async def play_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.reply("Please provide a search query or URL.", delete_after=30)
 
     async def queue_spotify(self, decoded, player, requester):
         embed = nextcord.Embed(color=nextcord.Color.blurple())

@@ -405,7 +405,7 @@ class Util(commands.Cog):
         title = 'Pong!'
         if 'dink' in ctx.message.content.lower():
             title = 'Donk!'
-        embed = nextcord.Embed(title=f'{title} 🏓', description=f'⏱️Ping:`{round(self.bot.latency*1000)}` ms', color=0xE3621E)
+        embed = nextcord.Embed(title=f'{title} 🏓', description=f'⏱️Ping: `{round(self.bot.latency*1000)}`ms', color=0xE3621E)
         await ctx.message.delete()
         await ctx.send(embed=embed)
 
