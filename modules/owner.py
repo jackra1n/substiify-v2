@@ -145,13 +145,13 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @message.command(name="channel")
-    async def message_channel(self, ctx, channel_id: int = None):
+    async def message_channel(self, ctx, channel_id: int = None, ignore_permissions: bool = False):
         if channel_id is not None:
             channel = await self.bot.fetch_channel(channel_id)
             if channel is None:
                 return await ctx.send("Channel not found", delete_after=30)
             #check if has send_message permission
-            if not channel.permissions_for(ctx.me).send_messages:
+            if not channel.permissions_for(ctx.me).send_messages and not ignore_permissions:
                 return await ctx.send("I don't have permission to send messages in that channel")
             self.message_channel = channel
             await ctx.message.delete()
