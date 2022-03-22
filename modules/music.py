@@ -123,6 +123,8 @@ class Music(commands.Cog):
         """
         await ctx.author.voice.channel.connect(cls=wavelink.Player)
         player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        if player is None:
+            return await ctx.send("No player found.")
         search = search.strip('<>')
 
         embed = nextcord.Embed(color=nextcord.Color.blurple())

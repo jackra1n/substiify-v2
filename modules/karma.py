@@ -393,7 +393,7 @@ class Karma(commands.Cog):
                 title=f'Wrong usage. Correct usage is `{self.bot.command_prefix}kasino bet <kasino_id> <amount> <1 or 2>`',
                 color=nextcord.Colour.from_rgb(209, 25, 25)
             )
-            return await ctx.author.send(embed=output)
+            return await ctx.author.send(embed=output, delete_after=30)
         if amount == "all":
             amount = self.get_user_karma(ctx.author.id, ctx.guild.id)
         else:
@@ -403,28 +403,28 @@ class Karma(commands.Cog):
                 title=f'You don\'t have that much karma. Your karma: {better_karma.amount}',
                 color=nextcord.Colour.from_rgb(209, 25, 25)
             )
-            return await ctx.author.send(embed=output)
+            return await ctx.author.send(embed=output, delete_after=30)
 
         if not self.is_kasino_open(kasino_id):
             output = nextcord.Embed(
                 title=f'Kasino with ID {kasino_id} is not open.',
                 color=nextcord.Colour.from_rgb(209, 25, 25)
             )
-            return await ctx.author.send(embed=output)
+            return await ctx.author.send(embed=output, delete_after=30)
 
         if self.is_kasino_locked(kasino_id):
             output = nextcord.Embed(
                 title=f'kasino with ID {kasino_id} is locked.',
                 color=nextcord.Colour.from_rgb(209, 25, 25)
             )
-            return await ctx.author.send(embed=output)
+            return await ctx.author.send(embed=output, delete_after=30)
             
         if amount < 1:
             output = nextcord.Embed(
                 title='You tried to bet < 1 karma! Silly you!',
                 color=nextcord.Colour.from_rgb(209, 25, 25)
             )
-            return await ctx.author.send(embed=output)
+            return await ctx.author.send(embed=output, delete_after=30)
 
         if self.has_user_bet(kasino_id, ctx.author.id):
             if not self.is_same_bet_option(kasino_id, ctx.author.id, option):

@@ -25,6 +25,8 @@ class Owner(commands.Cog):
         self.message_server = None
         self.message_channel = None
         self.message_text = None
+        self.message_embed = False
+        self.embed_title = None
 
 
     async def set_default_status(self):
@@ -110,11 +112,29 @@ class Owner(commands.Cog):
         embed.add_field(name="Server", value=self.message_server)
         embed.add_field(name="Channel", value=self.message_channel)
         embed.add_field(name="Message", value=self.message_text)
+        embed.add_field(name="Embed", value=self.message_embed)
+        embed.add_field(name="Embed title", value=self.embed_title)
         await ctx.send(embed=embed, delete_after=30)
+        await ctx.message.delete()
+
+    @commands.is_owner()
+    @message.group(invoke_without_command=True, name="embed")
+    async def _embed(self, ctx, option: bool):
+        self.message_embed = option
+        await ctx.send(f'Embed messages set to {option}', delete_after=30)
+        await ctx.message.delete()
+
+    @commands.is_owner()
+    @_embed.command(name="title")
+    async def title(self, ctx, title: str):
+        self.embed_title = title
+        await ctx.send(f'Embed title set to `{title}`', delete_after=30)
+        await ctx.message.delete()
 
     @commands.is_owner()
     @message.command(name="server")
     async def message_server(self, ctx, server_id: int = None):
+        await ctx.message.delete()
         if server_id is None:
             return await ctx.send("Please provide a server id", delete_after=30)
         server = await self.bot.fetch_guild(server_id)
@@ -127,15 +147,15 @@ class Owner(commands.Cog):
     @message.command(name="channel")
     async def message_channel(self, ctx, channel_id: int = None):
         if channel_id is not None:
-            self.message_channel = channel_id
             channel = await self.bot.fetch_channel(channel_id)
             if channel is None:
                 return await ctx.send("Channel not found", delete_after=30)
             #check if has send_message permission
             if not channel.permissions_for(ctx.me).send_messages:
                 return await ctx.send("I don't have permission to send messages in that channel")
+            self.message_channel = channel
+            await ctx.message.delete()
             return await ctx.send(f"Channel set to {channel.mention}" , delete_after=30)
-
 
         if self.message_server is None:
             return await ctx.send("Please set a server first", delete_after=30)
@@ -165,12 +185,14 @@ class Owner(commands.Cog):
                 await ctx.send(f"Channel set to `{channel.name}`", delete_after=30)
             else:
                 await ctx.send("That channel doesn't exist", delete_after=30)
+        await ctx.message.delete()
 
     @commands.is_owner()
     @message.command(name="text")
     async def message_text(self, ctx, *text: str):
         self.message_text = " ".join(text[:])
-        await ctx.send(f"Text set to:\n {self.message_text}", delete_after=30)
+        await ctx.send(f"Text set to:\n`{self.message_text}`", delete_after=30)
+        await ctx.message.delete()
 
     @commands.is_owner()
     @message.command(name="send")
@@ -182,6 +204,8 @@ class Owner(commands.Cog):
         embed.add_field(name="Server", value=self.message_server)
         embed.add_field(name="Channel", value=self.message_channel)
         embed.add_field(name="Message", value=self.message_text)
+        embed.add_field(name="Embed", value=self.message_embed)
+        embed.add_field(name="Embed title", value=self.embed_title)
         message = await ctx.send(embed=embed)
         await message.add_reaction("✅")
         await message.add_reaction("❌")
@@ -197,11 +221,19 @@ class Owner(commands.Cog):
 
         if reaction.emoji == "✅":
             await message.delete()
-            await self.message_channel.send(self.message_text)
+            if self.message_embed:
+                embed = nextcord.Embed(title=self.embed_title, color=nextcord.Colour.blurple())
+                if self.message_text is None:
+                    return await ctx.send("Please set the text first", delete_after=30)
+                embed.description = self.message_text
+                await self.message_channel.send(embed=embed)
+            else:
+                await self.message_channel.send(self.message_text)
             await ctx.send("Message sent", delete_after=30)
         else:
             await message.delete()
             await ctx.send("Message not sent", delete_after=30)
+        await ctx.message.delete()
 
 
     @commands.is_owner()

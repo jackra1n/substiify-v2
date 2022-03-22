@@ -51,7 +51,7 @@ class Fun(commands.Cog):
         """
         Goku drip meme.
         """
-        await self._meme_with_user(self.vac_api.adios, ctx, user)
+        await self._meme_with_user(self.vac_api.drip, ctx, user)
 
     @meme.command(name="cmm", usage="cmm [text]")
     async def meme_change_my_mind(self, ctx, *, text: str):
@@ -72,21 +72,21 @@ class Fun(commands.Cog):
         """
         Create first time meme.
         """
-        await self._meme_with_user(self.vac_api.adios, ctx, user)
+        await self._meme_with_user(self.vac_api.first_time, ctx, user)
 
     @meme.command(name="grave", usage="grave [user]")
     async def meme_grave(self, ctx, user: nextcord.User = None):
         """
         When someon got destroyed 💀.
         """
-        await self._meme_with_user(self.vac_api.adios, ctx, user)
+        await self._meme_with_user(self.vac_api.grave, ctx, user)
 
     @meme.command(name="speed", aliases=['iAmSpeed'], usage="speed [user]")
     async def meme_speed(self, ctx, user: nextcord.User = None):
         """
         Creates cars i am speed meme.
         """
-        await self._meme_with_user(self.vac_api.adios, ctx, user)
+        await self._meme_with_user(self.vac_api.iam_speed, ctx, user)
 
     @meme.command(name="milk", usage="milk <user1> [user2]")
     async def meme_milk(self, ctx, user1: nextcord.User, user2: nextcord.User = None):
@@ -100,7 +100,7 @@ class Fun(commands.Cog):
         """
         Create heaven meme.
         """
-        await self._meme_with_user(self.vac_api.adios, ctx, user)
+        await self._meme_with_user(self.vac_api.heaven, ctx, user)
 
     # TODO: split the two texts as parameters
     # @meme.command(name="npc", usage="npc [text] [text2]")
@@ -129,7 +129,7 @@ class Fun(commands.Cog):
         """
         Create wolverine meme.
         """
-        await self._meme_with_user(self.vac_api.adios, ctx, user)
+        await self._meme_with_user(self.vac_api.wolverine, ctx, user)
 
     @meme.command(name="womanYellingCat", aliases=['wyc'], usage="womanYellingCat <woman> <cat>")
     async def meme_woman_yelling_at_cat(self, ctx, woman: nextcord.User, cat: nextcord.User):
@@ -146,8 +146,9 @@ class Fun(commands.Cog):
         await ctx.message.delete()
 
     async def _meme_with_two_users(self, func, ctx, user1, user2):
+        avatar2 = user2.avatar.url if user2 else None
         async with ctx.typing():
-            meme_image = await func(user1.avatar.url, user2.avatar.url)
+            meme_image = await func(user1.avatar.url, avatar2)
             deletes_at = datetime.datetime.now() + datetime.timedelta(minutes=5)
             await ctx.send(f'Autodestruction <t:{int(deletes_at.timestamp())}:R>', file=nextcord.File(await meme_image.read(), filename="meme.png"), delete_after=300)
         await ctx.message.delete()
