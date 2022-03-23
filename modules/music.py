@@ -113,6 +113,8 @@ class Music(commands.Cog):
             if not permissions.connect or not permissions.speak:
                 raise commands.CommandInvokeError('I need the `CONNECT` and `SPEAK` permissions.')
 
+            await ctx.author.voice.channel.connect(cls=wavelink.Player)
+
     @commands.command(aliases=['p'], usage='play <url/query>')
     async def play(self, ctx, *, search: str):
         """ Plays or queues a song/playlist. Can be a YouTube URL, Soundcloud URL or a search query. 
@@ -121,7 +123,6 @@ class Music(commands.Cog):
         `<<play All girls are the same Juice WRLD` - searches for a song and queues it
         `<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
         """
-        await ctx.author.voice.channel.connect(cls=wavelink.Player)
         player = wavelink.NodePool.get_node().get_player(ctx.guild)
         if player is None:
             return await ctx.send("No player found.")
