@@ -44,19 +44,26 @@ class Music(commands.Cog):
     
         if not member.id == self.bot.user.id:
             return
+        elif before.channel is not None:
+            return
 
-        elif before.channel is None:
-            voice = after.channel.guild.voice_client
-            time = 0
-            while True:
-                await asyncio.sleep(1)
-                time = time + 1
-                if voice.is_playing() and not voice.is_paused():
-                    time = 0
-                if time == 300:
-                    await voice.disconnect()
-                if not voice.is_connected():
-                    break
+        voice = after.channel.guild.voice_client
+        time = 0
+
+        while True:
+            await asyncio.sleep(1)
+            time = time + 1
+            if voice.is_playing() and not voice.is_paused():
+                time = 0
+            if time < 300:
+                continue
+            player = wavelink.NodePool.get_node().get_player(after.channel.guild)
+            if player is not None:
+                await player.disconnect()
+            else: 
+                await voice.disconnect()
+            if not voice.is_connected():
+                break
 
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
@@ -238,6 +245,13 @@ class Music(commands.Cog):
         await player.stop()
         await ctx.send('*⃣ | Skipped.', delete_after=15)
         await ctx.message.delete()
+
+    @skip.error
+    async def leave_error(self, ctx, error):
+        if isinstance(error, commands.CommandInvokeError):
+            if "You are not in a voice channel." in error.original:
+                await ctx.send(f'{error.original}', delete_after=30)
+                await ctx.message.delete()
 
     @commands.command(name="now" ,aliases=['np', 'current'])
     async def now_playing(self, ctx):
