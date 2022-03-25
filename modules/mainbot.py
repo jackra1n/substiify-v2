@@ -69,7 +69,10 @@ class MainBot(commands.Cog):
             return
         if isinstance(error, commands.CheckFailure):
             await ctx.send(f'You do not have permission to use this command.')
-        await ctx.message.add_reaction('🆘')
+        try:
+            await ctx.message.add_reaction('🆘')
+        except:
+            pass
         logger.error(f'[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]')
 
 def setup(bot):

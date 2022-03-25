@@ -67,10 +67,8 @@ class Music(commands.Cog):
     async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
         """Event fired when a track ends."""
         if not player.queue.is_empty:
-            partial = player.queue.get()
+            partial = await player.queue.get_wait()
             requester = partial.requester
-            if not isinstance(partial, wavelink.PartialTrack):
-                partial = wavelink.PartialTrack(query=partial, cls=wavelink.YouTubeTrack)
             track = await player.play(partial)
             track.requester = requester
         else:
@@ -286,10 +284,12 @@ class Music(commands.Cog):
         """
         player = wavelink.NodePool.get_node().get_player(ctx.guild)
         await ctx.message.delete()
-        if len(player.queue) < 1:
+        if player.queue.count < 1:
             await ctx.send('Nothing queued.', delete_after=15)
-            embed = self._create_current_song_embed(player)
-            return await ctx.send(embed=embed)
+            if player.track:
+                embed = self._create_current_song_embed(player)
+                await ctx.send(embed=embed)
+            return
 
         current_page = 0
         queue_pages = self._create_queue_embed_list(ctx, player)
@@ -348,7 +348,7 @@ class Music(commands.Cog):
         # get server names by id
         server_names = []
         for player in players:
-            server_names.append(player.guild.name)
+            server_names.append(f'{player.guild.name} ({player.queue.count})')
 
         embed = nextcord.Embed(color=nextcord.Color.blurple())
         embed.title = 'Active players'
