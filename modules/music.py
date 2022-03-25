@@ -303,7 +303,10 @@ class Music(commands.Cog):
             return user == ctx.author and str(reaction.emoji) in ("⏮", "⏭", "❌") and reaction.message.id == queue_message.id
 
         while True:
-            reaction, user = await self.bot.wait_for("reaction_add", timeout=150.0, check=check)
+            try:
+                reaction, user = await self.bot.wait_for("reaction_add", timeout=150.0, check=check)
+            except asyncio.TimeoutError:
+                break
             if str(reaction.emoji) == "❌":
                 await queue_message.delete()
                 break
