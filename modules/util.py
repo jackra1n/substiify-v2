@@ -178,9 +178,8 @@ class Util(commands.Cog):
                 embed.set_footer(text="No one won the Giveaway")
                 await channel.send('No one won the Giveaway')
             elif len(users) > 0:
-                seed(random_seed_value)
+                seed(random_seed_value + giveaway.discord_message_id)
                 winner = choice(users)
-                random_seed_value += 1
                 embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
                 await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
             await message.edit(embed=embed)
