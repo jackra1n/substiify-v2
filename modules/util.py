@@ -449,7 +449,7 @@ class Util(commands.Cog):
             timestamp=datetime.now(timezone("Europe/Zurich"))
         )
         embed.set_thumbnail(url=self.bot.user.avatar.url)
-        embed.set_footer(text=f"Requested by by {ctx.author.display_name}")
+        embed.set_footer(text=f"Requested by by {ctx.author.display_name}", icon_url=ctx.author.avatar.url)
         await ctx.channel.send(embed=embed)
         await ctx.message.delete()
 
