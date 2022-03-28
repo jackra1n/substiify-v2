@@ -30,7 +30,7 @@ class Util(commands.Cog):
         self.deny_emoji = ':redCross:876177262813278288'
         self.giveaway_task.start()
 
-    @commands.group(aliases=["give"])
+    @commands.group(aliases=["give"], invoke_without_command=True)
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def giveaway(self, ctx):
         """
@@ -118,6 +118,7 @@ class Util(commands.Cog):
     async def reroll(self, ctx, message_id: int):
         """
         Allows you to reroll a giveaway if something went wrong.
+        Needs to be executed in the channel the giveaway was posted in.
         """
         try:
             msg = await ctx.fetch_message(message_id)
@@ -128,9 +129,11 @@ class Util(commands.Cog):
         users.pop(users.index(self.bot.user))
         prize = await self.get_giveaway_prize(ctx, message_id)
         embed = self.create_giveaway_embed(ctx.author, prize)
+        random_seed_value = datetime.now().timestamp()
         if len(users) <= 0:
             embed.set_footer(text="No one won the Giveaway")
         elif len(users) > 0:
+            seed(random_seed_value + ctx.message.id)
             winner = choice(users)
             embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
             await msg.channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
@@ -191,7 +194,7 @@ class Util(commands.Cog):
             msg = await ctx.fetch_message(message_id)
         except Exception as e:
             await ctx.send("The channel or ID mentioned was incorrect")
-        return msg.embeds[0].description.split("Win ")[1].split(" today!")[0]
+        return msg.embeds[0].description.split("Win **")[1].split("**!")[0]
 
     def convert(self, time):
         pos = ["m", "h", "d"]
