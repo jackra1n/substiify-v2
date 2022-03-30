@@ -123,13 +123,16 @@ class Util(commands.Cog):
         try:
             msg = await ctx.fetch_message(message_id)
         except Exception as e:
-            await ctx.send("The channel or ID mentioned was incorrect")
+            await ctx.send("The message couldn't be found in this channel")
             return
         users = await msg.reactions[0].users().flatten()
         users.pop(users.index(self.bot.user))
-        prize = await self.get_giveaway_prize(ctx, message_id)
-        embed = self.create_giveaway_embed(ctx.author, prize)
+
+        prize = await self.get_giveaway_prize(msg)
+        giveaway_host = msg.embeds[0].fields[0].value
+        embed = self.create_giveaway_embed(giveaway_host, prize)
         random_seed_value = datetime.now().timestamp()
+
         if len(users) <= 0:
             embed.set_footer(text="No one won the Giveaway")
         elif len(users) > 0:
@@ -138,6 +141,7 @@ class Util(commands.Cog):
             embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
             await msg.channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
         await msg.edit(embed=embed)
+        await ctx.message.delete()
 
     @giveaway.command(aliases=["cancel"], usage="stop <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -189,11 +193,7 @@ class Util(commands.Cog):
             db.session.query(db.giveaway).filter_by(discord_message_id=message.id).delete()
             db.session.commit()
 
-    async def get_giveaway_prize(self, ctx, message_id: int):
-        try:
-            msg = await ctx.fetch_message(message_id)
-        except Exception as e:
-            await ctx.send("The channel or ID mentioned was incorrect")
+    async def get_giveaway_prize(self, msg: nextcord.Message):
         return msg.embeds[0].description.split("Win **")[1].split("**!")[0]
 
     def convert(self, time):
@@ -208,11 +208,12 @@ class Util(commands.Cog):
             return -2
         return timeVal*time_dict[unit]
 
-    def create_giveaway_embed(self, author, prize):
+    def create_giveaway_embed(self, author: nextcord.Member, prize):
         embed = nextcord.Embed(title=":tada: Giveaway :tada:",
                         description=f"Win **{prize}**!",
                         color=0x00FFFF)
-        embed.add_field(name="Hosted By:", value=author.mention)
+        host = author.mention if isinstance(author, nextcord.Member) else author
+        embed.add_field(name="Hosted By:", value=host)
         return embed
 
     @commands.Cog.listener()
