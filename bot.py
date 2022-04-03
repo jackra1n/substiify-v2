@@ -1,8 +1,8 @@
 import json
 import logging
 
-import nextcord
-from nextcord.ext import commands
+import discord
+from discord.ext import commands
 
 from utils import store, util
 from utils.db import create_database
@@ -15,7 +15,7 @@ with open(store.SETTINGS_PATH, "r") as settings:
     settings = json.load(settings)
 
 prefix = settings["prefix"]
-bot = commands.Bot(command_prefix=prefix, owner_id=276462585690193921, intents=nextcord.Intents().all())
+bot = commands.Bot(command_prefix=prefix, owner_id=276462585690193921, intents=discord.Intents().all())
 
 bot.load_extension("modules.mainbot")
 bot.load_extension("modules.help")

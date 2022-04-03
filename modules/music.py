@@ -6,9 +6,9 @@ import logging
 import random
 import re
 
-import nextcord
+import discord
 import wavelink
-from nextcord.ext import commands
+from discord.ext import commands
 from wavelink.ext import spotify
 
 from utils import store, db
@@ -41,20 +41,15 @@ class Music(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-    
-        if not member.id == self.bot.user.id:
-            return
-        elif before.channel is not None:
-            return
 
+        if member.id != self.bot.user.id or before.channel is not None:
+            return
         voice = after.channel.guild.voice_client
         time = 0
 
         while True:
             await asyncio.sleep(1)
-            time = time + 1
-            if voice.is_playing() and not voice.is_paused():
-                time = 0
+            time = 0 if voice.is_playing() and not voice.is_paused() else time + 1
             if time < 300:
                 continue
             player = wavelink.NodePool.get_node().get_player(after.channel.guild)
@@ -133,7 +128,7 @@ class Music(commands.Cog):
             return await ctx.send("No player found.")
         search = search.strip('<>')
 
-        embed = nextcord.Embed(color=nextcord.Color.blurple())
+        embed = discord.Embed(color=discord.Color.blurple())
         if (decoded := spotify.decode_url(search)) is not None:
             if decoded["type"] is spotify.SpotifySearchType.unusable:
                 return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
@@ -184,7 +179,7 @@ class Music(commands.Cog):
             await ctx.reply("Please provide a search query or URL.", delete_after=30)
 
     async def queue_spotify(self, decoded, player, requester):
-        embed = nextcord.Embed(color=nextcord.Color.blurple())
+        embed = discord.Embed(color=discord.Color.blurple())
         if decoded["type"] in (spotify.SpotifySearchType.playlist, spotify.SpotifySearchType.album):
             tracks_count = 0
             async for partial in spotify.SpotifyTrack.iterator(query=decoded["id"], partial_tracks=True, type=decoded["type"]):
@@ -314,7 +309,11 @@ class Music(commands.Cog):
         await queue_message.add_reaction("⏭")
 
         def check(reaction, user):
-            return user == ctx.author and str(reaction.emoji) in ("⏮", "⏭", "❌") and reaction.message.id == queue_message.id
+            return (
+                user == ctx.author
+                and str(reaction.emoji) in {"⏮", "⏭", "❌"}
+                and reaction.message.id == queue_message.id
+            )
 
         while True:
             try:
@@ -367,7 +366,7 @@ class Music(commands.Cog):
         for player in players:
             server_names.append(f'{player.guild.name} ({player.queue.count})')
 
-        embed = nextcord.Embed(color=nextcord.Color.blurple())
+        embed = discord.Embed(color=discord.Color.blurple())
         embed.title = 'Active players'
         embed.description = '\n'.join(f'{server_name}' for server_name in server_names)
         await ctx.send(embed=embed, delete_after=60)
@@ -393,9 +392,9 @@ class Music(commands.Cog):
         await ctx.message.delete()
 
     def create_song_cleanup_embed(self, enable, server):
-        embed = nextcord.Embed(color=nextcord.Color.red())
+        embed = discord.Embed(color=discord.Color.red())
         if enable or server.music_cleanup:
-            embed = nextcord.Embed(color=nextcord.Color.green())
+            embed = discord.Embed(color=discord.Color.green())
         if server.music_cleanup:
             status_string = '`enabled` <:greenTick:876177251832590348>'
         else:
@@ -406,7 +405,7 @@ class Music(commands.Cog):
         return embed
     
     def _create_current_song_embed(self, player):
-        embed = nextcord.Embed(color=nextcord.Color.blurple())
+        embed = discord.Embed(color=discord.Color.blurple())
         embed.title = 'Now Playing'
         embed.description = f'[{player.track.title}]({player.track.uri})'
         if not player.track.is_stream():
@@ -428,10 +427,10 @@ class Music(commands.Cog):
 
         pages = []
         for i in range(0, player.queue.count, 10):
-            embed = nextcord.Embed(color=ctx.author.colour, timestamp=datetime.datetime.utcnow())
+            embed = discord.Embed(color=ctx.author.colour, timestamp=datetime.datetime.utcnow())
             embed.title = f"Queue ({player.queue.count})"
             embed.add_field(name='Now Playing', value=f'[{player.track.title}]({player.track.uri})')
-            embed.set_footer(text=f"Queued by {ctx.author.display_name}", icon_url=ctx.author.avatar.url)
+            embed.set_footer(text=f"Queued by {ctx.author.display_name}", icon_url=ctx.author.avatar_url)
 
             upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(songs_array[i:i+10], start=i)])
             embed.add_field(name="Next up", value=upcoming, inline=False)

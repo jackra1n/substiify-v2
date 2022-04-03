@@ -1,7 +1,6 @@
 #install with "pip3 install -r requirements.txt"
 
-nextcord[voice]
-nextcord[speed]
+discord.py[voice]
 psutil
 pytz
 sqlalchemy

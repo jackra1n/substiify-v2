@@ -2,8 +2,8 @@ import json
 import logging
 import platform
 
-import nextcord
-from nextcord.ext import commands
+import discord
+from discord.ext import commands
 
 from utils import db, store
 from utils.colors import colors, get_colored
@@ -32,13 +32,13 @@ class MainBot(commands.Cog):
 
         connected_as = get_colored("Connected as:", colors.cyan).ljust(30)
         python_version = get_colored("Python:", colors.blue).ljust(30)
-        nextcord_version = get_colored("nextcord:", colors.yellow).ljust(30)
+        discord_version = get_colored("discord.py:", colors.yellow).ljust(30)
         system_description = get_colored("Running on:", colors.green).ljust(30)
 
         print('\n', '='*40, sep='')
         print(f'{connected_as} {self.bot.user}')
         print(f'{python_version} {platform.python_version()}')
-        print(f'{nextcord_version} {nextcord.__version__}')
+        print(f'{discord_version} {discord.__version__}')
         print(f'{system_description} {self.get_system_description()}')
         print('='*40)
 
@@ -52,7 +52,7 @@ class MainBot(commands.Cog):
     async def load_extensions(self):
         for extension in self.startup_extensions:
             try:
-                self.bot.load_extension('modules.'+extension)
+                self.bot.load_extension(f'modules.{extension}')
             except Exception as e:
                 exc = f'{type(e).__name__}: {e}'
                 logger.warning(f'Failed to load extension {extension}\n{exc}')
@@ -68,7 +68,7 @@ class MainBot(commands.Cog):
         if 'is not found' in str(error):
             return
         if isinstance(error, commands.CheckFailure):
-            await ctx.send(f'You do not have permission to use this command.')
+            await ctx.send('You do not have permission to use this command.')
         try:
             await ctx.message.add_reaction('🆘')
         except:

@@ -2,5 +2,5 @@
 
 # start bot in a new screen
 
-screen -dmS nextcord-bot python3 bot.py
-screen -t nextcord-bot -X multiuser on
+screen -dmS substiify python3 bot.py
+screen -t substiify -X multiuser on
