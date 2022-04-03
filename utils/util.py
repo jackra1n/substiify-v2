@@ -12,10 +12,10 @@ ignore_logs = [
 
 class RemoveNoise(logging.Filter):
     def __init__(self):
-        super().__init__(name='nextcord.gateway')
+        super().__init__(name='discord.gateway')
 
     def filter(self, record):
-        if (record.name == 'nextcord.gateway' and 'Shard ID' in record.msg) or any(log in record.msg for log in ignore_logs):
+        if (record.name == 'discord.gateway' and 'Shard ID' in record.msg) or any(log in record.msg for log in ignore_logs):
             return False
         return True
 
@@ -40,8 +40,8 @@ def prepareFiles():
     # Create 'data' folder if it doesn't exist
     Path('data').mkdir(parents=True, exist_ok=True)
 
-    # Filter out some of the logs that come from nextcord.gateway
-    logging.getLogger('nextcord.gateway').addFilter(RemoveNoise())
+    # Filter out some of the logs that come from discord.gateway
+    logging.getLogger('discord.gateway').addFilter(RemoveNoise())
 
     rootLogger = logging.getLogger()
     rootLogger.setLevel(logging.INFO)

@@ -1,8 +1,8 @@
 from typing import Optional, Set
 
-import nextcord
-from nextcord import Embed
-from nextcord.ext import commands
+import discord
+from discord import Embed
+from discord.ext import commands
 
 
 class Help(commands.MinimalHelpCommand):
@@ -64,7 +64,7 @@ class Help(commands.MinimalHelpCommand):
             embed.description = description
         if set_author:
             avatar = self.context.bot.user.avatar or self.context.bot.user.default_avatar
-            embed.set_author(name=self.context.bot.user.name, icon_url=avatar.url)
+            embed.set_author(name=self.context.bot.user.name, icon_url=avatar_url)
         if command_set:
             # show help about all commands in the set
             filtered = await self.filter_commands(command_set, sort=True)
@@ -125,7 +125,7 @@ class Help(commands.MinimalHelpCommand):
     async def can_run_cmd(self, cmd):
         try:
             return await cmd.can_run(self.context)
-        except nextcord.ext.commands.CommandError:
+        except discord.ext.commands.CommandError:
             return False
 
 def setup(bot):

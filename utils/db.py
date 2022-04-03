@@ -2,7 +2,7 @@ import logging
 import sqlite3
 from datetime import datetime
 
-import nextcord
+import discord
 from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, String,
                         create_engine)
 from sqlalchemy.ext.declarative import declarative_base
@@ -24,7 +24,7 @@ class discord_server(Base):
     server_name = Column(String)
     music_cleanup = Column(Boolean, default=False)
 
-    def __init__(self, server: nextcord.Guild):
+    def __init__(self, server: discord.Guild):
         self.discord_server_id = server.id
         self.server_name = server.name
 
@@ -38,7 +38,7 @@ class discord_channel(Base):
     parent_discord_channel_id = Column(Integer, ForeignKey('discord_channel.discord_channel_id'))
     upvote = Column(Boolean, default=False)
 
-    def __init__(self, channel: nextcord.TextChannel):
+    def __init__(self, channel: discord.TextChannel):
         self.discord_channel_id = channel.id
         self.channel_name = channel.name
         self.discord_server_id = channel.guild.id
@@ -55,11 +55,11 @@ class discord_user(Base):
     is_bot = Column(Boolean)
     nickname = Column(String)
 
-    def __init__(self, user: nextcord.User):
+    def __init__(self, user: discord.User):
         self.discord_user_id = user.id
         self.username = user.name
         self.discriminator = user.discriminator
-        self.avatar = user.avatar.url if user.avatar else None
+        self.avatar = user.avatar_url if user.avatar else None
         self.is_bot = user.bot
         self.nickname = user.display_name
 
@@ -200,7 +200,7 @@ class kasino_bet(Base):
         self.amount = amount
         self.option = option
 
-def get_discord_server(server: nextcord.Guild):
+def get_discord_server(server: discord.Guild):
     db_server = session.query(discord_server).filter_by(discord_server_id=server.id).first()
     if db_server is None:
         db_server = discord_server(server)
@@ -208,7 +208,7 @@ def get_discord_server(server: nextcord.Guild):
         session.commit()
     return db_server
 
-def get_discord_channel(channel: nextcord.TextChannel):
+def get_discord_channel(channel: discord.TextChannel):
     db_channel = session.query(discord_channel).filter_by(discord_channel_id=channel.id).first()
     if db_channel is None:
         db_channel = discord_channel(channel)

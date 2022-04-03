@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime
 
-import nextcord
+import discord
 import aiohttp
-from nextcord.ext import commands
+from discord.ext import commands
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ class FreeGames(commands.Cog):
             for game in current_free_games:
                 start_date_str = game.start_date.strftime('%d %B %Y')
                 end_date_str = game.end_date.strftime('%d %B %Y')
-                embed = nextcord.Embed(title=game.title, url=game.epic_store_link, color=0x000000)
+                embed = discord.Embed(title=game.title, url=game.epic_store_link, color=0x000000)
                 embed.set_thumbnail(url=f"{EPIC_GAMES_LOGO_URL}")
                 embed.add_field(name="Available", value=f'{start_date_str} to {end_date_str}', inline=False)
                 embed.add_field(name="Price", value=f"~~`{game.original_price}`~~ ⟶ `{game.discount_price}`", inline=False)

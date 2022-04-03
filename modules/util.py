@@ -7,11 +7,11 @@ from asyncio import TimeoutError
 from datetime import datetime, timedelta
 from random import choice, seed, shuffle
 
-import nextcord
+import discord
 import psutil
-from nextcord import MessageType
-from nextcord.ext import commands, tasks
-from nextcord.ext.commands import BucketType
+from discord import MessageType
+from discord.ext import commands, tasks
+from discord.ext.commands import BucketType
 from pytz import timezone
 
 from utils import db, store
@@ -41,7 +41,7 @@ class Util(commands.Cog):
 
     @giveaway.command(aliases=["c"], usage="create [hosted_by]")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def create(self, ctx, hosted_by: nextcord.Member = None):
+    async def create(self, ctx, hosted_by: discord.Member = None):
         """
         Allows you to create a giveaway. Requires manage_channels permission.
         After calling this command, you will be asked to enter the prize, the time, and the channel.
@@ -67,7 +67,7 @@ class Util(commands.Cog):
             return m.author == ctx.author and m.channel == ctx.channel
 
         for i, question in enumerate(questions):
-            embed = nextcord.Embed(title=f"Question {i}", description=question)
+            embed = discord.Embed(title=f"Question {i}", description=question)
             question_message = await ctx.send(embed=embed)
             try:
                 message = await self.bot.wait_for('message', timeout=45, check=check)
@@ -156,7 +156,7 @@ class Util(commands.Cog):
         db.session.delete(giveaway)
         db.session.commit()
         msg = await ctx.fetch_message(message_id)
-        newEmbed = nextcord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!!")
+        newEmbed = discord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!!")
         await msg.edit(embed=newEmbed)
 
     @tasks.loop(seconds=45.0)
@@ -169,7 +169,7 @@ class Util(commands.Cog):
             channel = self.bot.get_channel(giveaway.discord_channel_id)
             try:
                 message = await channel.fetch_message(giveaway.discord_message_id)
-            except nextcord.NotFound as e:
+            except discord.NotFound as e:
                 db.session.delete(giveaway)
                 db.session.commit()
                 return await channel.send("Could not find the giveaway message! Deleting the giveaway.", delete_after=180)
@@ -193,7 +193,7 @@ class Util(commands.Cog):
             db.session.query(db.giveaway).filter_by(discord_message_id=message.id).delete()
             db.session.commit()
 
-    async def get_giveaway_prize(self, msg: nextcord.Message):
+    async def get_giveaway_prize(self, msg: discord.Message):
         return msg.embeds[0].description.split("Win **")[1].split("**!")[0]
 
     def convert(self, time):
@@ -208,16 +208,16 @@ class Util(commands.Cog):
             return -2
         return timeVal*time_dict[unit]
 
-    def create_giveaway_embed(self, author: nextcord.Member, prize):
-        embed = nextcord.Embed(title=":tada: Giveaway :tada:",
+    def create_giveaway_embed(self, author: discord.Member, prize):
+        embed = discord.Embed(title=":tada: Giveaway :tada:",
                         description=f"Win **{prize}**!",
                         color=0x00FFFF)
-        host = author.mention if isinstance(author, nextcord.Member) else author
+        host = author.mention if isinstance(author, discord.Member) else author
         embed.add_field(name="Hosted By:", value=host)
         return embed
 
     @commands.Cog.listener()
-    async def on_raw_reaction_add(self, payload: nextcord.RawReactionActionEvent):
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if payload.guild_id is None or payload.channel_id is None or payload.member is None or payload.message_id is None:
             return
         if payload.member.bot:
@@ -283,20 +283,20 @@ class Util(commands.Cog):
         await ctx.message.delete()
 
     async def submission_error(self, ctx, sentence):
-        embed = nextcord.Embed(
+        embed = discord.Embed(
             title='Submission error',
             description=f'Your message is too short: {len(sentence)} characters',
-            color=nextcord.Colour.red()
+            color=discord.Colour.red()
         )
         await ctx.send(embed=embed, delete_after=15)
 
     async def send_submission(self, ctx, channel, sentence, submission_type):
-        embed = nextcord.Embed(
+        embed = discord.Embed(
             title=f'New {submission_type} submission',
             description=f'```{sentence}```\nSubmitted by: {ctx.author.mention}',
             color=0x1E9FE3
         )
-        embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar.url)
+        embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar_url)
         message = await channel.send(embed=embed)
         await ctx.send(f'Thank you for submitting the {submission_type}!', delete_after=30)
         await message.add_reaction(f'<{self.accept_emoji}>')
@@ -313,33 +313,31 @@ class Util(commands.Cog):
         message = await channel.fetch_message(payload.message_id)
         embed = message.embeds[0]
         user = await self.bot.fetch_user(int(embed.footer.text))
-        new_embed = nextcord.Embed(
+        new_embed = discord.Embed(
             title=f'{submission_type} submission',
             description=embed.description,
-            color=nextcord.Colour.red() if 'denied' in action else nextcord.Colour.green()
+            color=discord.Colour.red() if 'denied' in action else discord.Colour.green()
         )
         await user.send(content=f'Hello {user.name}!\nYour {self.bot.user.mention} {submission_type} submission has been {action}.\n', embed=new_embed)
-        embed.color = nextcord.Colour.red() if 'denied' in action else nextcord.Colour.green()
+        embed.color = discord.Colour.red() if 'denied' in action else discord.Colour.green()
         await message.edit(embed=embed)
 
     @bug.error
     async def command_error(self, ctx, error):
-        if isinstance(error, commands.CommandOnCooldown):
-            em = nextcord.Embed(
-                title=f"Slow it down!",
-                description=f"Try again in {error.retry_after:.2f}s.",
-                color=nextcord.Colour.red())
-            await ctx.send(embed=em, delete_after=30)
-        if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.channel.send('Missing the bug description', delete_after=30)
+        await self._cooldown_error(ctx, error)
 
     @suggestion.error
     async def command_error(self, ctx, error):
+        await self._cooldown_error(ctx, error)
+        
+    async def _cooldown_error(self, ctx, error):
         if isinstance(error, commands.CommandOnCooldown):
-            em = nextcord.Embed(
-                title=f"Slow it down!",
+            em = discord.Embed(
+                title="Slow it down!",
                 description=f"Try again in {error.retry_after:.2f}s.",
-                color=nextcord.Colour.red())
+                color=discord.Colour.red(),
+            )
+
             await ctx.send(embed=em, delete_after=30)
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.channel.send('Missing the suggestion description', delete_after=30)
@@ -347,18 +345,18 @@ class Util(commands.Cog):
 
     @commands.cooldown(6, 5)
     @commands.command(aliases=['avatar'])
-    async def av(self, ctx, member: nextcord.Member = None):
+    async def av(self, ctx, member: discord.Member = None):
         """
         Enlarge and view your profile picture or another member
         """
         await ctx.message.delete()
         member = ctx.author if member is None else member
-        embed = nextcord.Embed(
+        embed = discord.Embed(
             title=f"{str(member.display_name)}'s avatar",
-            url=member.avatar.url,
+            url=member.avatar_url,
             color=0x1E9FE3
         )
-        embed.set_image(url=member.avatar.url)
+        embed.set_image(url=member.avatar_url)
         await ctx.channel.send(embed=embed)
 
     @commands.group(aliases=['c'], invoke_without_command = True)
@@ -368,13 +366,13 @@ class Util(commands.Cog):
         Clears messages within the current channel.
         """
         if ctx.message.type == MessageType.reply:
-            message = ctx.message.reference.resolved
-            if message:
+            if message := ctx.message.reference.resolved:
                 await message.delete()
                 await ctx.message.delete()
             return
         if amount is None:
-            return await ctx.send(f'Please specify the amount of messages to delete.', delete_after=15)
+            return await ctx.send('Please specify the amount of messages to delete.', delete_after=15)
+
         if amount >= 100:
             return await ctx.channel.send('Cannot delete more than 100 messages at a time!')
         await ctx.channel.purge(limit=amount + 1)
@@ -386,10 +384,10 @@ class Util(commands.Cog):
         messages = await ctx.channel.history(limit=amount + 1).flatten()
         bots_messages = [m for m in messages if m.author == self.bot.user]
 
-        if len(bots_messages) <= 100 and type(ctx.channel) == nextcord.TextChannel:
+        if len(bots_messages) <= 100 and type(ctx.channel) == discord.TextChannel:
             await ctx.channel.delete_messages(bots_messages)
 
-        elif type(ctx.channel) == nextcord.DMChannel:
+        elif type(ctx.channel) == discord.DMChannel:
             for message in bots_messages:
                 await message.delete()
                 await asyncio.sleep(0.75)
@@ -405,10 +403,8 @@ class Util(commands.Cog):
         """
         Shows the ping of the bot
         """
-        title = 'Pong!'
-        if 'dink' in ctx.message.content.lower():
-            title = 'Donk!'
-        embed = nextcord.Embed(title=f'{title} 🏓', description=f'⏱️Ping: `{round(self.bot.latency*1000)}`ms', color=0xE3621E)
+        title = 'Donk!' if 'dink' in ctx.message.content.lower() else 'Pong!'
+        embed = discord.Embed(title=f'{title} 🏓', description=f'⏱️Ping: `{round(self.bot.latency*1000)}`ms', color=0xE3621E)
         await ctx.message.delete()
         await ctx.send(embed=embed)
 
@@ -416,11 +412,12 @@ class Util(commands.Cog):
     async def specialThanks(self, ctx):
         peeople_who_helped = ["<@205704051856244736>", "<@812414532563501077>", "<@299478604809764876>", "<@291291715598286848>", "<@224618877626089483>", "<@231151428167663616>, <@153929916977643521>"]
         shuffle(peeople_who_helped)
-        embed = nextcord.Embed(
+        embed = discord.Embed(
             title="Special thanks for any help to those people",
-            description = f" ".join(peeople_who_helped),
-            color=0xE3621E
+            description=" ".join(peeople_who_helped),
+            color=0xE3621E,
         )
+
         await ctx.message.delete()
         await ctx.channel.send(embed=embed, delete_after=120)
 
@@ -443,28 +440,28 @@ class Util(commands.Cog):
 
         content = f'**Instance uptime:** `{bot_time}`\n' \
             f'**Version:** `{bot_version}` | **Updated:** `{last_commit_date}`\n' \
-            f'**Python:** `{platform.python_version()}` | **nextcord:** `{nextcord.__version__}`\n\n' \
+            f'**Python:** `{platform.python_version()}` | **discord.py:** `{discord.__version__}`\n\n' \
             f'**CPU:** `{cpu_percent}%` | **RAM:** `{ram_used} ({ram_percent}%)`\n\n' \
             f'**Made by:** <@{self.bot.owner_id}>' 
 
-        embed = nextcord.Embed(
+        embed = discord.Embed(
             title=f'Info about {self.bot.user.display_name}',
             description=content, color=0xE3621E,
             timestamp=datetime.now(timezone("Europe/Zurich"))
         )
-        embed.set_thumbnail(url=self.bot.user.avatar.url)
-        embed.set_footer(text=f"Requested by by {ctx.author.display_name}", icon_url=ctx.author.avatar.url)
+        embed.set_thumbnail(url=self.bot.user.avatar_url)
+        embed.set_footer(text=f"Requested by by {ctx.author.display_name}", icon_url=ctx.author.avatar_url)
         await ctx.channel.send(embed=embed)
         await ctx.message.delete()
 
 
 def time_up(t):
     if t <= 60:
-        return f"<1 minute"
+        return "<1 minute"
     elif 3600 > t > 60:
         minutes = t // 60
         return f"{int(minutes)} minutes"
-    elif t >= 3600:
+    else:
         hours = t // 3600  # Seconds divided by 3600 gives amount of hours
         minutes = (t % 3600) // 60  # The remaining seconds are looked at to see how many minutes they make up
         if hours >= 24:

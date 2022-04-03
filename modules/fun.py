@@ -4,10 +4,10 @@ import logging
 import random
 from enum import Enum
 
-import nextcord
+import discord
 import vacefron
-from nextcord.ext import commands
-from nextcord.ext.commands.cooldowns import BucketType
+from discord.ext import commands
+from discord.ext.commands.cooldowns import BucketType
 
 logger = logging.getLogger(__name__)
 
@@ -28,26 +28,26 @@ class Fun(commands.Cog):
             await ctx.send("Invalid subcommand passed.")
 
     @meme.command(name="adios", usage="adios [user]")
-    async def meme_adios(self, ctx, user: nextcord.User = None):
+    async def meme_adios(self, ctx, user: discord.User = None):
         """
         Create a meme with the adios meme.
         """
         await self._meme_with_user(self.vac_api.adios, ctx, user)
 
     @meme.command(name="eject", aliases=['ejected'], usage="eject [user] [is_impostor]")
-    async def meme_eject(self, ctx, user: nextcord.User = None, is_impostor: bool = False):
+    async def meme_eject(self, ctx, user: discord.User = None, is_impostor: bool = False):
         """
         Create amogus eject meme. Kinda sus.
         """
         user = user or ctx.author
         async with ctx.typing():
             eject_image = await self.vac_api.ejected(user.name, impostor=is_impostor)
-            await ctx.send(file=nextcord.File(await eject_image.read(), filename="ejected.png"))
+            await ctx.send(file=discord.File(await eject_image.read(), filename="ejected.png"))
         await ctx.message.delete()
 
 
     @meme.command(name="drip", usage="drip [user]")
-    async def meme_drip(self, ctx, user: nextcord.User = None):
+    async def meme_drip(self, ctx, user: discord.User = None):
         """
         Goku drip meme.
         """
@@ -68,35 +68,35 @@ class Fun(commands.Cog):
         await self._meme_with_text(self.vac_api.emergency_meeting, ctx, text)
 
     @meme.command(name="firstTime", aliases=['ft'], usage="firstTime [user]")
-    async def meme_first_time(self, ctx, user: nextcord.User = None):
+    async def meme_first_time(self, ctx, user: discord.User = None):
         """
         Create first time meme.
         """
         await self._meme_with_user(self.vac_api.first_time, ctx, user)
 
     @meme.command(name="grave", usage="grave [user]")
-    async def meme_grave(self, ctx, user: nextcord.User = None):
+    async def meme_grave(self, ctx, user: discord.User = None):
         """
         When someon got destroyed 💀.
         """
         await self._meme_with_user(self.vac_api.grave, ctx, user)
 
     @meme.command(name="speed", aliases=['iAmSpeed'], usage="speed [user]")
-    async def meme_speed(self, ctx, user: nextcord.User = None):
+    async def meme_speed(self, ctx, user: discord.User = None):
         """
         Creates cars i am speed meme.
         """
         await self._meme_with_user(self.vac_api.iam_speed, ctx, user)
 
     @meme.command(name="milk", usage="milk <user1> [user2]")
-    async def meme_milk(self, ctx, user1: nextcord.User, user2: nextcord.User = None):
+    async def meme_milk(self, ctx, user1: discord.User, user2: discord.User = None):
         """
         Generate that "I can milk you" meme from Markiplier with someone's avatar.
         """
         await self._meme_with_two_users(self.vac_api.i_can_milk_you, ctx, user1, user2)
 
     @meme.command(name="heaven", aliases=['hv', 'hvn'], usage="heaven [user]")
-    async def meme_heaven(self, ctx, user: nextcord.User = None):
+    async def meme_heaven(self, ctx, user: discord.User = None):
         """
         Create heaven meme.
         """
@@ -110,29 +110,29 @@ class Fun(commands.Cog):
     #     """
     #     async with ctx.typing():
     #         npc_image = await self.vac_api.npc(text, text2)
-    #         await ctx.send(file=nextcord.File(await npc_image.read(), filename="npc.png"))
+    #         await ctx.send(file=discord.File(await npc_image.read(), filename="npc.png"))
     #     await ctx.message.delete()
 
     @meme.command(name="stonks", usage="stonks [user] [not_stonks]")
-    async def meme_stonks(self, ctx, user: nextcord.User = None, not_stonks: bool = False):
+    async def meme_stonks(self, ctx, user: discord.User = None, not_stonks: bool = False):
         """
         Create stonks meme.
         """
         user = user or ctx.author
         async with ctx.typing():
-            stonks_image = await self.vac_api.stonks(user.avatar.url, not_stonks)
-            await ctx.send(file=nextcord.File(await stonks_image.read(), filename="stonks.png"))
+            stonks_image = await self.vac_api.stonks(user.avatar_url, not_stonks)
+            await ctx.send(file=discord.File(await stonks_image.read(), filename="stonks.png"))
         await ctx.message.delete()
 
     @meme.command(name="wolverine", aliases=['wolverin', 'wvn', 'wolv'], usage="wolverine [user]")
-    async def meme_wolverine(self, ctx, user: nextcord.User = None):
+    async def meme_wolverine(self, ctx, user: discord.User = None):
         """
         Create wolverine meme.
         """
         await self._meme_with_user(self.vac_api.wolverine, ctx, user)
 
     @meme.command(name="womanYellingCat", aliases=['wyc'], usage="womanYellingCat <woman> <cat>")
-    async def meme_woman_yelling_at_cat(self, ctx, woman: nextcord.User, cat: nextcord.User):
+    async def meme_woman_yelling_at_cat(self, ctx, woman: discord.User, cat: discord.User):
         """
         Generate that "woman yelling at cat" meme.
         """
@@ -142,23 +142,23 @@ class Fun(commands.Cog):
         async with ctx.typing():
             meme_image = await func(text)
             deletes_at = datetime.datetime.now() + datetime.timedelta(minutes=5)
-            await ctx.send(f'Autodestruction <t:{int(deletes_at.timestamp())}:R>', file=nextcord.File(await meme_image.read(), filename="meme.png"), delete_after=300)
+            await ctx.send(f'Autodestruction <t:{int(deletes_at.timestamp())}:R>', file=discord.File(await meme_image.read(), filename="meme.png"), delete_after=300)
         await ctx.message.delete()
 
     async def _meme_with_two_users(self, func, ctx, user1, user2):
-        avatar2 = user2.avatar.url if user2 else None
+        avatar2 = user2.avatar_url if user2 else None
         async with ctx.typing():
-            meme_image = await func(user1.avatar.url, avatar2)
+            meme_image = await func(user1.avatar_url, avatar2)
             deletes_at = datetime.datetime.now() + datetime.timedelta(minutes=5)
-            await ctx.send(f'Autodestruction <t:{int(deletes_at.timestamp())}:R>', file=nextcord.File(await meme_image.read(), filename="meme.png"), delete_after=300)
+            await ctx.send(f'Autodestruction <t:{int(deletes_at.timestamp())}:R>', file=discord.File(await meme_image.read(), filename="meme.png"), delete_after=300)
         await ctx.message.delete()
 
-    async def _meme_with_user(self, func, ctx, user: nextcord.User):
+    async def _meme_with_user(self, func, ctx, user: discord.User):
         user = user or ctx.author
         async with ctx.typing():
-            meme_image = await func(user.avatar.url)
+            meme_image = await func(user.avatar_url)
             deletes_at = datetime.datetime.now() + datetime.timedelta(minutes=5)
-            await ctx.send(f'Autodestruction <t:{int(deletes_at.timestamp())}:R>', file=nextcord.File(await meme_image.read(), filename="meme.png"), delete_after=300)
+            await ctx.send(f'Autodestruction <t:{int(deletes_at.timestamp())}:R>', file=discord.File(await meme_image.read(), filename="meme.png"), delete_after=300)
         await ctx.message.delete()
 
 
@@ -189,18 +189,18 @@ class Fun(commands.Cog):
                     "Outlook not so good.",
                     "Very doubtful."]
         response = random.choice(responses)
-        embed = nextcord.Embed(
+        embed = discord.Embed(
             title = response,
             description=f'Question: {question}',
-            colour = nextcord.Colour.orange()
+            colour = discord.Colour.orange()
         )
-        embed.set_footer(text=f'Question by {ctx.author}', icon_url=ctx.author.avatar.url)
+        embed.set_footer(text=f'Question by {ctx.author}', icon_url=ctx.author.avatar_url)
         await ctx.channel.send(embed=embed)
 
     
     @commands.command(brief='Fight someone on this server!')
     @commands.max_concurrency(1, per=BucketType.default, wait=True)
-    async def fight(self, ctx, member: nextcord.Member):
+    async def fight(self, ctx, member: discord.Member):
         """
         Allows you to fight someone on this server! It's a turn based fighting game. 
         To start the fight, you must use the command `<<fight @member` where @member is the person you want to fight.
@@ -233,21 +233,21 @@ class Fun(commands.Cog):
 
         # fighting other users
         else:
-            embed = nextcord.Embed(
+            embed = discord.Embed(
                 title='⚔️ ' + duel_authors_name + ' choose your class.',
                 description=ctx.author.mention +
                     'what class do you want to be? `berserker`, `tank` or `wizard`?',
-                color=nextcord.Colour.red()
+                color=discord.Colour.red()
             )
             await ctx.channel.send(embed=embed)
 
             warrior1 = await self.createWarrior(ctx, ctx.author)
 
-            embed = nextcord.Embed(
+            embed = discord.Embed(
                 title='⚔️ ' + duel_authors_name + ' has challenged ' + challenge_member_name + ' to a fight!',
                 description=duel_authors_name + ' chose class ' + warrior1.ClassName + '. ' + member.mention +
                     ', what is your class of choice? `berserker`,`tank`, or `wizard`?\nType your choice out in chat as it is displayed!',
-                color=nextcord.Colour.red()
+                color=discord.Colour.red()
             )
             await ctx.channel.send(embed=embed)
 
@@ -277,11 +277,11 @@ class Fun(commands.Cog):
             warrior2.user.mention + ', what would like to do? `punch`,`defend`, or `end`?\nType your choice out in chat as it is displayed!')
 
     async def sendWinnerEmbed(self, winner, ctx):
-        winEmbedMessage = nextcord.Embed(
+        winEmbedMessage = discord.Embed(
             title='STOP! STOP! STOP! THE FIGHT IS OVER!!!',
             description='**' + winner.user.display_name +
                 '** wins with just `' + str(winner.Health) + ' HP` left!',
-            color=nextcord.Colour.teal()
+            color=discord.Colour.teal()
         )
         await ctx.channel.send(embed=winEmbedMessage)
 

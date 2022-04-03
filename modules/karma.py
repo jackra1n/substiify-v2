@@ -3,8 +3,8 @@ import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import nextcord
-from nextcord.ext import commands
+import discord
+from discord.ext import commands
 from sqlalchemy.sql import func
 
 from utils import db, store
@@ -32,15 +32,15 @@ class Karma(commands.Cog):
         """
         await ctx.message.delete()
         if ctx.channel.id in self.vote_channels:
-            embed = nextcord.Embed(description=f'Votes are **ALREADY enabled** in {ctx.channel.mention}!', color=0x23b40c)
+            embed = discord.Embed(description=f'Votes are **ALREADY enabled** in {ctx.channel.mention}!', color=0x23b40c)
             await ctx.send(embed=embed, delete_after=10)
         else:
-            embed = nextcord.Embed(description=f'Votes are **NOT enabled** in {ctx.channel.mention}!', color=0xf66045)
+            embed = discord.Embed(description=f'Votes are **NOT enabled** in {ctx.channel.mention}!', color=0xf66045)
             await ctx.send(embed=embed, delete_after=10)
 
     @votes.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def setup(self, ctx, channel: nextcord.TextChannel = None):
+    async def setup(self, ctx, channel: discord.TextChannel = None):
         """
         Enables votes in the current channel. Requires Manage Channels permission.
         After enabling votes, the bot will add the upvote and downvote emojis to every message in the channel.
@@ -57,13 +57,13 @@ class Karma(commands.Cog):
             vote_channel.upvote = True
             db.session.commit()
         else:
-            embed = nextcord.Embed(
+            embed = discord.Embed(
                 description=f'Votes are **already active** in {ctx.channel.mention}!',
                 color=0x23b40c
             )
             await ctx.send(embed=embed, delete_after=20)
             return
-        embed = nextcord.Embed(
+        embed = discord.Embed(
             description=f'Votes **enabled** in {channel.mention}!',
             color=0x23b40c
         )
@@ -71,7 +71,7 @@ class Karma(commands.Cog):
 
     @votes.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def stop(self, ctx, channel: nextcord.TextChannel = None):
+    async def stop(self, ctx, channel: discord.TextChannel = None):
         """
         Disables votes in the current channel. Requires Manage Channels permission.
         """
@@ -81,7 +81,7 @@ class Karma(commands.Cog):
         if channel.id in self.vote_channels:
             self.vote_channels.remove(channel.id)
         await ctx.message.delete()
-        await ctx.channel.send(embed=nextcord.Embed(description=f'Votes has been stopped in {channel.mention}!', color=0xf66045))
+        await ctx.channel.send(embed=discord.Embed(description=f'Votes has been stopped in {channel.mention}!', color=0xf66045))
 
     def load_vote_channels(self) -> list:
         query = db.session.query(db.discord_channel).filter_by(upvote=True).all()
@@ -95,7 +95,7 @@ class Karma(commands.Cog):
 
 
     @commands.group(aliases=["k"], usage="karma [user]", invoke_without_command=True,)
-    async def karma(self, ctx, user: nextcord.User = None):
+    async def karma(self, ctx, user: discord.User = None):
         """
         Shows the karma of a user. If you dont specify a user, it will show your own.
         If you want to know what emote reactions are used for karma, use the subcommand `karma emotes`
@@ -109,27 +109,27 @@ class Karma(commands.Cog):
             user_karma = 0
         else:
             user_karma = user_karma.amount
-        embed = nextcord.Embed(title=f'Karma - {ctx.guild.name}', description=f'{user.mention} has {user_karma} karma.')
+        embed = discord.Embed(title=f'Karma - {ctx.guild.name}', description=f'{user.mention} has {user_karma} karma.')
         await ctx.send(embed=embed, delete_after=120)
         await ctx.message.delete()
 
     @karma.command(name="donate", aliases=["wiretransfer", "wt"], usage="donate <amount> <user>")
-    async def karma_donate(self, ctx, amount: int, user: nextcord.User):
+    async def karma_donate(self, ctx, amount: int, user: discord.User):
         """
         Donates karma to another user.
         """
         if user.bot:
-            return await ctx.send(embed=nextcord.Embed(description=f'You can\'t donate to bots!', color=0xf66045))
+            return await ctx.send(embed=discord.Embed(description=f'You can\'t donate to bots!', color=0xf66045))
         if amount <= 0:
-            return await ctx.send(embed=nextcord.Embed(description=f'You cannot donate {amount} karma!', color=0xf66045))
+            return await ctx.send(embed=discord.Embed(description=f'You cannot donate {amount} karma!', color=0xf66045))
         donator_karma = db.session.query(db.karma).filter_by(discord_user_id=ctx.author.id).filter_by(discord_server_id=ctx.guild.id).first()
         if donator_karma is None:
-            return await ctx.send(embed=nextcord.Embed(description=f'You don\'t have any karma!', color=0xf66045))
+            return await ctx.send(embed=discord.Embed(description=f'You don\'t have any karma!', color=0xf66045))
         if donator_karma.amount < amount:
-            return await ctx.send(embed=nextcord.Embed(description=f'You don\'t have enough karma!', color=0xf66045))
+            return await ctx.send(embed=discord.Embed(description=f'You don\'t have enough karma!', color=0xf66045))
         # check if user is a member of the server
         if user not in ctx.guild.members:
-            return await ctx.send(embed=nextcord.Embed(description=f'`{user}` is not a member of this server!', color=0xf66045))
+            return await ctx.send(embed=discord.Embed(description=f'`{user}` is not a member of this server!', color=0xf66045))
         user_karma = db.session.query(db.karma).filter_by(discord_user_id=user.id).filter_by(discord_server_id=ctx.guild.id).first()
         if user_karma is None:
             user_karma = db.karma(user.id, ctx.guild.id, amount)
@@ -138,17 +138,17 @@ class Karma(commands.Cog):
             user_karma.amount += amount
         donator_karma.amount -= amount
         db.session.commit()
-        embed = nextcord.Embed(description=f'{ctx.author.mention} has donated {amount} karma to {user.mention}!', color=0x23b40c)
+        embed = discord.Embed(description=f'{ctx.author.mention} has donated {amount} karma to {user.mention}!', color=0x23b40c)
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
     @karma_donate.error
     async def karma_donate_error(self, ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(embed=nextcord.Embed(description=f'You didn\'t specify a user to donate to!', color=0xf66045))
+            await ctx.send(embed=discord.Embed(description=f'You didn\'t specify a user to donate to!', color=0xf66045))
             await ctx.message.delete()
         elif isinstance(error, commands.BadArgument):
-            await ctx.send(embed=nextcord.Embed(description=f'Wrong command usage! Command usage is `{self.bot.command_prefix}karma donate <amount> <user>`', color=0xf66045))
+            await ctx.send(embed=discord.Embed(description=f'Wrong command usage! Command usage is `{self.bot.command_prefix}karma donate <amount> <user>`', color=0xf66045))
             await ctx.message.delete()
 
 
@@ -160,7 +160,7 @@ class Karma(commands.Cog):
         """
         karma_emotes = db.session.query(db.karma_emote).filter_by(discord_server_id=ctx.guild.id).order_by(db.karma_emote.action).all()
         if len(karma_emotes) == 0:
-            return await ctx.send(embed=nextcord.Embed(title='No emotes found.'), delete_after=60)
+            return await ctx.send(embed=discord.Embed(title='No emotes found.'), delete_after=60)
         embed_string = ''
         last_action = ''
         for emote in karma_emotes:
@@ -168,13 +168,13 @@ class Karma(commands.Cog):
                 embed_string += f'\n`{"add" if emote.action == 0 else "remove"}:` '
                 last_action = emote.action
             embed_string += f'{self.bot.get_emoji(emote.discord_emote_id)} '
-        embed = nextcord.Embed(title=f'Karma Emotes - {ctx.guild.name}', description=embed_string)
+        embed = discord.Embed(title=f'Karma Emotes - {ctx.guild.name}', description=embed_string)
         await ctx.send(embed=embed, delete_after=60)
         await ctx.message.delete()
 
     @karma_emotes.command(name='add', usage="add <emote> <action>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def karma_emote_add(self, ctx, emote: nextcord.Emoji, emote_action: int):
+    async def karma_emote_add(self, ctx, emote: discord.Emoji, emote_action: int):
         """
         Add an emote to the karma emotes for this server. Takes an emoji and an action (0 for add, 1 for remove karma)
         The votes from this bots Votes module automatically add karma to the user. No need to add those emotes to the emote list.
@@ -184,37 +184,37 @@ class Karma(commands.Cog):
         `<<karma emotes add :downvote: 1` - adds the downvote emote to list as karma decreasing emote
         """
         if emote_action not in [0, 1]:
-            embed = nextcord.Embed(title='Invalid action parameter.')
+            embed = discord.Embed(title='Invalid action parameter.')
             return await ctx.send(embed=embed, delete_after=30)
         # check if emote is already in the db
         existing_emote = db.session.query(db.karma_emote).filter_by(discord_emote_id=emote.id).filter_by(discord_server_id=ctx.guild.id).first()
         if existing_emote is not None:
-            embed = nextcord.Embed(title='That emote is already added.')
+            embed = discord.Embed(title='That emote is already added.')
             return await ctx.send(embed=embed, delete_after=30)
         max_emotes = db.session.query(db.karma_emote).filter_by(discord_server_id=ctx.guild.id).count()
         if max_emotes >= 10:
-            embed = nextcord.Embed(title='You can only have 10 emotes.')
+            embed = discord.Embed(title='You can only have 10 emotes.')
             return await ctx.send(embed=embed, delete_after=30)
         db.session.add(db.karma_emote(emote, emote_action))
         db.session.commit()
-        embed = nextcord.Embed(title=f'Emote {emote} added to the list.')
+        embed = discord.Embed(title=f'Emote {emote} added to the list.')
         await ctx.send(embed=embed, delete_after=30)
         await ctx.message.delete()
 
 
     @karma_emotes.command(name='remove', aliases=['delete'], usage="remove <emote>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def karma_emote_remove(self, ctx, emote: nextcord.Emoji):
+    async def karma_emote_remove(self, ctx, emote: discord.Emoji):
         """
         Remove an emote from the karma emotes for this server.
         """
         existing_emote = db.session.query(db.karma_emote).filter_by(discord_emote_id=emote.id).filter_by(discord_server_id=ctx.guild.id).first()
         if existing_emote is None:
-            embed = nextcord.Embed(title='That emote is not in the list.')
+            embed = discord.Embed(title='That emote is not in the list.')
             return await ctx.send(embed=embed, delete_after=20)
         db.session.delete(existing_emote)
         db.session.commit()
-        embed = nextcord.Embed(title=f'Emote {emote} removed from the list.')
+        embed = discord.Embed(title=f'Emote {emote} removed from the list.')
         await ctx.send(embed=embed, delete_after=30)
         await ctx.message.delete()
 
@@ -223,7 +223,7 @@ class Karma(commands.Cog):
         """
         Shows users with the most karma on the server.
         """
-        embed = nextcord.Embed(title='Karma Leaderboard')
+        embed = discord.Embed(title='Karma Leaderboard')
         if global_leaderboard is None:
             query = db.session.query(db.karma).filter_by(discord_server_id=ctx.guild.id).order_by(db.karma.amount.desc()).limit(15)
         elif global_leaderboard == 'global': 
@@ -254,7 +254,7 @@ class Karma(commands.Cog):
             month_board = await self.create_post_leaderboard(monthly_posts)
             week_board = await self.create_post_leaderboard(weekly_posts)
         
-        embed = nextcord.Embed(title='Top Messages')
+        embed = discord.Embed(title='Top Messages')
         embed.set_thumbnail(url=ctx.guild.icon.url)
         embed.add_field(name='Top 5 All Time', value=all_board, inline=False)
         embed.add_field(name='Top 5 This Month', value=month_board, inline=False)
@@ -269,7 +269,7 @@ class Karma(commands.Cog):
         """
         post = db.session.query(db.post).filter_by(discord_server_id=ctx.guild.id).filter_by(discord_message_id=post_id).first()
         if post is None:
-            embed = nextcord.Embed(title='That post does not exist.')
+            embed = discord.Embed(title='That post does not exist.')
             return await ctx.send(embed=embed, delete_after=30)
         query = db.session.query(db.karma_emote).filter_by(discord_server_id=ctx.guild.id)
 
@@ -285,7 +285,7 @@ class Karma(commands.Cog):
         upvote_reactions = 0
         downvote_reactions = 0
         for reaction in message.reactions:
-            if isinstance(reaction.emoji, nextcord.Emoji) or isinstance(reaction.emoji, nextcord.PartialEmoji):
+            if isinstance(reaction.emoji, discord.Emoji) or isinstance(reaction.emoji, discord.PartialEmoji):
                 if reaction.emoji.id in server_upvote_emotes_ids:
                     upvote_reactions += reaction.count-1
                 if reaction.emoji.id in server_downvote_emotes_ids:
@@ -304,7 +304,7 @@ class Karma(commands.Cog):
 
         embed_string = f'Old post upvotes: {old_upvotes}, Old post downvotes: {old_downvotes}\nRechecked post upvotes: {upvote_reactions}, Rechecked post downvotes: {downvote_reactions}\nKarma difference: {karma_difference}'
 
-        embed = nextcord.Embed(title=f'Post {post_id} check', description=embed_string)
+        embed = discord.Embed(title=f'Post {post_id} check', description=embed_string)
         await ctx.send(embed=embed, delete_after=60)
         await ctx.message.delete()
 
@@ -336,7 +336,7 @@ class Karma(commands.Cog):
     @kasino.command(name='close', usage="close <kasino_id> <winning_option>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def kasino_close(self, ctx, kasino_id: int, winner: int):
-        author_img = ctx.author.avatar.url
+        author_img = ctx.author.avatar_url
 
         
         if not self.is_kasino_open(kasino_id):
@@ -389,9 +389,9 @@ class Karma(commands.Cog):
             return await ctx.send(f'You do not have any karma.')
 
         if option not in [1, 2]:
-            output = nextcord.Embed(
+            output = discord.Embed(
                 title=f'Wrong usage. Correct usage is `{self.bot.command_prefix}kasino bet <kasino_id> <amount> <1 or 2>`',
-                color=nextcord.Colour.from_rgb(209, 25, 25)
+                color=discord.Colour.from_rgb(209, 25, 25)
             )
             return await ctx.author.send(embed=output, delete_after=30)
         if amount == "all":
@@ -399,53 +399,53 @@ class Karma(commands.Cog):
         else:
             amount = int(amount)
         if better_karma.amount < amount:
-            output = nextcord.Embed(
+            output = discord.Embed(
                 title=f'You don\'t have that much karma. Your karma: {better_karma.amount}',
-                color=nextcord.Colour.from_rgb(209, 25, 25)
+                color=discord.Colour.from_rgb(209, 25, 25)
             )
             return await ctx.author.send(embed=output, delete_after=30)
 
         if not self.is_kasino_open(kasino_id):
-            output = nextcord.Embed(
+            output = discord.Embed(
                 title=f'Kasino with ID {kasino_id} is not open.',
-                color=nextcord.Colour.from_rgb(209, 25, 25)
+                color=discord.Colour.from_rgb(209, 25, 25)
             )
             return await ctx.author.send(embed=output, delete_after=30)
 
         if self.is_kasino_locked(kasino_id):
-            output = nextcord.Embed(
+            output = discord.Embed(
                 title=f'kasino with ID {kasino_id} is locked.',
-                color=nextcord.Colour.from_rgb(209, 25, 25)
+                color=discord.Colour.from_rgb(209, 25, 25)
             )
             return await ctx.author.send(embed=output, delete_after=30)
             
         if amount < 1:
-            output = nextcord.Embed(
+            output = discord.Embed(
                 title='You tried to bet < 1 karma! Silly you!',
-                color=nextcord.Colour.from_rgb(209, 25, 25)
+                color=discord.Colour.from_rgb(209, 25, 25)
             )
             return await ctx.author.send(embed=output, delete_after=30)
 
         if self.has_user_bet(kasino_id, ctx.author.id):
             if not self.is_same_bet_option(kasino_id, ctx.author.id, option):
-                output = nextcord.Embed(
+                output = discord.Embed(
                     title=f'You can\'t change your choice on the bet with id {kasino_id}. No chickening out!',
-                    color=nextcord.Colour.from_rgb(209, 25, 25)
+                    color=discord.Colour.from_rgb(209, 25, 25)
                 )
                 return await ctx.author.send(embed=output)
             total_bet = self.increase_bet(kasino_id, ctx.author.id, ctx.guild.id, amount)
-            output = nextcord.Embed(
+            output = discord.Embed(
                 title=f'**Successfully increased bet on option {option}, on kasino with ID {kasino_id} for {amount} karma! Total bet is now: {total_bet} Karma**',
-                color=nextcord.Colour.from_rgb(52, 79, 235),
+                color=discord.Colour.from_rgb(52, 79, 235),
                 description=f'Remaining karma: {better_karma.amount}'
             )
             await ctx.author.send(embed=output)
         else:
             self.add_bet(kasino_id, ctx.author.id, ctx.guild.id, amount, option)
             user_karma = self.get_user_karma(ctx.author.id, ctx.guild.id)
-            output = nextcord.Embed(
+            output = discord.Embed(
                 title=f'**Successfully added bet on option {option}, on kasino with ID {kasino_id} for {amount} karma! Total bet is now: {amount} Karma**',
-                color=nextcord.Colour.from_rgb(52, 79, 235),
+                color=discord.Colour.from_rgb(52, 79, 235),
                 description=f'Your remaining karma: {user_karma}'
             )
             await ctx.author.send(embed=output)
@@ -454,7 +454,7 @@ class Karma(commands.Cog):
 
     @kasino.command(name='list', aliases=['l'], usage="list")
     async def kasino_list(self, ctx):
-        embed = nextcord.Embed(title='Open kasinos')
+        embed = discord.Embed(title='Open kasinos')
         embed_kasinos = ''
         for entry in db.session.query(db.kasino).filter_by(discord_server_id=ctx.guild.id).filter_by(locked=False).all():
             embed_kasinos += f'{entry.id} - {entry.question}\n'
@@ -504,7 +504,7 @@ class Karma(commands.Cog):
             return None
         try:
             message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
-        except nextcord.errors.NotFound:
+        except discord.errors.NotFound:
             return None
         if message.author.bot:
             return None
@@ -555,22 +555,22 @@ class Karma(commands.Cog):
         to_embed = None
 
         if winner == 1:
-            to_embed = nextcord.Embed(
+            to_embed = discord.Embed(
                 title=f':tada: "{kasino.option_1}" was correct! :tada:',
                 description=f'Question: {kasino.question}\nIf you\'ve chosen 1, you\'ve just won karma!\nDistributed to the winners: **{total_karma} Karma**',
-                color=nextcord.Colour.from_rgb(52, 79, 235)
+                color=discord.Colour.from_rgb(52, 79, 235)
             )
         elif winner == 2:
-            to_embed = nextcord.Embed(
+            to_embed = discord.Embed(
                 title=f':tada: "{kasino.option_2}" was correct! :tada:',
                 description=f'Question: {kasino.question}\nIf you\'ve chosen 2, you\'ve just won karma!\nDistributed to the winners: **{total_karma} Karma**',
-                color=nextcord.Colour.from_rgb(52, 79, 235)
+                color=discord.Colour.from_rgb(52, 79, 235)
             )
         elif winner == 3:
-            to_embed = nextcord.Embed(
+            to_embed = discord.Embed(
                 title=f':game_die: "{kasino.question}" has been cancelled.',
                 description=f'Amount bet will be refunded to each user.\nReturned: {total_karma} Karma',
-                color=nextcord.Colour.from_rgb(52, 79, 235)
+                color=discord.Colour.from_rgb(52, 79, 235)
             )
 
         to_embed.set_footer(
@@ -589,7 +589,7 @@ class Karma(commands.Cog):
         if db.session.query(db.discord_user).filter_by(discord_user_id=ctx.author.id).first() is None:
             db.session.add(db.discord_user(ctx.author))
 
-        to_embed = nextcord.Embed(description="Opening kasino, hold on tight...")
+        to_embed = discord.Embed(description="Opening kasino, hold on tight...")
         kasino_msg = await ctx.send(embed=to_embed)
         
         kasino = db.kasino(question, option_1, option_2, kasino_msg)
@@ -604,7 +604,7 @@ class Karma(commands.Cog):
         try:
             kasino_msg = await (await self.bot.fetch_channel(kasino.discord_channel_id)).fetch_message(kasino.discord_message_id)
             await kasino_msg.delete()
-        except nextcord.errors.NotFound:
+        except discord.errors.NotFound:
             pass
         db.session.delete(kasino)
         bets = db.session.query(db.kasino_bet).filter_by(kasino_id=kasino_id).all()
@@ -655,9 +655,9 @@ class Karma(commands.Cog):
         for bet in bets:
             self.change_user_karma(bet[0].discord_user_id, bet[1].discord_server_id, bet[0].amount)
             user_karma = self.get_user_karma(bet[0].discord_user_id, bet[1].discord_server_id)
-            output = nextcord.Embed(
+            output = discord.Embed(
                 title=f'**You\'ve been refunded {bet[0].amount} karma.**',
-                color=nextcord.Colour.from_rgb(52, 79, 235),
+                color=discord.Colour.from_rgb(52, 79, 235),
                 description=f'Question was: {kasino.question}\n'
                             f'Remaining karma: {user_karma}'
             )
@@ -682,9 +682,9 @@ class Karma(commands.Cog):
 
             self.change_user_karma(bet[0].discord_user_id, bet[1].discord_server_id, win_amount)
             user_karma = self.get_user_karma(bet[0].discord_user_id, bet[1].discord_server_id)
-            output = nextcord.Embed(
+            output = discord.Embed(
                 title=f':tada: **You\'ve won {win_amount} karma!** :tada:',
-                color=nextcord.Colour.from_rgb(66, 186, 50),
+                color=discord.Colour.from_rgb(66, 186, 50),
                 description=f'(Of which {bet[0].amount} you put down on the table)\n'
                             f'Question was: {question}\n'
                             f'New karma balance: {user_karma}'
@@ -692,9 +692,9 @@ class Karma(commands.Cog):
             await (await self.bot.fetch_user(bet[0].discord_user_id)).send(embed=output)
         for bet in losers:
             user_karma = self.get_user_karma(bet[0].discord_user_id, bet[1].discord_server_id)
-            output = nextcord.Embed(
+            output = discord.Embed(
                 title=f':chart_with_downwards_trend: **You\'ve unfortunately lost {bet[0].amount} karma...** :chart_with_downwards_trend:',
-                color=nextcord.Colour.from_rgb(209, 25, 25),
+                color=discord.Colour.from_rgb(209, 25, 25),
                 description=f'Question was: {question}\n'
                             f'New karma balance: {user_karma}'
             )
@@ -725,10 +725,10 @@ class Karma(commands.Cog):
         description = f"The kasino has been opened! Place your bets using `{self.bot.command_prefix}kasino bet {kasino.id} <amount> <1 or 2>`"
         if kasino.locked: 
             description = f'The kasino is locked! No more bets are taken in. Time to wait and see...'
-        to_embed = nextcord.Embed(
+        to_embed = discord.Embed(
             title=f'{"[LOCKED] " if kasino.locked else ""}:game_die: {kasino.question}',
             description=description,
-            color=nextcord.Colour.from_rgb(52, 79, 235)
+            color=discord.Colour.from_rgb(52, 79, 235)
         )
         to_embed.set_footer(text=f'On the table: {aAmount + bAmount} Karma | ID: {kasino.id}')
         to_embed.set_thumbnail(url='https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif')

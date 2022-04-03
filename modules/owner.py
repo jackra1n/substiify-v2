@@ -3,9 +3,9 @@ import logging
 import subprocess
 from os import path, walk
 
-import nextcord
-from nextcord import Activity, ActivityType
-from nextcord.ext import commands, tasks
+import discord
+from discord import Activity, ActivityType
+from discord.ext import commands, tasks
 from sqlalchemy import func
 
 from utils import db, store
@@ -45,7 +45,7 @@ class Owner(commands.Cog):
         """
         Shuts down the bot. Made this in case something goes wrong.
         """
-        embed = nextcord.Embed(description=f'Shutting down...', color=0xf66045)
+        embed = discord.Embed(description=f'Shutting down...', color=0xf66045)
         await ctx.send(embed=embed)
         await self.bot.close()
 
@@ -108,7 +108,7 @@ class Owner(commands.Cog):
     @commands.is_owner()
     @commands.group(invoke_without_command=True, hidden=True)
     async def message(self, ctx):
-        embed = nextcord.Embed(title="Current message settings", color=0xf66045)
+        embed = discord.Embed(title="Current message settings", color=0xf66045)
         embed.add_field(name="Server", value=self.message_server)
         embed.add_field(name="Channel", value=self.message_channel)
         embed.add_field(name="Message", value=self.message_text)
@@ -161,10 +161,10 @@ class Owner(commands.Cog):
             return await ctx.send("Please set a server first", delete_after=30)
 
         channels = await self.message_server.fetch_channels()
-        text_channels = [channel for channel in channels if type(channel) == nextcord.channel.TextChannel]
+        text_channels = [channel for channel in channels if type(channel) == discord.channel.TextChannel]
         if len(channels) == 0:
             return await ctx.send("No text channels found in this server", delete_after=30)
-        embed = nextcord.Embed(title="Channels", color=0xf66045)
+        embed = discord.Embed(title="Channels", color=0xf66045)
         channel_string = ""
         for index, channel in enumerate(text_channels):
             channel_string += f"{index}. {channel.name}\n"
@@ -199,7 +199,7 @@ class Owner(commands.Cog):
     async def message_send(self, ctx):
         if self.message_server is None or self.message_channel is None or self.message_text is None:
             return await ctx.send("Please set all the settings first", delete_after=30)
-        embed = nextcord.Embed(title="Message overview", color=nextcord.Colour.blurple())
+        embed = discord.Embed(title="Message overview", color=discord.Colour.blurple())
         embed.description = "⚠️ Are you sure you want to send this message ⚠️"
         embed.add_field(name="Server", value=self.message_server)
         embed.add_field(name="Channel", value=self.message_channel)
@@ -222,7 +222,7 @@ class Owner(commands.Cog):
         if reaction.emoji == "✅":
             await message.delete()
             if self.message_embed:
-                embed = nextcord.Embed(title=self.embed_title, color=nextcord.Colour.blurple())
+                embed = discord.Embed(title=self.embed_title, color=discord.Colour.blurple())
                 if self.message_text is None:
                     return await ctx.send("Please set the text first", delete_after=30)
                 embed.description = self.message_text
@@ -257,9 +257,9 @@ class Owner(commands.Cog):
             servers += f'{guild.name}\n'
             user_count += f'{guild.member_count}\n'
             owner += f'{guild.owner.mention} {guild.owner}\n'
-        embed = nextcord.Embed(
+        embed = discord.Embed(
             title='Server Infos',
-            color=nextcord.Colour.blurple()
+            color=discord.Colour.blurple()
         )
         embed.add_field(name='Name', value=servers, inline=True)
         embed.add_field(name='Cnt', value=user_count, inline=True)
@@ -274,9 +274,9 @@ class Owner(commands.Cog):
         for guild in self.bot.guilds:
             servers += f'{guild}\n'
             server_ids += f'{guild.id}\n'
-        embed = nextcord.Embed(
+        embed = discord.Embed(
             title='Server Ids',
-            color=nextcord.Colour.blurple()
+            color=discord.Colour.blurple()
         )
         embed.add_field(name='Name', value=servers, inline=True)
         embed.add_field(name='Id', value=server_ids, inline=True)
@@ -292,9 +292,9 @@ class Owner(commands.Cog):
         channels = ''
         for channel in guild.channels:
             channels += f'{channel.name}\n'
-        embed = nextcord.Embed(
+        embed = discord.Embed(
             title='Channel Infos',
-            color=nextcord.Colour.blurple()
+            color=discord.Colour.blurple()
         )
         embed.add_field(name='Name', value=channels, inline=True)
         await ctx.send(embed=embed, delete_after=120)
@@ -325,10 +325,10 @@ class Owner(commands.Cog):
                         member_string += f" 🎤🔇"
                     members.append(member_string)
                 members_string = "\n".join(sorted(members))
-                embed = nextcord.Embed(
+                embed = discord.Embed(
                     title = vc.name,
                     description = members_string,
-                    colour = nextcord.Colour.blurple()
+                    colour = discord.Colour.blurple()
                 )
                 await ctx.send(embed=embed)
         await ctx.message.delete()
@@ -357,7 +357,7 @@ class Owner(commands.Cog):
             json.dump(settings_json, settings, indent=2)
         if ctx.channel.permissions_for(ctx.guild.me).manage_messages:
             await ctx.message.delete()
-        embed = nextcord.Embed(description=f'{version} version has been set to {value}')
+        embed = discord.Embed(description=f'{version} version has been set to {value}')
         await ctx.send(embed=embed, delete_after=10)
 
     def get_modules(self):
@@ -397,7 +397,7 @@ class Owner(commands.Cog):
         for command in commands_used_query:
             formated_date = command[0].date.strftime("%d/%m/%Y %H:%M:%S")
             commands_used += f"`{command[0].command}` used by `{command[1].username}` at {formated_date}\n"
-        embed = nextcord.Embed(title=f"Top {amount} used commands on: **{ctx.guild.name}**", color=0xE3621E)
+        embed = discord.Embed(title=f"Top {amount} used commands on: **{ctx.guild.name}**", color=0xE3621E)
         embed.description = commands_used
         await ctx.send(embed=embed, delete_after=60)
         await ctx.message.delete()
@@ -414,7 +414,7 @@ class Owner(commands.Cog):
         for row in commands_used_query:
             commands_used += f"`{row[1].server_name}`\n"
             commands_count += f"{row[2]}\n"
-        embed = nextcord.Embed(title="Top servers used commands", color=0xE3621E)
+        embed = discord.Embed(title="Top servers used commands", color=0xE3621E)
         embed.add_field(name="Command", value=commands_used, inline=True)
         embed.add_field(name="Count", value=commands_count, inline=True)
         await ctx.send(embed=embed, delete_after=30)
@@ -434,13 +434,13 @@ class Owner(commands.Cog):
             return await ctx.send("I don't have the permissions to create an invite on this server", delete_after = 5)
 
         channels = await guild.fetch_channels()
-        text_channels = [channel for channel in channels if type(channel) == nextcord.channel.TextChannel and channel.permissions_for(guild.me).view_channel]
+        text_channels = [channel for channel in channels if type(channel) == discord.channel.TextChannel and channel.permissions_for(guild.me).view_channel]
         if len(channels) == 0:
             return await ctx.send("No text channels found in this server", delete_after=30)
         channel_string = ""
         for index, channel in enumerate(text_channels):
             channel_string += f"{index}. {channel.name}\n"
-        embed = nextcord.Embed(title="Channels", description=channel_string, color=0xf66045)
+        embed = discord.Embed(title="Channels", description=channel_string, color=0xf66045)
         await ctx.send(embed=embed, delete_after=120)
 
         def check(m):
@@ -537,7 +537,7 @@ def create_command_usage_embed(commands_used_query, embed_title):
     for row in commands_used_query:
         commands_used += f"`{row[0]}`\n"
         commands_count += f"{row[1]}\n"
-    embed = nextcord.Embed(title=embed_title, color=0xE3621E)
+    embed = discord.Embed(title=embed_title, color=0xE3621E)
     embed.add_field(name="Command", value=commands_used, inline=True)
     embed.add_field(name="Count", value=commands_count, inline=True)
     return embed
