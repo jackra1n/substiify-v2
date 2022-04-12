@@ -139,9 +139,8 @@ class Music(commands.Cog):
             if playlist is None:
                 return await ctx.reply("No results found.", delete_after=30)
             for track in playlist.tracks:
-                partial = wavelink.PartialTrack(query=track.title)
-                partial.requester = ctx.author
-                player.queue.put(partial)
+                track.requester = ctx.author
+                player.queue.put(track)
             if not player.is_playing():
                 track = await player.play(await player.queue.get_wait())
                 track.requester = ctx.author
