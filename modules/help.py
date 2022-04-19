@@ -9,7 +9,7 @@ class Help(commands.MinimalHelpCommand):
     """Shows help info for commands and cogs"""
 
     def get_command_signature(self, command):
-        return f"{self.context.clean_prefix}{command.qualified_name} {command.signature}"
+        return f"{self.clean_prefix}{command.qualified_name} {command.signature}"
 
     # help
     async def send_bot_help(self, mapping: dict):
@@ -19,7 +19,7 @@ class Help(commands.MinimalHelpCommand):
             mapping=mapping,
             set_author=True,
         )
-        embed.set_footer(text=f"Use {self.context.clean_prefix}help <command / category> to get more information.")
+        embed.set_footer(text=f"Use {self.clean_prefix}help <command / category> to get more information.")
         self.response = await self.get_destination().send(embed=embed)
 
     # help <cog>
@@ -34,7 +34,7 @@ class Help(commands.MinimalHelpCommand):
         embed.add_field(name="Subcommands", value=f"```{', '.join(sub_commands)}```")
         if len(command_chain := group.full_parent_name) > 0:
             command_chain = group.full_parent_name + " "
-        embed.set_footer(text=f"This command has subcommands. Check their help page with `{self.context.clean_prefix}help {command_chain}{group.name} <subcommand>`")
+        embed.set_footer(text=f"This command has subcommands. Check their help page with `{self.clean_prefix}help {command_chain}{group.name} <subcommand>`")
         await self.context.send(embed=embed)
 
     async def cog_help_embed(self, cog: Optional[commands.Cog]) -> Embed:
@@ -63,8 +63,8 @@ class Help(commands.MinimalHelpCommand):
         if description:
             embed.description = description
         if set_author:
-            avatar = self.context.bot.user.avatar or self.context.bot.user.default_avatar
-            embed.set_author(name=self.context.bot.user.name, icon_url=avatar_url)
+            avatar = self.context.bot.user.avatar_url or self.context.bot.user.default_avatar_url
+            embed.set_author(name=self.context.bot.user.name, icon_url=avatar)
         if command_set:
             # show help about all commands in the set
             filtered = await self.filter_commands(command_set, sort=True)
@@ -114,10 +114,10 @@ class Help(commands.MinimalHelpCommand):
             usage = command.usage
             if len(command.full_parent_name) > 0:
                 usage = command.full_parent_name + " " + usage
-            usage = self.context.clean_prefix + usage
+            usage = self.clean_prefix + usage
 
         embed = Embed(title=command_name, color=0xE3621E)
-        embed.add_field(name="Info", value=help_msg.replace("{prefix}", self.context.clean_prefix), inline=False)
+        embed.add_field(name="Info", value=help_msg.replace("{prefix}", self.clean_prefix), inline=False)
         embed.add_field(name="Aliases", value=f"```asciidoc\n{aliases_msg}```")
         embed.add_field(name="Usage", value=f"```asciidoc\n{usage}```", inline=False)
         return embed

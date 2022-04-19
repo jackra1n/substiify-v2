@@ -135,7 +135,7 @@ class Util(commands.Cog):
 
         if len(users) <= 0:
             embed.set_footer(text="No one won the Giveaway")
-        elif len(users) > 0:
+        else:
             seed(random_seed_value + ctx.message.id)
             winner = choice(users)
             embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
@@ -184,7 +184,7 @@ class Util(commands.Cog):
                 embed.remove_field(0)
                 embed.set_footer(text="No one won the Giveaway")
                 await channel.send('No one won the Giveaway')
-            elif len(users) > 0:
+            else:
                 seed(random_seed_value + giveaway.discord_message_id)
                 winner = choice(users)
                 embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
@@ -365,11 +365,12 @@ class Util(commands.Cog):
         """
         Clears messages within the current channel.
         """
-        if ctx.message.type == MessageType.reply:
-            if message := ctx.message.reference.resolved:
-                await message.delete()
-                await ctx.message.delete()
-            return
+        # TODO: re-add when discord.py 2.0 is released
+        # if ctx.message.type == MessageType.reply:
+        #     if message := ctx.message.reference.resolved:
+        #         await message.delete()
+        #         await ctx.message.delete()
+        #     return
         if amount is None:
             return await ctx.send('Please specify the amount of messages to delete.', delete_after=15)
 
