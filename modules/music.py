@@ -44,6 +44,11 @@ class Music(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
 
+        if member.id == self.bot.user.id and after.channel is None:
+            player = wavelink.NodePool.get_node().get_player(before.channel.guild)
+            if player is not None:
+                await player.disconnect()
+
         if member.id != self.bot.user.id or before.channel is not None:
             return
         voice = after.channel.guild.voice_client
@@ -369,9 +374,7 @@ class Music(commands.Cog):
             return await ctx.send('No players found.', delete_after=15)
 
         # get server names by id
-        server_names = []
-        for player in players:
-            server_names.append(f'{player.guild.name} ({player.queue.count})')
+        server_names = [f'{player.guild.name} ({player.queue.count})' for player in players]
 
         embed = discord.Embed(color=discord.Color.blurple())
         embed.title = 'Active players'
