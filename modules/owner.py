@@ -179,7 +179,7 @@ class Owner(commands.Cog):
         except TimeoutError:
             return await ctx.send("You didn't answer the questions in Time", delete_after=30)
         if message.content.isdigit():
-            channel = self.message_server.get_channel(text_channels[int(message.content)].id)
+            channel = await self.bot.fetch_channel(text_channels[int(message.content)].id)
             if channel is not None:
                 self.message_channel = channel
                 await ctx.send(f"Channel set to `{channel.name}`", delete_after=30)
