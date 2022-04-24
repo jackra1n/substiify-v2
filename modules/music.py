@@ -10,6 +10,7 @@ import discord
 import wavelink
 from discord.ext import commands
 from wavelink.ext import spotify
+from wavelink import Player, Track
 
 from utils import store, db
 
@@ -39,6 +40,7 @@ class Music(commands.Cog):
             spotify_client = spotify.SpotifyClient(client_id=spotify_client_id, client_secret=spotify_client_secret)
         await wavelink.NodePool.create_node(bot=self.bot, host='0.0.0.0', port=2333, password='youshallnotpass', spotify_client=spotify_client)
 
+
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
 
@@ -66,13 +68,12 @@ class Music(commands.Cog):
         logger.info(f'Node: <{node.identifier}> is ready!')
 
     @commands.Cog.listener()
-    async def on_wavelink_track_end(self, player: wavelink.Player, track: wavelink.Track, reason):
+    async def on_wavelink_track_end(self, player: Player, track: Track, reason):
         """Event fired when a track ends."""
         if not player.queue.is_empty:
             partial = await player.queue.get_wait()
-            requester = partial.requester
             track = await player.play(partial)
-            track.requester = requester
+            track.requester = partial.requester
         else:
             await player.stop()
 
@@ -89,7 +90,7 @@ class Music(commands.Cog):
 
     async def ensure_voice(self, ctx):
         """ This check ensures that the bot and command author are in the same voicechannel. """
-        player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        player = ctx.voice_client
         
         if ctx.command.name in ['players','cleanup']:
             return True
@@ -113,7 +114,7 @@ class Music(commands.Cog):
             if not permissions.connect or not permissions.speak:
                 raise commands.CommandInvokeError('I need the `CONNECT` and `SPEAK` permissions.')
 
-            await ctx.author.voice.channel.connect(cls=wavelink.Player)
+            await ctx.author.voice.channel.connect(cls=Player)
 
     @commands.command(aliases=['p'], usage='play <url/query>')
     async def play(self, ctx, *, search: str):
@@ -123,7 +124,7 @@ class Music(commands.Cog):
         `<<play All girls are the same Juice WRLD` - searches for a song and queues it
         `<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
         """
-        player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        player: Player = await self.__get_player(ctx)
         if player is None:
             return await ctx.send("No player found.")
         search = search.strip('<>')
@@ -132,20 +133,13 @@ class Music(commands.Cog):
         if (decoded := spotify.decode_url(search)) is not None:
             if decoded["type"] is spotify.SpotifySearchType.unusable:
                 return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
-            embed = await self.queue_spotify(decoded, player, ctx.author)
+            embed = await self.__queue_spotify(decoded, player, ctx.author)
 
         elif re.match(URL_REGEX, search) and 'list=' in search:
             playlist = await wavelink.NodePool.get_node().get_playlist(wavelink.YouTubePlaylist, search)
             if playlist is None:
                 return await ctx.reply("No results found.", delete_after=30)
-            for track in playlist.tracks:
-                track.requester = ctx.author
-                player.queue.put(track)
-            if not player.is_playing():
-                track = await player.play(await player.queue.get_wait())
-                track.requester = ctx.author
-            embed.title = 'Playlist Enqueued'
-            embed.description = f'{playlist.name} - {len(playlist.tracks)} tracks'
+            embed = self.__queue_youtube_playlist(playlist, player, ctx.author)
 
         else:
             # Get the results for the search from Lavalink.
@@ -177,7 +171,7 @@ class Music(commands.Cog):
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.reply("Please provide a search query or URL.", delete_after=30)
 
-    async def queue_spotify(self, decoded, player, requester):
+    async def __queue_spotify(self, decoded, player, requester):
         embed = discord.Embed(color=discord.Color.blurple())
         if decoded["type"] in (spotify.SpotifySearchType.playlist, spotify.SpotifySearchType.album):
             tracks_count = 0
@@ -201,12 +195,24 @@ class Music(commands.Cog):
             embed.description = f'[{track.title}]({track.uri})'
         return embed
 
+    async def __queue_youtube_playlist(self, playlist, player, requester):
+        for track in playlist.tracks:
+            track.requester = requester
+            player.queue.put(track)
+        if not player.is_playing():
+            track = await player.play(await player.queue.get_wait())
+            track.requester = requester
+        embed = discord.Embed(color=discord.Color.blurple())
+        embed.title = 'Playlist Enqueued'
+        embed.description = f'{playlist.name} - {len(playlist.tracks)} tracks'
+        return embed
+
     @commands.command(aliases=['disconnect', 'stop'])
     async def leave(self, ctx):
         """
         Disconnects the player from the voice channel and clears its queue.
         """
-        player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        player = await self.__get_player(ctx)
 
         if not player.is_connected():
             return await ctx.send('Not connected.', delete_after=30)
@@ -214,7 +220,6 @@ class Music(commands.Cog):
         if ctx.author.voice.channel != player.channel:
             return await ctx.send('You\'re not in my voicechannel!', delete_after=30)
 
-        player.queue.clear()
         await player.disconnect()
         await ctx.send('*⃣ | Disconnected.', delete_after=30)
         await ctx.message.delete()
@@ -231,7 +236,7 @@ class Music(commands.Cog):
         """
         Skips the current track. If there no more tracks in the queue, disconnects the player.
         """
-        player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        player = await self.__get_player(ctx)
 
         if not player.is_playing():
             return await ctx.send('Not playing currently.', delete_after=15)
@@ -252,7 +257,7 @@ class Music(commands.Cog):
         """
         Shows info about the currently playing track.
         """
-        player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        player = await self.__get_player(ctx)
         await ctx.message.delete()
 
         if not player.is_connected():
@@ -276,7 +281,7 @@ class Music(commands.Cog):
         """
         Randomly shuffles the queue.
         """
-        player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        player = await self.__get_player(ctx)
 
         if len(player.queue) < 2:
             return await ctx.send('Not enough tracks to shuffle.', delete_after=15)
@@ -285,12 +290,13 @@ class Music(commands.Cog):
         await ctx.send('*⃣ | Queue shuffled.', delete_after=15)
         await ctx.message.delete()
 
+
     @commands.group(aliases=['q'], invoke_without_command=True)
     async def queue(self, ctx):
         """
         Shows the queue in a paginated menu. Use the subcommand `clear` to clear the queue.
         """
-        player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        player = await self.__get_player(ctx)
         await ctx.message.delete()
         if player.queue.count < 1:
             await ctx.send('Nothing queued.', delete_after=15)
@@ -339,15 +345,17 @@ class Music(commands.Cog):
                 await ctx.send('No player found', delete_after=30)
                 await ctx.message.delete()
 
+
     @queue.command(aliases=['clear'])
     async def queue_clear(self, ctx):
         """
         Clears the queue.
         """
-        player = wavelink.NodePool.get_node().get_player(ctx.guild)
+        player = await self.__get_player(ctx)
         player.queue.clear()
         await ctx.send('*⃣ | Queue cleared.', delete_after=30)
         await ctx.message.delete()
+
 
     @commands.is_owner()
     @commands.command(hidden=True)
@@ -371,6 +379,7 @@ class Music(commands.Cog):
         await ctx.send(embed=embed, delete_after=60)
         await ctx.message.delete()
 
+
     @commands.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def cleanup(self, ctx, enable: bool = None):
@@ -390,6 +399,11 @@ class Music(commands.Cog):
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
+
+    async def __get_player(self, ctx):
+        return ctx.voice_client or await ctx.author.voice.channel.connect(cls=Player)
+
+
     def create_song_cleanup_embed(self, enable, server):
         embed = discord.Embed(color=discord.Color.red())
         if enable or server.music_cleanup:
@@ -403,6 +417,7 @@ class Music(commands.Cog):
         embed.set_footer(text = f'Use `{self.bot.command_prefix}cleanup <enable/disable>` to toggle.')
         return embed
     
+
     def _create_current_song_embed(self, player):
         embed = discord.Embed(color=discord.Color.blurple())
         embed.title = 'Now Playing'
@@ -415,6 +430,7 @@ class Music(commands.Cog):
             embed.add_field(name='Duration', value='LIVE 🔴')
         embed.add_field(name='Queued By', value=f"{player.track.requester.mention}")
         return embed
+
 
     def _create_queue_embed_list(self, ctx, player):
         songs_array = []
@@ -435,6 +451,7 @@ class Music(commands.Cog):
             embed.add_field(name="Next up", value=upcoming, inline=False)
             pages.append(embed)
         return pages
+
 
 def setup(bot):
     bot.add_cog(Music(bot))

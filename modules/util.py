@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import random
 import platform
 import subprocess
 from asyncio import TimeoutError
@@ -29,6 +30,33 @@ class Util(commands.Cog):
         self.accept_emoji = ':greenTick:876177251832590348'
         self.deny_emoji = ':redCross:876177262813278288'
         self.giveaway_task.start()
+
+    @commands.command(name='teams', aliases=['team'])
+    async def teams(self, ctx):
+        """
+        Create two teams from the current members of the voice channel for you toplay custom games.
+        """
+        if ctx.author.voice is None:
+            return await ctx.send('You must be in a voice channel to use this command.')
+
+        voice_members = ctx.author.voice.channel.members
+        if len(voice_members) < 4:
+            return await ctx.send('You must have at least 4 members in your voice channel to use this command.')
+        
+        random.shuffle(voice_members)
+        team_1 = []
+        team_2 = []
+
+        for member in voice_members:
+            if len(team_1) < len(voice_members) // 2:
+                team_1.append(member)
+            else:
+                team_2.append(member)
+
+        embed = discord.Embed(title='Teams', color=0x00FFFF)
+        embed.add_field(name='Team 1', value="\n".join([f'{member.mention} ' for member in team_1]))
+        embed.add_field(name='Team 2', value="\n".join([f'{member.mention} ' for member in team_2]))
+        await ctx.send(embed=embed)
 
     @commands.group(aliases=["give"], invoke_without_command=True)
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())

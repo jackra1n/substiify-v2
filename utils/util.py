@@ -15,21 +15,19 @@ class RemoveNoise(logging.Filter):
         super().__init__(name='discord.gateway')
 
     def filter(self, record):
-        if (record.name == 'discord.gateway' and 'Shard ID' in record.msg) or any(log in record.msg for log in ignore_logs):
-            return False
-        return True
+        return (record.name != 'discord.gateway' or 'Shard ID' not in record.msg) and all(log not in record.msg for log in ignore_logs)
 
 def prepareFiles():
 
     default_settings = {
         "token": "",
+        "prefix": "<<",
         "version": 
         {
             "major": "0",
             "minor": "87",
         },
         "last_update": "",
-        "prefix": "<<",
         "spotify_client_id": "",
         "spotify_client_secret": ""
     }
@@ -71,4 +69,4 @@ def prepareFiles():
         logger.info(f'Creating {store.DB_PATH}')
         open(store.DB_PATH, 'a')
 
-    logger.info(f'All files ready')
+    logger.info('All files ready')

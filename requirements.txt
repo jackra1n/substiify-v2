@@ -4,5 +4,5 @@ discord.py[voice]
 psutil
 pytz
 sqlalchemy
-wavelink >= 1.2.1
+wavelink
 vacefron.py
