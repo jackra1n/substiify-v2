@@ -179,7 +179,7 @@ class Owner(commands.Cog):
         except TimeoutError:
             return await ctx.send("You didn't answer the questions in Time", delete_after=30)
         if message.content.isdigit():
-            channel = await self.message_server.fetch_channel(text_channels[int(message.content)].id)
+            channel = self.message_server.get_channel(text_channels[int(message.content)].id)
             if channel is not None:
                 self.message_channel = channel
                 await ctx.send(f"Channel set to `{channel.name}`", delete_after=30)
@@ -316,13 +316,13 @@ class Owner(commands.Cog):
                 for member in vc.members:
                     member_string = f"{member.display_name}"
                     if member.voice.self_stream:
-                        member_string += f" 🔴"
+                        member_string += " 🔴"
                     if member.voice.self_video:
-                        member_string += f" 📷"
+                        member_string += " 📷"
                     if member.voice.self_deaf:
-                        member_string += f" 🎧🔇"
+                        member_string += " 🎧🔇"
                     elif member.voice.self_mute:
-                        member_string += f" 🎤🔇"
+                        member_string += " 🎤🔇"
                     members.append(member_string)
                 members_string = "\n".join(sorted(members))
                 embed = discord.Embed(
@@ -382,7 +382,7 @@ class Owner(commands.Cog):
         Shows a list of most used commands on all servers
         """
         commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.command).order_by(func.count('*').desc()).limit(10).all()
-        embed = create_command_usage_embed(commands_used_query, f"Top 10 total used commands")
+        embed = create_command_usage_embed(commands_used_query, "Top 10 total used commands")
         await ctx.send(embed=embed, delete_after=180)
         await ctx.message.delete()
 
