@@ -144,7 +144,7 @@ class Music(commands.Cog):
             playlist = await wavelink.NodePool.get_node().get_playlist(wavelink.YouTubePlaylist, search)
             if playlist is None:
                 return await ctx.reply("No results found.", delete_after=30)
-            embed = self.__queue_youtube_playlist(playlist, player, ctx.author)
+            embed = await self.__queue_youtube_playlist(playlist, player, ctx.author)
 
         else:
             # Get the results for the search from Lavalink.
