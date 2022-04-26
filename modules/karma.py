@@ -261,6 +261,7 @@ class Karma(commands.Cog):
         embed.add_field(name='Top 5 This Week', value=week_board, inline=False)
         await ctx.send(embed=embed)
 
+
     @commands.command(name='checkpost', aliases=['cp'], usage="checkpost <post id>")
     @commands.is_owner()
     async def check_post(self, ctx, post_id):
@@ -285,7 +286,7 @@ class Karma(commands.Cog):
         upvote_reactions = 0
         downvote_reactions = 0
         for reaction in message.reactions:
-            if isinstance(reaction.emoji, discord.Emoji) or isinstance(reaction.emoji, discord.PartialEmoji):
+            if isinstance(reaction.emoji, (discord.Emoji, discord.PartialEmoji)):
                 if reaction.emoji.id in server_upvote_emotes_ids:
                     upvote_reactions += reaction.count-1
                 if reaction.emoji.id in server_downvote_emotes_ids:
@@ -469,10 +470,10 @@ class Karma(commands.Cog):
         if user is None:
             return
         if payload.emoji.id in self.get_query_karma_add(payload.guild_id):
-            self.change_user_karma(user.id, payload.guild_id, 1)
+            await self.change_user_karma(user.id, payload.guild_id, 1)
             await self.change_post_upvotes(payload, 1)
         elif payload.emoji.id in self.get_query_karma_remove(payload.guild_id):
-            self.change_user_karma(user.id, payload.guild_id, -1)
+            await self.change_user_karma(user.id, payload.guild_id, -1)
             await self.change_post_downvotes(payload, 1)
 
     @commands.Cog.listener()
@@ -481,10 +482,10 @@ class Karma(commands.Cog):
         if user is None:
             return
         if payload.emoji.id in self.get_query_karma_add(payload.guild_id):
-            self.change_user_karma(user.id, payload.guild_id, -1) 
+            await self.change_user_karma(user.id, payload.guild_id, -1) 
             await self.change_post_upvotes(payload, -1)
         elif payload.emoji.id in self.get_query_karma_remove(payload.guild_id):
-            self.change_user_karma(user.id, payload.guild_id, 1)
+            await self.change_user_karma(user.id, payload.guild_id, 1)
             await self.change_post_downvotes(payload, -1)
 
     def get_query_karma_add(self, guild_id):
@@ -521,13 +522,19 @@ class Karma(commands.Cog):
             return 0
         return karma.amount
 
-    def change_user_karma(self, user_id, guild_id, amount):
-        # check if user and guild are in the db
-        existing_user = db.session.query(db.karma).filter_by(discord_user_id=user_id).filter_by(discord_server_id=guild_id).first()
+    async def change_user_karma(self, user_id, guild_id, amount):
+        # check if user is in the db
+        existing_user = db.session.query(db.discord_user).filter_by(discord_user_id=user_id).first()
         if existing_user is None:
+            user = await self.bot.fetch_user(user_id)
+            db.session.add(db.discord_user(user))
+        
+        # check if user karma and guild are in the db
+        existing_user_karma = db.session.query(db.karma).filter_by(discord_user_id=user_id).filter_by(discord_server_id=guild_id).first()
+        if existing_user_karma is None:
             db.session.add(db.karma(user_id, guild_id, amount))
         else:
-            existing_user.amount += amount
+            existing_user_karma.amount += amount
         db.session.commit()
 
     async def change_post_upvotes(self, payload, amount):
@@ -653,7 +660,7 @@ class Karma(commands.Cog):
         bets = db.session.query(db.kasino_bet, db.kasino).join(db.kasino, db.kasino.id == db.kasino_bet.kasino_id).filter_by(id=kasino_id).all()
         kasino = db.session.query(db.kasino).filter_by(id=kasino_id).first()
         for bet in bets:
-            self.change_user_karma(bet[0].discord_user_id, bet[1].discord_server_id, bet[0].amount)
+            await self.change_user_karma(bet[0].discord_user_id, bet[1].discord_server_id, bet[0].amount)
             user_karma = self.get_user_karma(bet[0].discord_user_id, bet[1].discord_server_id)
             output = discord.Embed(
                 title=f'**You\'ve been refunded {bet[0].amount} karma.**',
@@ -680,7 +687,7 @@ class Karma(commands.Cog):
             win_ratio = bet[0].amount / total_winner_karma
             win_amount = round(win_ratio * total_kasino_karma)
 
-            self.change_user_karma(bet[0].discord_user_id, bet[1].discord_server_id, win_amount)
+            await self.change_user_karma(bet[0].discord_user_id, bet[1].discord_server_id, win_amount)
             user_karma = self.get_user_karma(bet[0].discord_user_id, bet[1].discord_server_id)
             output = discord.Embed(
                 title=f':tada: **You\'ve won {win_amount} karma!** :tada:',

@@ -514,7 +514,8 @@ class Owner(commands.Cog):
             if db.session.query(db.discord_server).filter_by(discord_server_id=server.id).first() is None:
                 db.session.add(db.discord_server(server))
             for channel in server.channels:
-                db.session.add(db.discord_channel(channel))
+                if db.session.query(db.discord_channel).filter_by(discord_channel_id=channel.id).first() is None:
+                    db.session.add(db.discord_channel(channel))
         db.session.commit()
         for post in db.session.query(db.post).group_by(db.post.discord_user_id).all():
             if db.session.query(db.discord_user).filter_by(discord_user_id=post.discord_user_id).first() is None:
