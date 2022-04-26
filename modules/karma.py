@@ -255,7 +255,7 @@ class Karma(commands.Cog):
             week_board = await self.create_post_leaderboard(weekly_posts)
         
         embed = discord.Embed(title='Top Messages')
-        embed.set_thumbnail(url=ctx.guild.icon.url)
+        embed.set_thumbnail(url=ctx.guild.icon_url)
         embed.add_field(name='Top 5 All Time', value=all_board, inline=False)
         embed.add_field(name='Top 5 This Month', value=month_board, inline=False)
         embed.add_field(name='Top 5 This Week', value=week_board, inline=False)
