@@ -278,7 +278,9 @@ class Karma(commands.Cog):
         server_downvote_emotes = query.filter_by(action=1).all()
 
         server_upvote_emotes_ids = [emote.discord_emote_id for emote in server_upvote_emotes]
+        server_upvote_emotes_ids.append(store.UPVOTE_EMOTE_ID)
         server_downvote_emotes_ids = [emote.discord_emote_id for emote in server_downvote_emotes]
+        server_downvote_emotes_ids.append(store.DOWNVOTE_EMOTE_ID)
 
         channel = await self.bot.fetch_channel(post.discord_channel_id)
         message = await channel.fetch_message(post.discord_message_id)
