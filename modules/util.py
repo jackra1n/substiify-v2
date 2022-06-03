@@ -39,7 +39,7 @@ class Util(commands.Cog):
         if ctx.author.voice is None:
             return await ctx.send('You must be in a voice channel to use this command.')
 
-        voice_members = ctx.author.voice.channel.members
+        voice_members = [ member for member in ctx.author.voice.channel.members if not member.bot ]
         if len(voice_members) < 4:
             return await ctx.send('You must have at least 4 members in your voice channel to use this command.')
         
