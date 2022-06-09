@@ -38,6 +38,19 @@ class Karma(commands.Cog):
             embed = discord.Embed(description=f'Votes are **NOT enabled** in {ctx.channel.mention}!', color=0xf66045)
             await ctx.send(embed=embed, delete_after=10)
 
+
+    @votes.command(name='list')
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    async def list_votes(self, ctx):
+        """
+        Lists all the votes that are enabled in the server
+        """
+        upvote_channels = db.session.query(db.discord_channel).filter_by(discord_server_id=ctx.guild.id).filter_by(upvote=True).all()
+        channels_string = ''.join([ f'{x.discord_channel_id} ({x.channel_name})\n' for x in upvote_channels ])
+        embed = discord.Embed(description=f'Votes are enabled in the following channels:\n{channels_string}', color=0x23b40c)
+        await ctx.send(embed=embed, delete_after=20)
+
+
     @votes.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def setup(self, ctx, channel: discord.TextChannel = None):
@@ -48,10 +61,9 @@ class Karma(commands.Cog):
 
         If users click the reactions user karma will be updated.
         """
-        await ctx.message.delete()
         channel = ctx.channel if channel is None else channel
         if channel.id not in self.vote_channels:
-            self.vote_channels = self.vote_channels.append(channel.id)
+            self.vote_channels.append(channel.id)
         vote_channel = db.get_discord_channel(channel)
         if not vote_channel.upvote:
             vote_channel.upvote = True
@@ -68,6 +80,7 @@ class Karma(commands.Cog):
             color=0x23b40c
         )
         await ctx.send(embed=embed)
+        await ctx.message.delete()
 
     @votes.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
