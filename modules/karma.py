@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import shutil
 from datetime import datetime, timedelta
@@ -33,10 +34,9 @@ class Karma(commands.Cog):
         await ctx.message.delete()
         if ctx.channel.id in self.vote_channels:
             embed = discord.Embed(description=f'Votes are **ALREADY enabled** in {ctx.channel.mention}!', color=0x23b40c)
-            await ctx.send(embed=embed, delete_after=10)
         else:
             embed = discord.Embed(description=f'Votes are **NOT enabled** in {ctx.channel.mention}!', color=0xf66045)
-            await ctx.send(embed=embed, delete_after=10)
+        await ctx.send(embed=embed, delete_after=10)
 
 
     @votes.command(name='list')
@@ -118,10 +118,7 @@ class Karma(commands.Cog):
         if user.bot:
             return
         user_karma = db.session.query(db.karma).filter_by(discord_user_id=user.id).filter_by(discord_server_id=ctx.guild.id).first()
-        if user_karma is None:
-            user_karma = 0
-        else:
-            user_karma = user_karma.amount
+        user_karma = 0 if user_karma is None else user_karma.amount
         embed = discord.Embed(title=f'Karma - {ctx.guild.name}', description=f'{user.mention} has {user_karma} karma.')
         await ctx.send(embed=embed, delete_after=120)
         await ctx.message.delete()
@@ -354,7 +351,6 @@ class Karma(commands.Cog):
     async def kasino_close(self, ctx, kasino_id: int, winner: int):
         author_img = ctx.author.avatar_url
 
-        
         if not self.is_kasino_open(kasino_id):
             return await ctx.author.send(f'Kasino with ID {kasino_id} is not open.')
 
@@ -362,12 +358,12 @@ class Karma(commands.Cog):
         if kasino.discord_server_id != ctx.guild.id:
             return await ctx.send(f'Kasino with ID {kasino_id} is not in this server.', delete_after=120)
 
-        if winner == 3:
-            await self.abort_kasino(kasino_id)
-        elif winner in [1, 2]:
+        if winner in [1, 2]:
             await self.win_kasino(kasino_id, winner)
+        elif winner == 3:
+            await self.abort_kasino(kasino_id)
         else:
-            return await ctx.author.send(f'Winner has to be 1, 2 or 3 (abort)')
+            return await ctx.author.send('Winner has to be 1, 2 or 3 (abort)')
 
         await self.send_conclusion(ctx, kasino_id, winner, ctx.author, author_img)
         await self.remove_kasino(kasino_id)
@@ -377,10 +373,9 @@ class Karma(commands.Cog):
     async def kasino_close_error(self, ctx, error):
         if isinstance(error, commands.errors.MissingRequiredArgument):
             await ctx.send(f'You didn\'t provide a required argument! Correct usage is `{self.bot.command_prefix}kasino close <kasino_id> <winning_option>`', delete_after=20)
-            await ctx.message.delete()
         elif isinstance(error, commands.errors.BadArgument):
-            await ctx.send(f'Bad argument.', delete_after=20)
-            await ctx.message.delete()
+            await ctx.send('Bad argument.', delete_after=20)
+        await ctx.message.delete()
 
 
     @kasino.command(name='lock', usage="lock <kasino_id>")
@@ -402,69 +397,67 @@ class Karma(commands.Cog):
             return await ctx.send(f'Kasino with ID `{kasino_id}` is not open.')
         better_karma = db.session.query(db.karma).filter_by(discord_user_id=ctx.author.id).filter_by(discord_server_id=ctx.guild.id).first()
         if better_karma is None:
-            return await ctx.send(f'You do not have any karma.')
+            return await ctx.send('You do not have any karma.')
 
         if option not in [1, 2]:
-            output = discord.Embed(
+            output_embed = discord.Embed(
                 title=f'Wrong usage. Correct usage is `{self.bot.command_prefix}kasino bet <kasino_id> <amount> <1 or 2>`',
                 color=discord.Colour.from_rgb(209, 25, 25)
             )
-            return await ctx.author.send(embed=output, delete_after=30)
+            return await ctx.author.send(embed=output_embed, delete_after=30)
         if amount == "all":
             amount = self.get_user_karma(ctx.author.id, ctx.guild.id)
         else:
             amount = int(amount)
         if better_karma.amount < amount:
-            output = discord.Embed(
+            output_embed = discord.Embed(
                 title=f'You don\'t have that much karma. Your karma: {better_karma.amount}',
                 color=discord.Colour.from_rgb(209, 25, 25)
             )
-            return await ctx.author.send(embed=output, delete_after=30)
+            return await ctx.author.send(embed=output_embed, delete_after=30)
 
         if not self.is_kasino_open(kasino_id):
-            output = discord.Embed(
+            output_embed = discord.Embed(
                 title=f'Kasino with ID {kasino_id} is not open.',
                 color=discord.Colour.from_rgb(209, 25, 25)
             )
-            return await ctx.author.send(embed=output, delete_after=30)
+            return await ctx.author.send(embed=output_embed, delete_after=30)
 
         if self.is_kasino_locked(kasino_id):
-            output = discord.Embed(
+            output_embed = discord.Embed(
                 title=f'kasino with ID {kasino_id} is locked.',
                 color=discord.Colour.from_rgb(209, 25, 25)
             )
-            return await ctx.author.send(embed=output, delete_after=30)
-            
+            return await ctx.author.send(embed=output_embed, delete_after=30)
+
         if amount < 1:
-            output = discord.Embed(
+            output_embed = discord.Embed(
                 title='You tried to bet < 1 karma! Silly you!',
                 color=discord.Colour.from_rgb(209, 25, 25)
             )
-            return await ctx.author.send(embed=output, delete_after=30)
+            return await ctx.author.send(embed=output_embed, delete_after=30)
 
+        output_embed = discord.Embed(color=discord.Colour.from_rgb(52, 79, 235))
+        output = ''
+        
         if self.has_user_bet(kasino_id, ctx.author.id):
             if not self.is_same_bet_option(kasino_id, ctx.author.id, option):
-                output = discord.Embed(
-                    title=f'You can\'t change your choice on the bet with id {kasino_id}. No chickening out!',
-                    color=discord.Colour.from_rgb(209, 25, 25)
-                )
+                output_embed.title = f'You can\'t change your choice on the bet with id {kasino_id}. No chickening out!'
+                output_embed.color= discord.Colour.from_rgb(209, 25, 25)
                 return await ctx.author.send(embed=output)
             total_bet = self.increase_bet(kasino_id, ctx.author.id, ctx.guild.id, amount)
-            output = discord.Embed(
-                title=f'**Successfully increased bet on option {option}, on kasino with ID {kasino_id} for {amount} karma! Total bet is now: {total_bet} Karma**',
-                color=discord.Colour.from_rgb(52, 79, 235),
-                description=f'Remaining karma: {better_karma.amount}'
-            )
-            await ctx.author.send(embed=output)
+            output = 'increased'
         else:
             self.add_bet(kasino_id, ctx.author.id, ctx.guild.id, amount, option)
-            user_karma = self.get_user_karma(ctx.author.id, ctx.guild.id)
-            output = discord.Embed(
-                title=f'**Successfully added bet on option {option}, on kasino with ID {kasino_id} for {amount} karma! Total bet is now: {amount} Karma**',
-                color=discord.Colour.from_rgb(52, 79, 235),
-                description=f'Your remaining karma: {user_karma}'
-            )
-            await ctx.author.send(embed=output)
+            total_bet = amount
+            output = 'added'
+
+        user_karma = self.get_user_karma(ctx.author.id, ctx.guild.id)
+        output_embed.title = f'**Successfully {output} bet on option {option}, on kasino with ID {kasino_id} for {amount} karma! Total bet is now: {total_bet} Karma**'
+        output_embed.color=discord.Colour.from_rgb(52, 79, 235)
+        output_embed.description=f'Remaining karma: {user_karma}'
+
+        await ctx.author.send(embed=output)
         await self.update_kasino(kasino_id)
 
 
@@ -623,11 +616,9 @@ class Karma(commands.Cog):
         kasino = db.session.query(db.kasino).filter_by(id=kasino_id).first()
         if kasino is None:
             return
-        try:
+        with contextlib.suppress(discord.errors.NotFound):
             kasino_msg = await (await self.bot.fetch_channel(kasino.discord_channel_id)).fetch_message(kasino.discord_message_id)
             await kasino_msg.delete()
-        except discord.errors.NotFound:
-            pass
         db.session.delete(kasino)
         bets = db.session.query(db.kasino_bet).filter_by(kasino_id=kasino_id).all()
         for bet in bets:
@@ -641,10 +632,10 @@ class Karma(commands.Cog):
         Path(backup_folder).mkdir(parents=True, exist_ok=True)
         shutil.copy(store.DB_PATH, f"{backup_folder}/backup_{now_time_string}_{kasino_id}.sqlite")
 
-    def has_user_bet(self, kasino_id: int, user_id: int):
+    def has_user_bet(self, kasino_id: int, user_id: int) -> bool:
         return db.session.query(db.kasino_bet).filter_by(discord_user_id=user_id).filter_by(kasino_id=kasino_id).first() is not None
 
-    def is_same_bet_option(self, kasino_id: int, user_id: int, option: int):
+    def is_same_bet_option(self, kasino_id: int, user_id: int, option: int) -> bool:
         return db.session.query(db.kasino_bet).filter_by(discord_user_id=user_id).filter_by(kasino_id=kasino_id).first().option == option
 
     def add_bet(self, kasino_id: int, user_id: int, server_id: int, amount: int, option: int):
@@ -653,7 +644,7 @@ class Karma(commands.Cog):
         user_karma.amount -= amount
         db.session.commit()
 
-    def increase_bet(self, kasino_id: int, user_id: int, server_id: int, increase_amount: int):
+    def increase_bet(self, kasino_id: int, user_id: int, server_id: int, increase_amount: int) -> int:
         existing_bet = db.session.query(db.kasino_bet).filter_by(discord_user_id=user_id).filter_by(kasino_id=kasino_id).first()
         existing_bet.amount += increase_amount
         user_karma = db.session.query(db.karma).filter_by(discord_user_id=user_id).filter_by(discord_server_id=server_id).first()
@@ -661,17 +652,17 @@ class Karma(commands.Cog):
         db.session.commit()
         return existing_bet.amount
 
-    def is_kasino_open(self, kasino_id: int):
+    def is_kasino_open(self, kasino_id: int) -> bool:
         return db.session.query(db.kasino).filter_by(id=kasino_id).first() is not None
 
-    def is_kasino_locked(self, kasino_id: int):
+    def is_kasino_locked(self, kasino_id: int) -> bool:
         return db.session.query(db.kasino).filter_by(id=kasino_id).first().locked
 
-    def lock_kasino(self, kasino_id: int):
+    def lock_kasino(self, kasino_id: int) -> None:
         db.session.query(db.kasino).filter_by(id=kasino_id).update({'locked': True})
         db.session.commit()
     
-    async def abort_kasino(self, kasino_id: int):
+    async def abort_kasino(self, kasino_id: int) -> None:
         bets = db.session.query(db.kasino_bet, db.kasino).join(db.kasino, db.kasino.id == db.kasino_bet.kasino_id).filter_by(id=kasino_id).all()
         kasino = db.session.query(db.kasino).filter_by(id=kasino_id).first()
         for bet in bets:
@@ -684,7 +675,6 @@ class Karma(commands.Cog):
                             f'Remaining karma: {user_karma}'
             )
             await (await self.bot.fetch_user(bet[0].discord_user_id)).send(embed=output)
-        return True
 
     async def win_kasino(self, kasino_id: int, winning_option: int):
         qry = db.session.query(db.kasino_bet, db.kasino).join(db.kasino, db.kasino.id == db.kasino_bet.kasino_id)
@@ -734,14 +724,8 @@ class Karma(commands.Cog):
         aAmount = 0 if aAmount is None else aAmount
         bAmount = 0 if bAmount is None else bAmount
 
-        if aAmount != 0:
-            aOdds = float(aAmount + bAmount) / aAmount
-        else:
-            aOdds = 1.0
-        if bAmount != 0:
-            bOdds = float(aAmount + bAmount) / bAmount
-        else:
-            bOdds = 1.0
+        aOdds = float(aAmount + bAmount) / aAmount if aAmount != 0 else 1.0
+        bOdds = float(aAmount + bAmount) / bAmount if bAmount != 0 else 1.0
 
         # CREATE MESSAGE
         description = f"The kasino has been opened! Place your bets using `{self.bot.command_prefix}kasino bet {kasino.id} <amount> <1 or 2>`"

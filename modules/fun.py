@@ -276,18 +276,18 @@ class Fun(commands.Cog):
         await ctx.channel.send(
             warrior2.user.mention + ', what would like to do? `punch`,`defend`, or `end`?\nType your choice out in chat as it is displayed!')
 
+
     async def sendWinnerEmbed(self, winner, ctx):
         winEmbedMessage = discord.Embed(
             title='STOP! STOP! STOP! THE FIGHT IS OVER!!!',
-            description='**' + winner.user.display_name +
-                '** wins with just `' + str(winner.Health) + ' HP` left!',
-            color=discord.Colour.teal()
-        )
+            description=f'**{winner.user.display_name}** wins with just `{str(winner.Health)} HP` left!',
+            color=discord.Colour.teal())
         await ctx.channel.send(embed=winEmbedMessage)
+
 
     def checkClassChooser(self, author):
         def inner_check(message):
-            return (message.content == 'berserker' or message.content == 'tank' or message.content == 'wizard') and message.author == author
+            return message.content in ['berserker', 'tank', 'wizard'] and message.author == author
 
         return inner_check
 
@@ -336,10 +336,10 @@ class Fun(commands.Cog):
             return True
 
     async def calculateDamage(self, ctx, warrior1, warrior2, damage):
-        hit_response = ['cRaZyy', 'pOwerful', 'DEADLY', 'dangerous', 'deathly', 'l33t', 'amazing']
         if damage <= 0:
             await ctx.channel.send("**" + warrior2.user.display_name.strip('<>') + "** blocked the attack!")
         else:
+            hit_response = ['cRaZyy', 'pOwerful', 'DEADLY', 'dangerous', 'deathly', 'l33t', 'amazing']
             await ctx.channel.send('**' + warrior1.user.display_name.strip('<>') + '** lands a ' + random.choice(
                 hit_response) + ' hit on **' + warrior2.user.display_name.strip('<>') + '** dealing `' + str(damage) + '` damage!')
             warrior2.Health -= damage

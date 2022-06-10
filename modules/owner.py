@@ -45,7 +45,7 @@ class Owner(commands.Cog):
         """
         Shuts down the bot. Made this in case something goes wrong.
         """
-        embed = discord.Embed(description=f'Shutting down...', color=0xf66045)
+        embed = discord.Embed(description='Shutting down...', color=0xf66045)
         await ctx.send(embed=embed)
         await self.bot.close()
 
@@ -289,9 +289,7 @@ class Owner(commands.Cog):
         Lists all the channels in a server.
         """
         guild = self.bot.get_guild(guild_id)
-        channels = ''
-        for channel in guild.channels:
-            channels += f'{channel.name}\n'
+        channels = ''.join(f'{channel.name}\n' for channel in guild.channels)
         embed = discord.Embed(
             title='Channel Infos',
             color=discord.Colour.blurple()

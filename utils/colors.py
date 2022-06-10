@@ -12,7 +12,7 @@ class colors:
     white = "37m"
 
 def print_colored(text, color=colors.white, is_bold=False):
-    print(f'{pref}{1 if is_bold else 0};{color}' + text + reset)
+    print(get_colored(text, color, is_bold))
 
 def get_colored(text, color=colors.white, is_bold=False):
-    return f'{pref}{1 if is_bold else 0};{color}' + text + reset
+    return f'{pref}{int(is_bold)};{color}{text}{reset}'
