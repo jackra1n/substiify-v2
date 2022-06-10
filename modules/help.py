@@ -33,16 +33,14 @@ class Help(commands.MinimalHelpCommand):
         sub_commands = [c.name for c in group.commands if not c.hidden]
         embed.add_field(name="Subcommands", value=f"```{', '.join(sub_commands)}```")
         if len(command_chain := group.full_parent_name) > 0:
-            command_chain = group.full_parent_name + " "
+            command_chain = f"{group.full_parent_name} "
         embed.set_footer(text=f"This command has subcommands. Check their help page with `{self.clean_prefix}help {command_chain}{group.name} <subcommand>`")
         await self.context.send(embed=embed)
 
     async def cog_help_embed(self, cog: Optional[commands.Cog]) -> Embed:
         if cog is None:
-            return await self._help_embed(
-                title=f"No category",
-                command_set=self.get_bot_mapping()[None]
-            )
+            return await self._help_embed(title="No category", command_set=self.get_bot_mapping()[None])
+
         emoji = getattr(cog, "COG_EMOJI", None)
         return await self._help_embed(
             title=f"{emoji} {cog.qualified_name}" if emoji else cog.qualified_name,
@@ -77,8 +75,7 @@ class Help(commands.MinimalHelpCommand):
         elif mapping:
             # add a short description of commands in each cog
             for cog, cmds in sorted(mapping.items(), key=lambda e: len(e[1]), reverse=True):
-                cmds = [ c for c in cmds if not c.hidden ]
-                if len(cmds) > 0:
+                if cmds := [c for c in cmds if not c.hidden]:
                     cmd_list = f"```md\n"
                     for com in sorted(cmds, key=lambda e: e.name):
                         prefix = "*" if await self.can_run_cmd(com) else ">"
@@ -113,7 +110,7 @@ class Help(commands.MinimalHelpCommand):
         else:
             usage = command.usage
             if len(command.full_parent_name) > 0:
-                usage = command.full_parent_name + " " + usage
+                usage = f"{command.full_parent_name} {usage}"
             usage = self.clean_prefix + usage
 
         embed = Embed(title=command_name, color=0xE3621E)

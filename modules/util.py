@@ -490,14 +490,13 @@ def time_up(t):
     elif 3600 > t > 60:
         minutes = t // 60
         return f"{int(minutes)} minutes"
-    else:
-        hours = t // 3600  # Seconds divided by 3600 gives amount of hours
-        minutes = (t % 3600) // 60  # The remaining seconds are looked at to see how many minutes they make up
-        if hours >= 24:
-            days = hours // 24
-            hours = hours % 24
-            return f"{int(days)} days, {int(hours)} hours, {int(minutes)} minutes"
-        return f"{int(hours)} hours, {int(minutes)} minutes"
+    hours = t // 3600  # Seconds divided by 3600 gives amount of hours
+    minutes = (t % 3600) // 60  # The remaining seconds are looked at to see how many minutes they make up
+    if hours >= 24:
+        days = hours // 24
+        hours = hours % 24
+        return f"{int(days)} days, {int(hours)} hours, {int(minutes)} minutes"
+    return f"{int(hours)} hours, {int(minutes)} minutes"
 
 def format_bytes(size: int) -> str:
     # 2**10 = 1024
