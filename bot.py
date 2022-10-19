@@ -6,13 +6,15 @@ import platform
 import discord
 from discord.ext import commands
 
-from utils import db, store, util
+from utils import db, store, util, log_util
 from utils.colors import colors, get_colored
-from utils.db import create_database
+from helper.CustomLogFormatter import CustomLogFormatter
+
 
 util.prepareFiles()
-create_database()
-logger = logging.getLogger(__name__)
+db.create_database()
+log_util.setup_file_handler()
+logger = logging.getLogger('discord')
 
 with open(store.SETTINGS_PATH, "r") as settings:
     settings = json.load(settings)
@@ -23,13 +25,13 @@ if not settings['token']:
 
 prefix = settings["prefix"]
 initial_extensions = (
-    'cogs.free_games',
-    'cogs.fun',
-    'cogs.help',
-    'cogs.karma',
-    'cogs.music',
-    'cogs.owner',
-    'cogs.util'
+    'free_games',
+    'fun',
+    'help',
+    'karma',
+    'music',
+    'owner',
+    'util'
 )
 
 
@@ -49,9 +51,10 @@ class Substiify(commands.Bot):
         )
 
     async def setup_hook(self):
+        cogs_folder = 'modules'
         for extension in initial_extensions:
             try:
-                await self.load_extension(extension)
+                await self.load_extension(f"{cogs_folder}.{extension}")
             except Exception as e:
                 exc = f'{type(e).__name__}: {e}'
                 logger.warning(f'Failed to load extension {extension}\n{exc}')
@@ -87,6 +90,7 @@ class Substiify(commands.Bot):
         logger.error(f'[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]')
 
 
-bot = Substiify()
+custom_formatter = CustomLogFormatter()
 
-bot.run(settings['token'])
+bot = Substiify()
+bot.run(settings['token'], log_formatter=custom_formatter)

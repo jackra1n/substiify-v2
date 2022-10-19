@@ -5,7 +5,7 @@ import aiohttp
 import discord
 from discord.ext import commands
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('discord')
 
 EPIC_STORE_FREE_GAMES_API = "https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions"
 EPIC_GAMES_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Epic_Games_logo.svg/50px-Epic_Games_logo.svg.png"

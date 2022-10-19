@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from utils import store
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('discord')
 
 engine = create_engine(f'sqlite:///{store.DB_PATH}')
 session = sessionmaker(bind=engine)()

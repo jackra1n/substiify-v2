@@ -9,7 +9,7 @@ import vacefron
 from discord.ext import commands
 from discord.ext.commands.cooldowns import BucketType
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('discord')
 
 class Fun(commands.Cog):
 

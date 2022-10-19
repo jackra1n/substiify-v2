@@ -10,7 +10,7 @@ from sqlalchemy import func
 
 from utils import db, store
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('discord')
 
 
 class Owner(commands.Cog):
