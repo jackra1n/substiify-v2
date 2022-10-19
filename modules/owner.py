@@ -57,7 +57,7 @@ class Owner(commands.Cog):
         Fetches the lates git commit and reloads the bot.
         """
         await ctx.message.add_reaction('<:greenTick:876177251832590348>')
-        subprocess.run(["/bin/git","pull","--no-edit"])
+        subprocess.run(["/bin/git", "pull", "--no-edit"])
         try:
             for cog in self.get_modules():
                 self.bot.reload_extension(f'modules.{cog}')
@@ -151,12 +151,12 @@ class Owner(commands.Cog):
             channel = await self.bot.fetch_channel(channel_id)
             if channel is None:
                 return await ctx.send("Channel not found", delete_after=30)
-            #check if has send_message permission
+            # check if has send_message permission
             if not channel.permissions_for(ctx.me).send_messages and not ignore_permissions:
                 return await ctx.send("I don't have permission to send messages in that channel")
             self.message_channel = channel
             await ctx.message.delete()
-            return await ctx.send(f"Channel set to {channel.mention}" , delete_after=30)
+            return await ctx.send(f"Channel set to {channel.mention}", delete_after=30)
 
         if self.message_server is None:
             return await ctx.send("Please set a server first", delete_after=30)
@@ -236,7 +236,6 @@ class Owner(commands.Cog):
             await ctx.send("Message not sent", delete_after=30)
         await ctx.message.delete()
 
-
     @commands.is_owner()
     @commands.group()
     async def server(self, ctx):
@@ -298,40 +297,6 @@ class Owner(commands.Cog):
         embed.add_field(name='Name', value=channels, inline=True)
         await ctx.send(embed=embed, delete_after=120)
 
-
-    @commands.is_owner()
-    @commands.command(hidden=True)
-    async def checkVCs(self, ctx, server_id : int):
-        if server_id is None:
-            return await ctx.send("Please provide a server ID to be checked", delete_after = 5)
-        server = self.bot.get_guild(server_id)
-        if server is None:
-            return await ctx.send("Server not found", delete_after = 5)
-        if len(server.voice_channels) == 0:
-            return await ctx.send(f"No voice channels on {server.name}", delete_after = 20)
-        for vc in server.voice_channels:
-            if len(vc.members) > 0:
-                members = []
-                for member in vc.members:
-                    member_string = f"{member.display_name}"
-                    if member.voice.self_stream:
-                        member_string += " 🔴"
-                    if member.voice.self_video:
-                        member_string += " 📷"
-                    if member.voice.self_deaf:
-                        member_string += " 🎧🔇"
-                    elif member.voice.self_mute:
-                        member_string += " 🎤🔇"
-                    members.append(member_string)
-                members_string = "\n".join(sorted(members))
-                embed = discord.Embed(
-                    title = vc.name,
-                    description = members_string,
-                    colour = discord.Colour.blurple()
-                )
-                await ctx.send(embed=embed)
-        await ctx.message.delete()
-
     @commands.group()
     @commands.is_owner()
     async def version(self, ctx):
@@ -360,11 +325,10 @@ class Owner(commands.Cog):
         await ctx.send(embed=embed, delete_after=10)
 
     def get_modules(self):
-        filenames = next(walk("modules"), (None, None, []))[2] 
+        filenames = next(walk("modules"), (None, None, []))[2]
         filenames.remove(path.basename(__file__))
-        return [name.replace('.py','') for name in filenames]
+        return [name.replace('.py', '') for name in filenames]
 
-    
     @commands.group(name="usage", invoke_without_command=True)
     async def usage(self, ctx):
         """
@@ -376,7 +340,7 @@ class Owner(commands.Cog):
         await ctx.message.delete()
 
     @usage.command(name="all")
-    async def usage_all(self, ctx): 
+    async def usage_all(self, ctx):
         """
         Shows a list of most used commands on all servers
         """
@@ -418,48 +382,6 @@ class Owner(commands.Cog):
         embed.add_field(name="Count", value=commands_count, inline=True)
         await ctx.send(embed=embed, delete_after=30)
         await ctx.message.delete()
-
-    @commands.is_owner()
-    @commands.command(name="invite", hidden=True)
-    async def server_invite(self, ctx, guild_id: int):
-        """
-        Creates an invite for the bot
-        """
-        guild = self.bot.get_guild(guild_id)
-        if guild is None:
-            return await ctx.send("Server not found", delete_after = 5)
-
-        if not guild.me.guild_permissions.create_instant_invite:
-            return await ctx.send("I don't have the permissions to create an invite on this server", delete_after = 5)
-
-        channels = await guild.fetch_channels()
-        text_channels = [channel for channel in channels if type(channel) == discord.channel.TextChannel and channel.permissions_for(guild.me).view_channel]
-        if len(channels) == 0:
-            return await ctx.send("No text channels found in this server", delete_after=30)
-        channel_string = ""
-        for index, channel in enumerate(text_channels):
-            channel_string += f"{index}. {channel.name}\n"
-        embed = discord.Embed(title="Channels", description=channel_string, color=0xf66045)
-        await ctx.send(embed=embed, delete_after=120)
-
-        def check(m):
-            return m.author == ctx.author and m.channel == ctx.channel
-
-        try:
-            message = await self.bot.wait_for('message', timeout=60, check=check)
-        except TimeoutError:
-            return await ctx.send("You didn't answer the questions in Time", delete_after=30)
-
-        if message.content.isdigit():
-            channel = await guild.fetch_channel(text_channels[int(message.content)].id)
-            if channel is not None:
-                try:
-                    invite = await channel.create_invite(max_age=300, max_uses=1)
-                except:
-                    return await ctx.send("Failed to create invite", delete_after=30)
-                await ctx.send(f'Invite for `{guild.name}/{channel.name}`:\n{invite.url}', delete_after=30)
-            else:
-                await ctx.send("That channel doesn't exist", delete_after=30)
 
     @commands.is_owner()
     @commands.group(name="db", invoke_without_command=True, hidden=True)
@@ -530,7 +452,6 @@ class Owner(commands.Cog):
         await ctx.send("Database populated", delete_after=30)
 
 
-
 def create_command_usage_embed(commands_used_query, embed_title):
     commands_used = ""
     commands_count = ""
@@ -541,6 +462,7 @@ def create_command_usage_embed(commands_used_query, embed_title):
     embed.add_field(name="Command", value=commands_used, inline=True)
     embed.add_field(name="Count", value=commands_count, inline=True)
     return embed
+
 
 async def setup(bot):
     await bot.add_cog(Owner(bot))

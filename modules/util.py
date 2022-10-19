@@ -76,7 +76,7 @@ class Util(commands.Cog):
         After calling this command, you will be asked to enter the prize, the time, and the channel.
         To set the host of the giveaway, specify the optional parameter `hosted_by`.
 
-        Example: 
+        Example:
         `<<giveaway create` or `<<giveaway create @user`
         """
         if hosted_by is None:
@@ -107,13 +107,13 @@ class Util(commands.Cog):
             await question_message.delete()
             try:
                 await message.delete()
-            except:
+            except Exception:
                 pass
 
         # Check if Channel Id is valid
         try:
             channel_id = int(answers[0][2:-1])
-        except Exception as e:
+        except Exception:
             await ctx.send(f"The Channel provided was wrong. The channel should be {ctx.channel.mention}")
             return
 
@@ -135,7 +135,7 @@ class Util(commands.Cog):
         end = (datetime.now() + timedelta(seconds=time))
         end_string = end.strftime('%d.%m.%Y %H:%M')
         embed.description += f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
-        
+
         embed.set_footer(text=f"Giveway ends on {end_string}")
         newMsg = await channel.send(embed=embed)
         await newMsg.add_reaction("🎉")
@@ -151,7 +151,7 @@ class Util(commands.Cog):
         """
         try:
             msg = await ctx.fetch_message(message_id)
-        except Exception as e:
+        except Exception:
             await ctx.send("The message couldn't be found in this channel")
             return
         users = await msg.reactions[0].users().flatten()
@@ -198,7 +198,7 @@ class Util(commands.Cog):
             channel = self.bot.get_channel(giveaway.discord_channel_id)
             try:
                 message = await channel.fetch_message(giveaway.discord_message_id)
-            except discord.NotFound as e:
+            except discord.NotFound:
                 db.session.delete(giveaway)
                 db.session.commit()
                 return await channel.send("Could not find the giveaway message! Deleting the giveaway.", delete_after=180)
@@ -238,9 +238,11 @@ class Util(commands.Cog):
         return timeVal * time_dict[unit]
 
     def create_giveaway_embed(self, author: discord.Member, prize):
-        embed = discord.Embed(title=":tada: Giveaway :tada:",
-                        description=f"Win **{prize}**!",
-                        color=0x00FFFF)
+        embed = discord.Embed(
+            title=":tada: Giveaway :tada:",
+            description=f"Win **{prize}**!",
+            color=0x00FFFF
+        )
         host = author.mention if isinstance(author, discord.Member) else author
         embed.add_field(name="Hosted By:", value=host)
         return embed
@@ -354,13 +356,10 @@ class Util(commands.Cog):
         await message.edit(embed=embed)
 
     @bug.error
-    async def command_error(self, ctx, error):
-        await self._cooldown_error(ctx, error)
-
     @suggestion.error
     async def command_error(self, ctx, error):
         await self._cooldown_error(ctx, error)
-        
+
     async def _cooldown_error(self, ctx, error):
         if isinstance(error, commands.CommandOnCooldown):
             em = discord.Embed(
@@ -390,7 +389,7 @@ class Util(commands.Cog):
         embed.set_image(url=member.avatar)
         await ctx.channel.send(embed=embed)
 
-    @commands.group(aliases=['c'], invoke_without_command = True)
+    @commands.group(aliases=['c'], invoke_without_command=True)
     @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
     async def clear(self, ctx, amount: int = None):
         """
@@ -422,7 +421,6 @@ class Util(commands.Cog):
             for message in bots_messages:
                 await message.delete()
                 await asyncio.sleep(0.75)
-        
 
     @clear.error
     async def clear_error(self, ctx, error):
@@ -457,7 +455,7 @@ class Util(commands.Cog):
         """
         Shows different technical information about the bot
         """
-        bot_time = time_up((datetime.now() - store.SCRIPT_START).total_seconds()) #uptime of the bot
+        bot_time = time_up((datetime.now() - store.SCRIPT_START).total_seconds())  # uptime of the bot
         last_commit_date = subprocess.check_output(['git', 'log', '-1', '--date=format:"%Y/%m/%d"', '--format=%ad']).decode('utf-8').strip().strip('"')
         cpu_percent = psutil.cpu_percent()
         ram = psutil.virtual_memory()
@@ -473,7 +471,7 @@ class Util(commands.Cog):
             f'**Version:** `{bot_version}` | **Updated:** `{last_commit_date}`\n' \
             f'**Python:** `{platform.python_version()}` | **discord.py:** `{discord.__version__}`\n\n' \
             f'**CPU:** `{cpu_percent}%` | **RAM:** `{ram_used} ({ram_percent}%)`\n\n' \
-            f'**Made by:** <@{self.bot.owner_id}>' 
+            f'**Made by:** <@{self.bot.owner_id}>'
 
         embed = discord.Embed(
             title=f'Info about {self.bot.user.display_name}',
@@ -500,11 +498,12 @@ def time_up(t):
         return f"{int(days)} days, {int(hours)} hours, {int(minutes)} minutes"
     return f"{int(hours)} hours, {int(minutes)} minutes"
 
+
 def format_bytes(size: int) -> str:
     # 2**10 = 1024
     power = 2**10
     n = 0
-    power_labels = {0 : '', 1: 'KB', 2: 'MB', 3: 'GB', 4: 'TB'}
+    power_labels = {0: '', 1: 'KB', 2: 'MB', 3: 'GB', 4: 'TB'}
     while size > power:
         size /= power
         n += 1

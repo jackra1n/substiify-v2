@@ -76,7 +76,7 @@ class Help(commands.MinimalHelpCommand):
             # add a short description of commands in each cog
             for cog, cmds in sorted(mapping.items(), key=lambda e: len(e[1]), reverse=True):
                 if cmds := [c for c in cmds if not c.hidden]:
-                    cmd_list = f"```md\n"
+                    cmd_list = "```md\n"
                     for com in sorted(cmds, key=lambda e: e.name):
                         prefix = "*" if await self.can_run_cmd(com) else ">"
                         cmd_list += f"{prefix} {com}\n"
