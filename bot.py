@@ -6,10 +6,9 @@ import platform
 import discord
 from discord.ext import commands
 
-from utils import db, store, util, log_util
-from utils.colors import colors, get_colored
 from helper.CustomLogFormatter import CustomLogFormatter
-
+from utils import db, log_util, store, util
+from utils.colors import colors, get_colored
 
 util.prepareFiles()
 db.create_database()
