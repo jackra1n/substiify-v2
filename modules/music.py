@@ -345,7 +345,7 @@ class Music(commands.Cog):
         if isinstance(error, NoPlayerFound):
             await ctx.send('No player found', delete_after=30)
 
-    @queue.command(aliases=['clear'])
+    @queue.command(name='clear')
     async def queue_clear(self, ctx):
         """
         Clears the queue.
