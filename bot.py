@@ -7,12 +7,11 @@ import discord
 from discord.ext import commands
 
 from helper.CustomLogFormatter import CustomLogFormatter
-from utils import db, log_util, store, util
+from utils import db, store, util
 from utils.colors import colors, get_colored
 
 util.prepareFiles()
 db.create_database()
-log_util.setup_file_handler()
 logger = logging.getLogger('discord')
 
 with open(store.SETTINGS_PATH, "r") as settings:
@@ -80,7 +79,7 @@ class Substiify(commands.Bot):
         db.session.commit()
 
     async def on_command_error(self, ctx, error):
-        if 'is not found' in str(error):
+        if isinstance(error, commands.CommandNotFound):
             return
         if isinstance(error, commands.CheckFailure):
             await ctx.send('You do not have permission to use this command.')

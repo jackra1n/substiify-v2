@@ -89,7 +89,7 @@ class FreeGames(commands.Cog):
                 embed.add_field(name="Price", value=f"~~`{game.original_price}`~~ ⟶ `{game.discount_price}`", inline=False)
                 embed.set_image(url=f"{game.cover_image_url}")
 
-                await ctx.channel.send(embed=embed)
+                await ctx.send(embed=embed)
         except Exception as e:
             logger.error(f'Fail while sending free game: {e}')
 

@@ -154,7 +154,7 @@ class Util(commands.Cog):
         except Exception:
             await ctx.send("The message couldn't be found in this channel")
             return
-        users = await msg.reactions[0].users().flatten()
+        users = [user async for user in msg.reactions[0].users() if not user.bot]
         users.pop(users.index(self.bot.user))
 
         prize = await self.get_giveaway_prize(msg)
@@ -195,14 +195,14 @@ class Util(commands.Cog):
         for giveaway in giveaways:
             if datetime.now() < giveaway.end_date:
                 return
-            channel = self.bot.get_channel(giveaway.discord_channel_id)
+            channel = await self.bot.fetch_channel(giveaway.discord_channel_id)
             try:
                 message = await channel.fetch_message(giveaway.discord_message_id)
             except discord.NotFound:
                 db.session.delete(giveaway)
                 db.session.commit()
                 return await channel.send("Could not find the giveaway message! Deleting the giveaway.", delete_after=180)
-            users = await message.reactions[0].users().flatten()
+            users = [user async for user in message.reactions[0].users() if not user.bot]
             author = await self.bot.fetch_user(giveaway.discord_user_id)
             prize = giveaway.prize
             embed = self.create_giveaway_embed(author, prize)
@@ -370,7 +370,7 @@ class Util(commands.Cog):
 
             await ctx.send(embed=em, delete_after=30)
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.channel.send('Missing the suggestion description', delete_after=30)
+            await ctx.send('Missing the suggestion description', delete_after=30)
         await ctx.message.delete()
 
     @commands.cooldown(6, 5)
@@ -387,7 +387,7 @@ class Util(commands.Cog):
             color=0x1E9FE3
         )
         embed.set_image(url=member.avatar)
-        await ctx.channel.send(embed=embed)
+        await ctx.send(embed=embed)
 
     @commands.group(aliases=['c'], invoke_without_command=True)
     @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
@@ -404,7 +404,7 @@ class Util(commands.Cog):
             return await ctx.send('Please specify the amount of messages to delete.', delete_after=15)
 
         if amount >= 100:
-            return await ctx.channel.send('Cannot delete more than 100 messages at a time!')
+            return await ctx.send('Cannot delete more than 100 messages at a time!')
         await ctx.channel.purge(limit=amount + 1)
 
     @clear.command(aliases=['bot', 'b'])
@@ -415,6 +415,7 @@ class Util(commands.Cog):
         bots_messages = [m for m in messages if m.author == self.bot.user]
 
         if len(bots_messages) <= 100 and type(ctx.channel) == discord.TextChannel:
+            await ctx.message.delete()
             await ctx.channel.delete_messages(bots_messages)
 
         elif type(ctx.channel) == discord.DMChannel:
@@ -425,7 +426,7 @@ class Util(commands.Cog):
     @clear.error
     async def clear_error(self, ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.channel.send('Please put an amount to clear.')
+            await ctx.send('Please put an amount to clear.')
 
     @commands.command(aliases=['dink'])
     async def ping(self, ctx):
@@ -448,7 +449,7 @@ class Util(commands.Cog):
         )
 
         await ctx.message.delete()
-        await ctx.channel.send(embed=embed, delete_after=120)
+        await ctx.send(embed=embed, delete_after=120)
 
     @commands.command()
     async def info(self, ctx):
@@ -479,8 +480,8 @@ class Util(commands.Cog):
             timestamp=datetime.now(timezone("Europe/Zurich"))
         )
         embed.set_thumbnail(url=self.bot.user.avatar)
-        embed.set_footer(text=f"Requested by by {ctx.author.display_name}", icon_url=ctx.author.avatar)
-        await ctx.channel.send(embed=embed)
+        embed.set_footer(text=f"Requested by by {ctx.author}", icon_url=ctx.author.avatar)
+        await ctx.send(embed=embed)
         await ctx.message.delete()
 
 
