@@ -36,10 +36,9 @@ class Music(commands.Cog):
         if not spotify_client_id or not spotify_client_secret:
             logger.warning("Spotify client id or secret not found. Spotify support disabled.")
             spotify_client = None
-        else: 
+        else:
             spotify_client = spotify.SpotifyClient(client_id=spotify_client_id, client_secret=spotify_client_secret)
         await wavelink.NodePool.create_node(bot=self.bot, host='0.0.0.0', port=2333, password='youshallnotpass', spotify_client=spotify_client)
-
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -62,7 +61,7 @@ class Music(commands.Cog):
             player = wavelink.NodePool.get_node().get_player(after.channel.guild)
             if player is not None:
                 await player.disconnect()
-            else: 
+            else:
                 await voice.disconnect()
             if not voice.is_connected():
                 break
@@ -82,7 +81,6 @@ class Music(commands.Cog):
         else:
             await player.stop()
 
-
     async def cog_before_invoke(self, ctx):
         """ Command before-invoke handler. """
         guild_check = ctx.guild is not None
@@ -92,15 +90,14 @@ class Music(commands.Cog):
 
         return guild_check
 
-
     async def ensure_voice(self, ctx):
         """ This check ensures that the bot and command author are in the same voicechannel. """
-        if ctx.command.name in ['players','cleanup']:
+        if ctx.command.name in ['players', 'cleanup']:
             return True
 
         player = ctx.voice_client
 
-        if ctx.command.name in ['queue','now']:
+        if ctx.command.name in ['queue', 'now']:
             if player is None:
                 raise NoPlayerFound()
             return True
@@ -123,8 +120,8 @@ class Music(commands.Cog):
 
     @commands.command(aliases=['p'], usage='play <url/query>')
     async def play(self, ctx, *, search: str):
-        """ Plays or queues a song/playlist. Can be a YouTube URL, Soundcloud URL or a search query. 
-        
+        """ Plays or queues a song/playlist. Can be a YouTube URL, Soundcloud URL or a search query.
+
         Examples:
         `<<play All girls are the same Juice WRLD` - searches for a song and queues it
         `<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
@@ -150,7 +147,7 @@ class Music(commands.Cog):
             # Get the results for the search from Lavalink.
             try:
                 track = await wavelink.YouTubeTrack.search(query=search, return_first=True)
-            except IndexError as e:
+            except IndexError:
                 await ctx.message.delete()
                 return await ctx.send("No results found.", delete_after=15)
             # Seems like should be this instead of try except
@@ -167,7 +164,7 @@ class Music(commands.Cog):
 
         server = db.get_discord_server(ctx.guild)
         delete_after = 60 if server.music_cleanup else None
-        
+
         await ctx.message.delete()
         await ctx.send(embed=embed, delete_after=delete_after)
 
@@ -235,8 +232,8 @@ class Music(commands.Cog):
     @leave.error
     async def leave_error(self, ctx, error):
         if isinstance(error, NoVoiceChannel):
-            await ctx.send("No suitable voice channel was found.", delete_after = 30)
-        
+            await ctx.send("No suitable voice channel was found.", delete_after=30)
+
     @commands.command()
     async def skip(self, ctx):
         """
@@ -254,9 +251,9 @@ class Music(commands.Cog):
     @skip.error
     async def skip_error(self, ctx, error):
         if isinstance(error, NoVoiceChannel):
-            await ctx.send("No suitable voice channel was found.", delete_after = 30)
+            await ctx.send("No suitable voice channel was found.", delete_after=30)
 
-    @commands.command(name="now" ,aliases=['np', 'current'])
+    @commands.command(name="now", aliases=['np', 'current'])
     async def now_playing(self, ctx):
         """
         Shows info about the currently playing track.
@@ -276,7 +273,7 @@ class Music(commands.Cog):
     @now_playing.error
     async def now_playing_error(self, ctx, error):
         if isinstance(error, NoVoiceChannel):
-            await ctx.send("No suitable voice channel was found.", delete_after = 30)
+            await ctx.send("No suitable voice channel was found.", delete_after=30)
         if isinstance(error, NoPlayerFound):
             await ctx.send('No player found', delete_after=30)
 
@@ -293,7 +290,6 @@ class Music(commands.Cog):
         random.shuffle(player.queue._queue)
         await ctx.send('*⃣ | Queue shuffled.', delete_after=15)
         await ctx.message.delete()
-
 
     @commands.group(aliases=['q'], invoke_without_command=True)
     async def queue(self, ctx):
@@ -338,17 +334,16 @@ class Music(commands.Cog):
             elif str(reaction.emoji) == "⏭":
                 if current_page != len(queue_pages) - 1:
                     current_page += 1
-                
+
             await queue_message.remove_reaction(reaction.emoji, user)
             await queue_message.edit(embed=queue_pages[current_page])
 
     @queue.error
     async def queue_error(self, ctx, error):
         if isinstance(error, NoVoiceChannel):
-            await ctx.send("No suitable voice channel was found.", delete_after = 30)
+            await ctx.send("No suitable voice channel was found.", delete_after=30)
         if isinstance(error, NoPlayerFound):
             await ctx.send('No player found', delete_after=30)
-
 
     @queue.command(aliases=['clear'])
     async def queue_clear(self, ctx):
@@ -359,7 +354,6 @@ class Music(commands.Cog):
         player.queue.clear()
         await ctx.send('*⃣ | Queue cleared.', delete_after=30)
         await ctx.message.delete()
-
 
     @commands.is_owner()
     @commands.command(hidden=True)
@@ -381,7 +375,6 @@ class Music(commands.Cog):
         await ctx.send(embed=embed, delete_after=60)
         await ctx.message.delete()
 
-
     @commands.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def cleanup(self, ctx, enable: bool = None):
@@ -396,11 +389,10 @@ class Music(commands.Cog):
 
         server.music_cleanup = enable
         db.session.commit()
-        
+
         embed = self.create_song_cleanup_embed(enable, server)
         await ctx.send(embed=embed)
         await ctx.message.delete()
-
 
     def create_song_cleanup_embed(self, enable, server):
         embed = discord.Embed(color=discord.Color.red())
@@ -412,9 +404,8 @@ class Music(commands.Cog):
             status_string = '`disabled` <:redCross:876177262813278288>'
         embed.title = 'Cleanup status'
         embed.description = f'Song messages auto-cleanup is {status_string}.'
-        embed.set_footer(text = f'Use `{self.bot.command_prefix}cleanup <enable/disable>` to toggle.')
+        embed.set_footer(text=f'Use `{self.bot.command_prefix}cleanup <enable/disable>` to toggle.')
         return embed
-    
 
     def _create_current_song_embed(self, player):
         embed = discord.Embed(color=discord.Color.blurple())
@@ -428,7 +419,6 @@ class Music(commands.Cog):
             embed.add_field(name='Duration', value='LIVE 🔴')
         embed.add_field(name='Queued By', value=f"{player.track.requester.mention}")
         return embed
-
 
     def _create_queue_embed_list(self, ctx, player):
         songs_array = []
@@ -446,7 +436,7 @@ class Music(commands.Cog):
             embed.add_field(name='Now Playing', value=f'[{player.track.title}]({player.track.uri})')
             embed.set_footer(text=f"Queued by {ctx.author.display_name}", icon_url=ctx.author.avatar)
 
-            upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(songs_array[i:i+10], start=i)])
+            upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(songs_array[i:i + 10], start=i)])
             embed.add_field(name="Next up", value=upcoming, inline=False)
             pages.append(embed)
         return pages
@@ -455,20 +445,26 @@ class Music(commands.Cog):
 class AlreadyConnectedToChannel(commands.CommandError):
     pass
 
+
 class NoVoiceChannel(commands.CommandError):
     pass
+
 
 class NoPermissions(commands.CommandError):
     pass
 
+
 class NoPlayerFound(commands.CommandError):
     pass
+
 
 class QueueIsEmpty(commands.CommandError):
     pass
 
+
 class NoTracksFound(commands.CommandError):
     pass
+
 
 class NoMoreTracks(commands.CommandError):
     pass

@@ -10,6 +10,7 @@ logger = logging.getLogger('discord')
 EPIC_STORE_FREE_GAMES_API = "https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions"
 EPIC_GAMES_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Epic_Games_logo.svg/50px-Epic_Games_logo.svg.png"
 
+
 class Game():
     def __init__(self, game_info_json: str) -> None:
         self.title = game_info_json["title"]
@@ -32,14 +33,13 @@ class Game():
 
     def _create_discount_price(self, game_price_str: str) -> str:
         discount_price = game_price_str["totalPrice"]["fmtPrice"]["discountPrice"]
-        if discount_price == "0":
-            return "Free"
-        return discount_price
+        return "Free" if discount_price == "0" else discount_price
 
     def _create_thumbnail(self, key_images: str) -> str:
         for image in key_images:
             if image["type"] == 'OfferImageWide':
                 return image["url"]
+
 
 class FreeGames(commands.Cog):
 
@@ -92,6 +92,7 @@ class FreeGames(commands.Cog):
                 await ctx.channel.send(embed=embed)
         except Exception as e:
             logger.error(f'Fail while sending free game: {e}')
+
 
 async def setup(bot):
     await bot.add_cog(FreeGames(bot))
