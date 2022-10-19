@@ -93,7 +93,7 @@ class Karma(commands.Cog):
         if channel.id in self.vote_channels:
             self.vote_channels.remove(channel.id)
         await ctx.message.delete()
-        await ctx.channel.send(embed=discord.Embed(description=f'Votes has been stopped in {channel.mention}!', color=0xf66045))
+        await ctx.send(embed=discord.Embed(description=f'Votes has been stopped in {channel.mention}!', color=0xf66045))
 
     def load_vote_channels(self) -> list:
         query = db.session.query(db.discord_channel).filter_by(upvote=True).all()
@@ -229,19 +229,20 @@ class Karma(commands.Cog):
         """
         Shows users with the most karma on the server.
         """
-        embed = discord.Embed(title='Karma Leaderboard')
-        if global_leaderboard is None:
-            query = db.session.query(db.karma).filter_by(discord_server_id=ctx.guild.id).order_by(db.karma.amount.desc()).limit(15)
-        elif global_leaderboard == 'global':
-            query = db.session.query(db.karma).order_by(db.karma.amount.desc()).limit(15)
-        if len(query.all()) == 0:
-            embed.description = 'No users have any karma.'
-        embed.description = ''
-        for index, entry in enumerate(query, start=1):
-            user = await self.bot.fetch_user(entry.discord_user_id)
-            embed.description += f'`{str(index).rjust(2)}.` | `{entry.amount}` - {user.mention}\n'
-        await ctx.send(embed=embed)
-        await ctx.message.delete()
+        async with ctx.typing():
+            embed = discord.Embed(title='Karma Leaderboard')
+            if global_leaderboard is None:
+                query = db.session.query(db.karma).filter_by(discord_server_id=ctx.guild.id).order_by(db.karma.amount.desc()).limit(15)
+            elif global_leaderboard == 'global':
+                query = db.session.query(db.karma).order_by(db.karma.amount.desc()).limit(15)
+            if len(query.all()) == 0:
+                embed.description = 'No users have any karma.'
+            embed.description = ''
+            for index, entry in enumerate(query, start=1):
+                user = await self.bot.fetch_user(entry.discord_user_id)
+                embed.description += f'`{str(index).rjust(2)}.` | `{entry.amount}` - {user.mention}\n'
+            await ctx.send(embed=embed)
+            await ctx.message.delete()
 
     @commands.command(aliases=['plb'], usage="postlb")
     async def postlb(self, ctx):

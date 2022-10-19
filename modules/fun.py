@@ -180,7 +180,7 @@ class Fun(commands.Cog):
             colour=discord.Colour.orange()
         )
         embed.set_footer(text=f'Question by {ctx.author}', icon_url=ctx.author.avatar)
-        await ctx.channel.send(embed=embed)
+        await ctx.send(embed=embed)
 
 
 async def setup(bot):

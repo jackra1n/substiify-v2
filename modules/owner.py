@@ -63,8 +63,8 @@ class Owner(commands.Cog):
                 self.bot.reload_extension(f'modules.{cog}')
         except Exception as e:
             exc = f'{type(e).__name__}: {e}'
-            await ctx.channel.send(f'Failed to reload extensions\n{exc}')
-        await ctx.channel.send('Reloaded all cogs', delete_after=120)
+            await ctx.send(f'Failed to reload extensions\n{exc}')
+        await ctx.send('Reloaded all cogs', delete_after=120)
         await ctx.message.delete()
 
     @commands.is_owner()
