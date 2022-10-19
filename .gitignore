@@ -144,3 +144,5 @@ data/settings.json
 data/backups/
 
 logs/
+
+.vscode/

@@ -61,7 +61,7 @@ class Help(commands.MinimalHelpCommand):
         if description:
             embed.description = description
         if set_author:
-            avatar = self.context.bot.user.avatar_url or self.context.bot.user.default_avatar_url
+            avatar = self.context.bot.user.avatar or self.context.bot.user.default_avatar
             embed.set_author(name=self.context.bot.user.name, icon_url=avatar)
         if command_set:
             # show help about all commands in the set
@@ -125,5 +125,5 @@ class Help(commands.MinimalHelpCommand):
         except discord.ext.commands.CommandError:
             return False
 
-def setup(bot):
+async def setup(bot):
     bot.help_command = Help()

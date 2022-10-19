@@ -59,7 +59,7 @@ class discord_user(Base):
         self.discord_user_id = user.id
         self.username = user.name
         self.discriminator = user.discriminator
-        self.avatar = str(user.avatar_url) if user.avatar else None
+        self.avatar = str(user.avatar) if user.avatar else None
         self.is_bot = user.bot
         self.nickname = user.display_name
 

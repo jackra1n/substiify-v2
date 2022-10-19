@@ -1,8 +1,8 @@
 import logging
 from datetime import datetime
 
-import discord
 import aiohttp
+import discord
 from discord.ext import commands
 
 logger = logging.getLogger(__name__)
@@ -93,5 +93,5 @@ class FreeGames(commands.Cog):
         except Exception as e:
             logger.error(f'Fail while sending free game: {e}')
 
-def setup(bot):
-    bot.add_cog(FreeGames(bot))
+async def setup(bot):
+    await bot.add_cog(FreeGames(bot))

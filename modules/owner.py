@@ -12,6 +12,7 @@ from utils import db, store
 
 logger = logging.getLogger(__name__)
 
+
 class Owner(commands.Cog):
 
     COG_EMOJI = "👑"
@@ -28,12 +29,12 @@ class Owner(commands.Cog):
         self.message_embed = False
         self.embed_title = None
 
-
     async def set_default_status(self):
-        servers = len(self.bot.guilds)
-        activityName = f"{self.prefix}help | {servers} servers"
-        activity = Activity(type=ActivityType.listening, name=activityName)
-        await self.bot.change_presence(activity=activity)
+        if self.bot.is_ready():
+            servers = len(self.bot.guilds)
+            activityName = f"{self.prefix}help | {servers} servers"
+            activity = Activity(type=ActivityType.listening, name=activityName)
+            await self.bot.change_presence(activity=activity)
 
     @tasks.loop(minutes=30)
     async def status_task(self):
@@ -541,5 +542,5 @@ def create_command_usage_embed(commands_used_query, embed_title):
     embed.add_field(name="Count", value=commands_count, inline=True)
     return embed
 
-def setup(bot):
-    bot.add_cog(Owner(bot))
+async def setup(bot):
+    await bot.add_cog(Owner(bot))

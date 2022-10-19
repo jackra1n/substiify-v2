@@ -349,7 +349,7 @@ class Karma(commands.Cog):
     @kasino.command(name='close', usage="close <kasino_id> <winning_option>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def kasino_close(self, ctx, kasino_id: int, winner: int):
-        author_img = ctx.author.avatar_url
+        author_img = ctx.author.avatar
 
         if not self.is_kasino_open(kasino_id):
             return await ctx.author.send(f'Kasino with ID {kasino_id} is not open.')
@@ -729,8 +729,8 @@ class Karma(commands.Cog):
 
         # CREATE MESSAGE
         description = f"The kasino has been opened! Place your bets using `{self.bot.command_prefix}kasino bet {kasino.id} <amount> <1 or 2>`"
-        if kasino.locked: 
-            description = f'The kasino is locked! No more bets are taken in. Time to wait and see...'
+        if kasino.locked:
+            description = 'The kasino is locked! No more bets are taken in. Time to wait and see...'
         to_embed = discord.Embed(
             title=f'{"[LOCKED] " if kasino.locked else ""}:game_die: {kasino.question}',
             description=description,
@@ -745,5 +745,6 @@ class Karma(commands.Cog):
 
         await kasino_msg.edit(embed=to_embed)
 
-def setup(bot):
-    bot.add_cog(Karma(bot))
+
+async def setup(bot):
+    await bot.add_cog(Karma(bot))

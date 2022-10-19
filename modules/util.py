@@ -1,8 +1,8 @@
 import asyncio
 import json
 import logging
-import random
 import platform
+import random
 import subprocess
 from asyncio import TimeoutError
 from datetime import datetime, timedelta
@@ -19,11 +19,12 @@ from utils import db, store
 
 logger = logging.getLogger(__name__)
 
+
 class Util(commands.Cog):
 
     COG_EMOJI = "📦"
 
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.bug_channel = bot.get_channel(876412993498398740)
         self.suggestion_channel = bot.get_channel(876413286978031676)
@@ -39,10 +40,10 @@ class Util(commands.Cog):
         if ctx.author.voice is None:
             return await ctx.send('You must be in a voice channel to use this command.')
 
-        voice_members = [ member for member in ctx.author.voice.channel.members if not member.bot ]
+        voice_members = [member for member in ctx.author.voice.channel.members if not member.bot]
         if len(voice_members) < 4:
             return await ctx.send('You must have at least 4 members in your voice channel to use this command.')
-        
+
         random.shuffle(voice_members)
         team_1 = []
         team_2 = []
@@ -226,15 +227,15 @@ class Util(commands.Cog):
 
     def convert(self, time):
         pos = ["m", "h", "d"]
-        time_dict = {"m": 60, "h": 3600, "d": 24*3600}
+        time_dict = {"m": 60, "h": 3600, "d": 24 * 3600}
         unit = time[-1]
         if unit not in pos:
             return -1
         try:
             timeVal = int(time[:-1])
-        except Exception as e:
+        except Exception:
             return -2
-        return timeVal*time_dict[unit]
+        return timeVal * time_dict[unit]
 
     def create_giveaway_embed(self, author: discord.Member, prize):
         embed = discord.Embed(title=":tada: Giveaway :tada:",
@@ -249,6 +250,8 @@ class Util(commands.Cog):
         if payload.guild_id is None or payload.channel_id is None or payload.member is None or payload.message_id is None:
             return
         if payload.member.bot:
+            return
+        if self.bug_channel is None or self.suggestion_channel is None:
             return
         if payload.channel_id == self.bug_channel.id:
             message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
@@ -324,7 +327,7 @@ class Util(commands.Cog):
             description=f'```{sentence}```\nSubmitted by: {ctx.author.mention}',
             color=0x1E9FE3
         )
-        embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar_url)
+        embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar)
         message = await channel.send(embed=embed)
         await ctx.send(f'Thank you for submitting the {submission_type}!', delete_after=30)
         await message.add_reaction(f'<{self.accept_emoji}>')
@@ -381,10 +384,10 @@ class Util(commands.Cog):
         member = ctx.author if member is None else member
         embed = discord.Embed(
             title=f"{str(member.display_name)}'s avatar",
-            url=member.avatar_url,
+            url=member.avatar,
             color=0x1E9FE3
         )
-        embed.set_image(url=member.avatar_url)
+        embed.set_image(url=member.avatar)
         await ctx.channel.send(embed=embed)
 
     @commands.group(aliases=['c'], invoke_without_command = True)
@@ -393,12 +396,11 @@ class Util(commands.Cog):
         """
         Clears messages within the current channel.
         """
-        # TODO: re-add when discord.py 2.0 is released
-        # if ctx.message.type == MessageType.reply:
-        #     if message := ctx.message.reference.resolved:
-        #         await message.delete()
-        #         await ctx.message.delete()
-        #     return
+        if ctx.message.type == MessageType.reply:
+            if message := ctx.message.reference.resolved:
+                await message.delete()
+                await ctx.message.delete()
+            return
         if amount is None:
             return await ctx.send('Please specify the amount of messages to delete.', delete_after=15)
 
@@ -478,8 +480,8 @@ class Util(commands.Cog):
             description=content, color=0xE3621E,
             timestamp=datetime.now(timezone("Europe/Zurich"))
         )
-        embed.set_thumbnail(url=self.bot.user.avatar_url)
-        embed.set_footer(text=f"Requested by by {ctx.author.display_name}", icon_url=ctx.author.avatar_url)
+        embed.set_thumbnail(url=self.bot.user.avatar)
+        embed.set_footer(text=f"Requested by by {ctx.author.display_name}", icon_url=ctx.author.avatar)
         await ctx.channel.send(embed=embed)
         await ctx.message.delete()
 
@@ -509,5 +511,5 @@ def format_bytes(size: int) -> str:
     return f'{round(size, 2)}{power_labels[n]}'
 
 
-def setup(bot):
-    bot.add_cog(Util(bot))
+async def setup(bot):
+    await bot.add_cog(Util(bot))
