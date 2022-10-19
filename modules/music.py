@@ -9,12 +9,12 @@ import re
 import discord
 import wavelink
 from discord.ext import commands
-from wavelink.ext import spotify
 from wavelink import Player, Track
+from wavelink.ext import spotify
 
-from utils import store, db
+from utils import db, store
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('discord')
 
 URL_REGEX = r"(?i)\b((?:https?://|www\d{0,3}[.]|[a-z0-9.\-]+[.][a-z]{2,4}/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’]))"
 
@@ -444,7 +444,7 @@ class Music(commands.Cog):
 
             embed.title = f"Queue ({player.queue.count})"
             embed.add_field(name='Now Playing', value=f'[{player.track.title}]({player.track.uri})')
-            embed.set_footer(text=f"Queued by {ctx.author.display_name}", icon_url=ctx.author.avatar_url)
+            embed.set_footer(text=f"Queued by {ctx.author.display_name}", icon_url=ctx.author.avatar)
 
             upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(songs_array[i:i+10], start=i)])
             embed.add_field(name="Next up", value=upcoming, inline=False)
@@ -474,5 +474,5 @@ class NoMoreTracks(commands.CommandError):
     pass
 
 
-def setup(bot):
-    bot.add_cog(Music(bot))
+async def setup(bot):
+    await bot.add_cog(Music(bot))

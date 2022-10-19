@@ -1,11 +1,11 @@
 import logging
 from datetime import datetime
 
-import discord
 import aiohttp
+import discord
 from discord.ext import commands
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('discord')
 
 EPIC_STORE_FREE_GAMES_API = "https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions"
 EPIC_GAMES_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Epic_Games_logo.svg/50px-Epic_Games_logo.svg.png"
@@ -93,5 +93,5 @@ class FreeGames(commands.Cog):
         except Exception as e:
             logger.error(f'Fail while sending free game: {e}')
 
-def setup(bot):
-    bot.add_cog(FreeGames(bot))
+async def setup(bot):
+    await bot.add_cog(FreeGames(bot))

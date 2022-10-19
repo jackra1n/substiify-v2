@@ -10,7 +10,7 @@ from sqlalchemy.orm import sessionmaker
 
 from utils import store
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('discord')
 
 engine = create_engine(f'sqlite:///{store.DB_PATH}')
 session = sessionmaker(bind=engine)()
@@ -59,7 +59,7 @@ class discord_user(Base):
         self.discord_user_id = user.id
         self.username = user.name
         self.discriminator = user.discriminator
-        self.avatar = str(user.avatar_url) if user.avatar else None
+        self.avatar = str(user.avatar) if user.avatar else None
         self.is_bot = user.bot
         self.nickname = user.display_name
 

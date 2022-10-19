@@ -1,28 +1,18 @@
 import json
 import logging
-from logging.handlers import TimedRotatingFileHandler
+
 from pathlib import Path
 
-from helper.CustomLogFormatter import CustomLogFormatter
 from utils import store
 
-ignore_logs = [
-    'Got a request',
-]
-
-class RemoveNoise(logging.Filter):
-    def __init__(self):
-        super().__init__(name='discord.gateway')
-
-    def filter(self, record):
-        return (record.name != 'discord.gateway' or 'Shard ID' not in record.msg) and all(log not in record.msg for log in ignore_logs)
 
 def prepareFiles():
+    logger = logging.getLogger('discord')
 
     default_settings = {
         "token": "",
         "prefix": "<<",
-        "version": 
+        "version":
         {
             "major": "0",
             "minor": "87",
@@ -37,26 +27,6 @@ def prepareFiles():
 
     # Create 'data' folder if it doesn't exist
     Path('data').mkdir(parents=True, exist_ok=True)
-
-    # Filter out some of the logs that come from discord.gateway
-    logging.getLogger('discord.gateway').addFilter(RemoveNoise())
-
-    rootLogger = logging.getLogger()
-    rootLogger.setLevel(logging.INFO)
-
-    dt_fmt = '%Y-%m-%d %H:%M:%S'
-    fileFormatter = logging.Formatter('[{asctime}] [{levelname:<7}] {name}: {message}', dt_fmt, style='{')
-
-    fileHandler = TimedRotatingFileHandler(f'{store.LOGS_PATH}/substiify_', when="midnight", interval=1, encoding='utf-8')
-    fileHandler.suffix = "%Y-%m-%d.log"
-    fileHandler.setFormatter(fileFormatter)
-    rootLogger.addHandler(fileHandler)
-
-    consoleHandler = logging.StreamHandler()
-    consoleHandler.setFormatter(CustomLogFormatter())
-    rootLogger.addHandler(consoleHandler)
-
-    logger = logging.getLogger('util.prepare_files')
 
     # Create 'settings.json' if it doesn't exist
     if not Path(store.SETTINGS_PATH).is_file():
