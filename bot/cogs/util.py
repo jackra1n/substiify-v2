@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import platform
 import random
@@ -10,12 +9,12 @@ from random import choice, seed, shuffle
 
 import discord
 import psutil
+from core import values
 from discord import MessageType
 from discord.ext import commands, tasks
 from discord.ext.commands import BucketType
 from pytz import timezone
-
-from utils import db, store
+from utils import db
 
 logger = logging.getLogger('discord')
 
@@ -298,7 +297,7 @@ class Util(commands.Cog):
             await self.send_submission(ctx, self.bug_channel, sentence, ctx.command.name)
         await ctx.message.delete()
 
-    @submit.command(aliases=['improvement','better'], usage='suggestion <message>')
+    @submit.command(aliases=['improvement', 'better'], usage='suggestion <message>')
     @commands.cooldown(2, 900, BucketType.user)
     async def suggestion(self, ctx, *words: str):
         """
@@ -379,7 +378,8 @@ class Util(commands.Cog):
         """
         Enlarge and view your profile picture or another member
         """
-        await ctx.message.delete()
+        if member is None:
+            await ctx.message.delete()
         member = ctx.author if member is None else member
         embed = discord.Embed(
             title=f"{str(member.display_name)}'s avatar",
@@ -388,6 +388,11 @@ class Util(commands.Cog):
         )
         embed.set_image(url=member.avatar)
         await ctx.send(embed=embed)
+
+    @av.error
+    async def av_error(self, ctx, error):
+        if isinstance(error, commands.MemberNotFound):
+            await ctx.send('Member not found', delete_after=30)
 
     @commands.group(aliases=['c'], invoke_without_command=True)
     @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
@@ -456,18 +461,13 @@ class Util(commands.Cog):
         """
         Shows different technical information about the bot
         """
-        bot_time = time_up((datetime.now() - store.SCRIPT_START).total_seconds())  # uptime of the bot
+        bot_time = time_up((datetime.now() - values.SCRIPT_START).total_seconds())  # uptime of the bot
         last_commit_date = subprocess.check_output(['git', 'log', '-1', '--date=format:"%Y/%m/%d"', '--format=%ad']).decode('utf-8').strip().strip('"')
         cpu_percent = psutil.cpu_percent()
         ram = psutil.virtual_memory()
         ram_used = format_bytes((ram.total - ram.available))
         ram_percent = psutil.virtual_memory().percent
-        with open(store.SETTINGS_PATH, "r") as settings:
-            self.settings = json.load(settings)
-        ver = self.settings['version']
-        patch = subprocess.check_output(['git', 'rev-list', f'{self.settings["last_update"]}..HEAD', '--count']).decode('utf-8').strip()
-        bot_version = f"{ver['major']}.{ver['minor']}.{patch}"
-
+        bot_version = self.bot.version.get()
         content = f'**Instance uptime:** `{bot_time}`\n' \
             f'**Version:** `{bot_version}` | **Updated:** `{last_commit_date}`\n' \
             f'**Python:** `{platform.python_version()}` | **discord.py:** `{discord.__version__}`\n\n' \

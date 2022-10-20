@@ -4,11 +4,12 @@ import subprocess
 from os import path, walk
 
 import discord
+from core import config
+from core.version import VersionType
 from discord import Activity, ActivityType
 from discord.ext import commands, tasks
 from sqlalchemy import func
-
-from utils import db, store
+from utils import db
 
 logger = logging.getLogger('discord')
 
@@ -20,9 +21,6 @@ class Owner(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.status_task.start()
-        with open(store.SETTINGS_PATH, "r") as settings:
-            self.settings = json.load(settings)
-        self.prefix = self.settings["prefix"]
         self.message_server = None
         self.message_channel = None
         self.message_text = None
@@ -32,7 +30,7 @@ class Owner(commands.Cog):
     async def set_default_status(self):
         if self.bot.is_ready():
             servers = len(self.bot.guilds)
-            activityName = f"{self.prefix}help | {servers} servers"
+            activityName = f"{config.PREFIX}help | {servers} servers"
             activity = Activity(type=ActivityType.listening, name=activityName)
             await self.bot.change_presence(activity=activity)
 
@@ -297,32 +295,32 @@ class Owner(commands.Cog):
         embed.add_field(name='Name', value=channels, inline=True)
         await ctx.send(embed=embed, delete_after=120)
 
-    @commands.group()
     @commands.is_owner()
+    @commands.group(invoke_without_command=True)
     async def version(self, ctx):
         """
         Sets the bot's version.
         """
+        embed = discord.Embed(color=discord.Colour.green())
+        embed.add_field(name='Current version', value=self.bot.version.get())
+        await ctx.send(embed=embed, delete_after=30)
 
-    @version.command(name='minor')
     @commands.is_owner()
-    async def version_minor(self, ctx, version: int):
+    @version.command(name='set')
+    async def set_version(self, ctx, version_type: VersionType, value: int):
         """
         Sets the minor version.
         """
-        await self._set_version(ctx, 'minor', version)
+        self.bot.version.set(version_type, value)
+        embed = discord.Embed(description=f'{version_type.value} version has been set to {value}')
+        await ctx.send(embed=embed, delete_after=15)
 
-    async def _set_version(self, ctx, version, value):
-        with open(store.SETTINGS_PATH, "r") as settings:
-            settings_json = json.load(settings)
-        settings_json['version'][version] = value
-        settings_json['last_update'] = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8').strip()
-        with open(store.SETTINGS_PATH, "w") as settings:
-            json.dump(settings_json, settings, indent=2)
-        if ctx.channel.permissions_for(ctx.guild.me).manage_messages:
-            await ctx.message.delete()
-        embed = discord.Embed(description=f'{version} version has been set to {value}')
-        await ctx.send(embed=embed, delete_after=10)
+    @set_version.error
+    async def set_version_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("Please specify the version type and value", delete_after=30)
+        if isinstance(error, commands.BadArgument):
+            await ctx.send("Version type not recognized. Version types are 'major' or 'minor'", delete_after=30)
 
     def get_modules(self):
         filenames = next(walk("modules"), (None, None, []))[2]

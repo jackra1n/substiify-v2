@@ -74,7 +74,7 @@ class FreeGames(commands.Cog):
             # Check if the game is currently free
             if datetime.strptime(game["effectiveDate"].split('T')[0], "%Y-%m-%d") > datetime.now():
                 continue
-            try:    
+            try:
                 current_free_games.append(Game(game))
             except Exception as e:
                 logger.error(f'Error while creating \'Game\' object: {e}')

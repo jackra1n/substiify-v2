@@ -5,10 +5,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import discord
+from core import values
 from discord.ext import commands
 from sqlalchemy.sql import func
-
-from utils import db, store
+from utils import db
 
 logger = logging.getLogger('discord')
 
@@ -100,10 +100,10 @@ class Karma(commands.Cog):
         return [x.discord_channel_id for x in query] if query is not None else []
 
     def get_upvote_emote(self):
-        return self.bot.get_emoji(store.UPVOTE_EMOTE_ID)
+        return self.bot.get_emoji(values.UPVOTE_EMOTE_ID)
 
     def get_downvote_emote(self):
-        return self.bot.get_emoji(store.DOWNVOTE_EMOTE_ID)
+        return self.bot.get_emoji(values.DOWNVOTE_EMOTE_ID)
 
     @commands.group(aliases=["k"], usage="karma [user]", invoke_without_command=True,)
     async def karma(self, ctx, user: discord.User = None):
@@ -156,7 +156,7 @@ class Karma(commands.Cog):
             await ctx.send(embed=discord.Embed(description='You didn\'t specify a user to donate to!', color=0xf66045))
             await ctx.message.delete()
         elif isinstance(error, commands.BadArgument):
-            await ctx.send(embed=discord.Embed(description=f'Wrong command usage! Command usage is `{self.bot.command_prefix}karma donate <amount> <user>`', color=0xf66045))
+            await ctx.send(embed=discord.Embed(description=f'Wrong command usage! Command usage is `{ctx.prefix}karma donate <amount> <user>`', color=0xf66045))
             await ctx.message.delete()
 
     @karma.group(name='emotes', aliases=['emote'], usage="emotes", invoke_without_command=True)
@@ -283,9 +283,9 @@ class Karma(commands.Cog):
         server_downvote_emotes = query.filter_by(action=1).all()
 
         server_upvote_emotes_ids = [emote.discord_emote_id for emote in server_upvote_emotes]
-        server_upvote_emotes_ids.append(store.UPVOTE_EMOTE_ID)
+        server_upvote_emotes_ids.append(values.UPVOTE_EMOTE_ID)
         server_downvote_emotes_ids = [emote.discord_emote_id for emote in server_downvote_emotes]
-        server_downvote_emotes_ids.append(store.DOWNVOTE_EMOTE_ID)
+        server_downvote_emotes_ids.append(values.DOWNVOTE_EMOTE_ID)
 
         channel = await self.bot.fetch_channel(post.discord_channel_id)
         message = await channel.fetch_message(post.discord_message_id)
@@ -336,7 +336,7 @@ class Karma(commands.Cog):
         await ctx.message.delete()
         kasino = await self.add_kasino(ctx, question, op_a, op_b)
         self.create_kasino_backup(kasino.id)
-        await self.update_kasino(kasino.id)
+        await self.update_kasino(ctx, kasino.id)
 
     @kasino.command(name='close', usage="close <kasino_id> <winning_option>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -364,7 +364,7 @@ class Karma(commands.Cog):
     @kasino_close.error
     async def kasino_close_error(self, ctx, error):
         if isinstance(error, commands.errors.MissingRequiredArgument):
-            await ctx.send(f'You didn\'t provide a required argument! Correct usage is `{self.bot.command_prefix}kasino close <kasino_id> <winning_option>`', delete_after=20)
+            await ctx.send(f'You didn\'t provide a required argument! Correct usage is `{ctx.prefix}kasino close <kasino_id> <winning_option>`', delete_after=20)
         elif isinstance(error, commands.errors.BadArgument):
             await ctx.send('Bad argument.', delete_after=20)
         await ctx.message.delete()
@@ -378,7 +378,7 @@ class Karma(commands.Cog):
             return await ctx.author.send(f'Kasino with ID `{kasino_id}` is already locked.')
 
         self.lock_kasino(kasino_id)
-        await self.update_kasino(kasino_id)
+        await self.update_kasino(ctx, kasino_id)
         await ctx.message.delete()
 
     @kasino.command(name='bet', usage="bet <kasino_id> <amount> <option>")
@@ -392,7 +392,7 @@ class Karma(commands.Cog):
 
         if option not in [1, 2]:
             output_embed = discord.Embed(
-                title=f'Wrong usage. Correct usage is `{self.bot.command_prefix}kasino bet <kasino_id> <amount> <1 or 2>`',
+                title=f'Wrong usage. Correct usage is `{ctx.prefix}kasino bet <kasino_id> <amount> <1 or 2>`',
                 color=discord.Colour.from_rgb(209, 25, 25)
             )
             return await ctx.author.send(embed=output_embed, delete_after=30)
@@ -449,7 +449,7 @@ class Karma(commands.Cog):
         output_embed.description = f'Remaining karma: {user_karma}'
 
         await ctx.author.send(embed=output)
-        await self.update_kasino(kasino_id)
+        await self.update_kasino(ctx, kasino_id)
 
     @kasino.command(name='list', aliases=['l'], usage="list")
     async def kasino_list(self, ctx):
@@ -487,13 +487,13 @@ class Karma(commands.Cog):
     def get_query_karma_add(self, guild_id):
         query = db.session.query(db.karma_emote.discord_emote_id).filter_by(discord_server_id=guild_id).filter_by(action=0).all()
         emote_list = [x[0] for x in query] if query is not None else []
-        emote_list.append(int(store.UPVOTE_EMOTE_ID))
+        emote_list.append(int(values.UPVOTE_EMOTE_ID))
         return emote_list
 
     def get_query_karma_remove(self, guild_id):
         query = db.session.query(db.karma_emote.discord_emote_id).filter_by(discord_server_id=guild_id).filter_by(action=1).all()
         emote_list = [x[0] for x in query] if query is not None else []
-        emote_list.append(int(store.DOWNVOTE_EMOTE_ID))
+        emote_list.append(int(values.DOWNVOTE_EMOTE_ID))
         return emote_list
 
     async def check_payload(self, payload):
@@ -616,9 +616,9 @@ class Karma(commands.Cog):
     def create_kasino_backup(self, kasino_id):
         today_string = datetime.now().strftime("%Y_%m_%d")
         now_time_string = datetime.now().strftime("%H%M")
-        backup_folder = f"{store.DATA_PATH}/backups/{today_string}"
+        backup_folder = f"{values.DATA_PATH}/backups/{today_string}"
         Path(backup_folder).mkdir(parents=True, exist_ok=True)
-        shutil.copy(store.DB_PATH, f"{backup_folder}/backup_{now_time_string}_{kasino_id}.sqlite")
+        shutil.copy(values.DB_PATH, f"{backup_folder}/backup_{now_time_string}_{kasino_id}.sqlite")
 
     def has_user_bet(self, kasino_id: int, user_id: int) -> bool:
         return db.session.query(db.kasino_bet).filter_by(discord_user_id=user_id).filter_by(kasino_id=kasino_id).first() is not None
@@ -701,7 +701,7 @@ class Karma(commands.Cog):
             await (await self.bot.fetch_user(bet[0].discord_user_id)).send(embed=output)
         db.session.commit()
 
-    async def update_kasino(self, kasino_id: int):
+    async def update_kasino(self, ctx, kasino_id: int):
         kasino = db.session.query(db.kasino).filter_by(id=kasino_id).first()
         kasino_msg = await (await self.bot.fetch_channel(kasino.discord_channel_id)).fetch_message(kasino.discord_message_id)
 
@@ -716,7 +716,7 @@ class Karma(commands.Cog):
         bOdds = float(aAmount + bAmount) / bAmount if bAmount != 0 else 1.0
 
         # CREATE MESSAGE
-        description = f"The kasino has been opened! Place your bets using `{self.bot.command_prefix}kasino bet {kasino.id} <amount> <1 or 2>`"
+        description = f"The kasino has been opened! Place your bets using `{ctx.prefix}kasino bet {kasino.id} <amount> <1 or 2>`"
         if kasino.locked:
             description = 'The kasino is locked! No more bets are taken in. Time to wait and see...'
         to_embed = discord.Embed(

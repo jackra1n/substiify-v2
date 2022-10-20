@@ -5,9 +5,8 @@ DOWNVOTE_EMOTE_ID = 877668628261126144
 
 SCRIPT_START = datetime.now()
 
-DATA_PATH = "./data"
-SETTINGS_PATH = f'{DATA_PATH}/settings.json'
+DATA_PATH = "./bot/data"
+VERSION_CONFIG_PATH = f'{DATA_PATH}/version.toml'
 DB_PATH = f'{DATA_PATH}/main.sqlite'
-LOGS_PATH = './logs'
+LOGS_PATH = './bot/logs'
 RESOURCES_PATH = './resources'
-
