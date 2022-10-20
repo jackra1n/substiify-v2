@@ -35,17 +35,32 @@ class Music(commands.Cog):
             spotify_client = spotify.SpotifyClient(client_id=config.SPOTIFY_CLIENT_ID, client_secret=config.SPOTIFY_CLIENT_SECRET)
         await wavelink.NodePool.create_node(bot=self.bot, host=config.LAVALINK_HOST, port=config.LAVALINK_PORT, password=config.LAVALINK_PASSWORD, spotify_client=spotify_client)
 
+    async def cog_command_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.reply("Please provide a search query or URL.")
+        if isinstance(error, NoVoiceChannel):
+            await ctx.send("You are not in a voice channel.")
+        if isinstance(error, NoPlayerFound):
+            await ctx.send('No active player found.')
+        if isinstance(error, NoPermissions):
+            await ctx.send('I do not have the permissions to join your voice channel.')
+        if isinstance(error, DifferentVoiceChannel):
+            await ctx.send('You are not in the same voice channel as the bot.')
+        if isinstance(error, NoNodeAccessible):
+            await ctx.send('No playing agent is available at the moment. Please try again later or contact support.')
+
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
 
-        if member.id == self.bot.user.id and after.channel is None:
+        if member == self.bot.user and after.channel is None:
             player = wavelink.NodePool.get_node().get_player(before.channel.guild)
             if player is not None:
                 await player.disconnect()
 
-        if member.id != self.bot.user.id or before.channel is not None:
+        if member == self.bot.user or before.channel is None:
             return
-        voice = after.channel.guild.voice_client
+        print(f'{member} before: {before.channel} after: {after.channel}')
+        voice = before.channel.guild.voice_client
         time = 0
 
         while True:
@@ -67,6 +82,15 @@ class Music(commands.Cog):
         logger.info(f'Node: <{node.identifier}> is ready!')
 
     @commands.Cog.listener()
+    async def on_wavelink_websocket_closed(self, reason: str, code):
+        """Event fired when a node's websocket connection is closed."""
+        if wavelink.NodePool.nodes is None:
+            msg = 'Lavalink node connection closed. No other nodes are available!'
+            logger.warn(msg)
+            owner = await self.bot.fetch_user(self.bot.owner_id)
+            await owner.send(msg)
+
+    @commands.Cog.listener()
     async def on_wavelink_track_end(self, player: Player, track: Track, reason):
         """Event fired when a track ends."""
         if not player.queue.is_empty:
@@ -75,6 +99,13 @@ class Music(commands.Cog):
             track.requester = partial.requester
         else:
             await player.stop()
+
+        def check(p: wavelink.Player, t: wavelink.Track):
+            return p.guild == player.guild
+        try:
+            await self.bot.wait_for("wavelink_track_start", check=check, timeout=900)
+        except asyncio.TimeoutError:
+            await player.disconnect()
 
     async def cog_before_invoke(self, ctx):
         """ Command before-invoke handler. """
@@ -87,6 +118,9 @@ class Music(commands.Cog):
 
     async def ensure_voice(self, ctx):
         """ This check ensures that the bot and command author are in the same voicechannel. """
+        if wavelink.NodePool.nodes is None:
+            raise NoNodeAccessible()
+
         if ctx.command.name in ['players', 'cleanup']:
             return True
 
@@ -112,6 +146,10 @@ class Music(commands.Cog):
                 raise NoPermissions()
 
             await ctx.author.voice.channel.connect(cls=Player)
+            return True
+
+        if player.channel != ctx.author.voice.channel:
+            raise DifferentVoiceChannel()
 
     @commands.command(aliases=['p'], usage='play <url/query>')
     async def play(self, ctx, *, search: str):
@@ -162,11 +200,6 @@ class Music(commands.Cog):
 
         await ctx.message.delete()
         await ctx.send(embed=embed, delete_after=delete_after)
-
-    @play.error
-    async def play_error(self, ctx, error):
-        if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.reply("Please provide a search query or URL.", delete_after=30)
 
     async def _queue_spotify(self, decoded, player, requester):
         embed = discord.Embed(color=discord.Color.blurple())
@@ -224,11 +257,6 @@ class Music(commands.Cog):
         await ctx.send('*⃣ | Disconnected.', delete_after=30)
         await ctx.message.delete()
 
-    @leave.error
-    async def leave_error(self, ctx, error):
-        if isinstance(error, NoVoiceChannel):
-            await ctx.send("No suitable voice channel was found.", delete_after=30)
-
     @commands.command()
     async def skip(self, ctx):
         """
@@ -242,11 +270,6 @@ class Music(commands.Cog):
         await player.stop()
         await ctx.send('*⃣ | Skipped.', delete_after=15)
         await ctx.message.delete()
-
-    @skip.error
-    async def skip_error(self, ctx, error):
-        if isinstance(error, NoVoiceChannel):
-            await ctx.send("No suitable voice channel was found.", delete_after=30)
 
     @commands.command(name="now", aliases=['np', 'current'])
     async def now_playing(self, ctx):
@@ -264,13 +287,6 @@ class Music(commands.Cog):
 
         embed = self._create_current_song_embed(player)
         await ctx.send(embed=embed, delete_after=60)
-
-    @now_playing.error
-    async def now_playing_error(self, ctx, error):
-        if isinstance(error, NoVoiceChannel):
-            await ctx.send("No suitable voice channel was found.", delete_after=30)
-        if isinstance(error, NoPlayerFound):
-            await ctx.send('No player found', delete_after=30)
 
     @commands.command()
     async def shuffle(self, ctx):
@@ -333,13 +349,6 @@ class Music(commands.Cog):
             await queue_message.remove_reaction(reaction.emoji, user)
             await queue_message.edit(embed=queue_pages[current_page])
 
-    @queue.error
-    async def queue_error(self, ctx, error):
-        if isinstance(error, NoVoiceChannel):
-            await ctx.send("No suitable voice channel was found.", delete_after=30)
-        if isinstance(error, NoPlayerFound):
-            await ctx.send('No player found', delete_after=30)
-
     @queue.command(name='clear')
     async def queue_clear(self, ctx):
         """
@@ -378,18 +387,15 @@ class Music(commands.Cog):
         """
         server = db.get_discord_server(ctx.guild)
 
-        if enable is None:
-            embed = self.create_song_cleanup_embed(enable, server)
-            return await ctx.send(embed=embed)
+        if enable is not None:
+            server.music_cleanup = enable
+            db.session.commit()
 
-        server.music_cleanup = enable
-        db.session.commit()
-
-        embed = self.create_song_cleanup_embed(enable, server)
+        embed = self.create_song_cleanup_embed(ctx, enable, server)
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
-    def create_song_cleanup_embed(self, enable, server):
+    def create_song_cleanup_embed(self, ctx, enable, server):
         embed = discord.Embed(color=discord.Color.red())
         if enable or server.music_cleanup:
             embed = discord.Embed(color=discord.Color.green())
@@ -399,7 +405,7 @@ class Music(commands.Cog):
             status_string = '`disabled` <:redCross:876177262813278288>'
         embed.title = 'Cleanup status'
         embed.description = f'Song messages auto-cleanup is {status_string}.'
-        embed.set_footer(text=f'Use `{self.bot.command_prefix}cleanup <enable/disable>` to toggle.')
+        embed.set_footer(text=f'Use `{ctx.prefix}cleanup <enable/disable>` to toggle.')
         return embed
 
     def _create_current_song_embed(self, player):
@@ -462,6 +468,14 @@ class NoTracksFound(commands.CommandError):
 
 
 class NoMoreTracks(commands.CommandError):
+    pass
+
+
+class DifferentVoiceChannel(commands.CommandError):
+    pass
+
+
+class NoNodeAccessible(commands.CommandError):
     pass
 
 

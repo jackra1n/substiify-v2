@@ -378,7 +378,8 @@ class Util(commands.Cog):
         """
         Enlarge and view your profile picture or another member
         """
-        await ctx.message.delete()
+        if member is None:
+            await ctx.message.delete()
         member = ctx.author if member is None else member
         embed = discord.Embed(
             title=f"{str(member.display_name)}'s avatar",
@@ -387,6 +388,11 @@ class Util(commands.Cog):
         )
         embed.set_image(url=member.avatar)
         await ctx.send(embed=embed)
+
+    @av.error
+    async def av_error(self, ctx, error):
+        if isinstance(error, commands.MemberNotFound):
+            await ctx.send('Member not found', delete_after=30)
 
     @commands.group(aliases=['c'], invoke_without_command=True)
     @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())

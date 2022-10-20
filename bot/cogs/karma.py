@@ -156,7 +156,7 @@ class Karma(commands.Cog):
             await ctx.send(embed=discord.Embed(description='You didn\'t specify a user to donate to!', color=0xf66045))
             await ctx.message.delete()
         elif isinstance(error, commands.BadArgument):
-            await ctx.send(embed=discord.Embed(description=f'Wrong command usage! Command usage is `{self.bot.command_prefix}karma donate <amount> <user>`', color=0xf66045))
+            await ctx.send(embed=discord.Embed(description=f'Wrong command usage! Command usage is `{ctx.prefix}karma donate <amount> <user>`', color=0xf66045))
             await ctx.message.delete()
 
     @karma.group(name='emotes', aliases=['emote'], usage="emotes", invoke_without_command=True)
@@ -336,7 +336,7 @@ class Karma(commands.Cog):
         await ctx.message.delete()
         kasino = await self.add_kasino(ctx, question, op_a, op_b)
         self.create_kasino_backup(kasino.id)
-        await self.update_kasino(kasino.id)
+        await self.update_kasino(ctx, kasino.id)
 
     @kasino.command(name='close', usage="close <kasino_id> <winning_option>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -364,7 +364,7 @@ class Karma(commands.Cog):
     @kasino_close.error
     async def kasino_close_error(self, ctx, error):
         if isinstance(error, commands.errors.MissingRequiredArgument):
-            await ctx.send(f'You didn\'t provide a required argument! Correct usage is `{self.bot.command_prefix}kasino close <kasino_id> <winning_option>`', delete_after=20)
+            await ctx.send(f'You didn\'t provide a required argument! Correct usage is `{ctx.prefix}kasino close <kasino_id> <winning_option>`', delete_after=20)
         elif isinstance(error, commands.errors.BadArgument):
             await ctx.send('Bad argument.', delete_after=20)
         await ctx.message.delete()
@@ -378,7 +378,7 @@ class Karma(commands.Cog):
             return await ctx.author.send(f'Kasino with ID `{kasino_id}` is already locked.')
 
         self.lock_kasino(kasino_id)
-        await self.update_kasino(kasino_id)
+        await self.update_kasino(ctx, kasino_id)
         await ctx.message.delete()
 
     @kasino.command(name='bet', usage="bet <kasino_id> <amount> <option>")
@@ -392,7 +392,7 @@ class Karma(commands.Cog):
 
         if option not in [1, 2]:
             output_embed = discord.Embed(
-                title=f'Wrong usage. Correct usage is `{self.bot.command_prefix}kasino bet <kasino_id> <amount> <1 or 2>`',
+                title=f'Wrong usage. Correct usage is `{ctx.prefix}kasino bet <kasino_id> <amount> <1 or 2>`',
                 color=discord.Colour.from_rgb(209, 25, 25)
             )
             return await ctx.author.send(embed=output_embed, delete_after=30)
@@ -449,7 +449,7 @@ class Karma(commands.Cog):
         output_embed.description = f'Remaining karma: {user_karma}'
 
         await ctx.author.send(embed=output)
-        await self.update_kasino(kasino_id)
+        await self.update_kasino(ctx, kasino_id)
 
     @kasino.command(name='list', aliases=['l'], usage="list")
     async def kasino_list(self, ctx):
@@ -701,7 +701,7 @@ class Karma(commands.Cog):
             await (await self.bot.fetch_user(bet[0].discord_user_id)).send(embed=output)
         db.session.commit()
 
-    async def update_kasino(self, kasino_id: int):
+    async def update_kasino(self, ctx, kasino_id: int):
         kasino = db.session.query(db.kasino).filter_by(id=kasino_id).first()
         kasino_msg = await (await self.bot.fetch_channel(kasino.discord_channel_id)).fetch_message(kasino.discord_message_id)
 
@@ -716,7 +716,7 @@ class Karma(commands.Cog):
         bOdds = float(aAmount + bAmount) / bAmount if bAmount != 0 else 1.0
 
         # CREATE MESSAGE
-        description = f"The kasino has been opened! Place your bets using `{self.bot.command_prefix}kasino bet {kasino.id} <amount> <1 or 2>`"
+        description = f"The kasino has been opened! Place your bets using `{ctx.prefix}kasino bet {kasino.id} <amount> <1 or 2>`"
         if kasino.locked:
             description = 'The kasino is locked! No more bets are taken in. Time to wait and see...'
         to_embed = discord.Embed(
