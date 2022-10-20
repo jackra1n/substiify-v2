@@ -2,9 +2,9 @@ import contextlib
 import logging
 import platform
 
+import discord
 from core import config
 from core.version import Version
-import discord
 from discord.ext import commands
 from utils import db
 from utils.colors import colors, get_colored

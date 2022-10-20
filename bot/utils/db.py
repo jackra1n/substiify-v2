@@ -9,13 +9,13 @@ from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, String,
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-
 logger = logging.getLogger('discord')
 
 engine = create_engine(f'sqlite:///{values.DB_PATH}')
 session = sessionmaker(bind=engine)()
 
 Base = declarative_base()
+
 
 class discord_server(Base):
     __tablename__ = 'discord_server'
@@ -104,6 +104,7 @@ class giveaway(Base):
         self.discord_server_id = giveaway_message.guild.id
         self.discord_channel_id = giveaway_message.channel.id
 
+
 class karma(Base):
     __tablename__ = 'karma'
 
@@ -116,6 +117,7 @@ class karma(Base):
         self.discord_user_id = user_id
         self.discord_server_id = server_id
         self.amount = amount
+
 
 class post(Base):
     __tablename__ = 'post'
@@ -137,6 +139,7 @@ class post(Base):
         self.upvotes = upvotes
         self.downvotes = downvotes
 
+
 class karma_emote(Base):
     __tablename__ = 'karma_emote'
 
@@ -148,6 +151,7 @@ class karma_emote(Base):
         self.discord_server_id = emote.guild_id
         self.discord_emote_id = emote.id
         self.action = action
+
 
 class user_rank(Base):
     __tablename__ = 'user_rank'
@@ -163,6 +167,7 @@ class user_rank(Base):
         self.discord_server_id = user.guild.id
         self.vc_rank_points = vc_rank_points
         self.message_rank_points = message_rank_points
+
 
 class kasino(Base):
     __tablename__ = 'kasino'
@@ -185,6 +190,7 @@ class kasino(Base):
         self.discord_channel_id = message.channel.id
         self.discord_message_id = message.id
 
+
 class kasino_bet(Base):
     __tablename__ = 'kasino_bet'
 
@@ -200,6 +206,7 @@ class kasino_bet(Base):
         self.amount = amount
         self.option = option
 
+
 def get_discord_server(server: discord.Guild):
     db_server = session.query(discord_server).filter_by(discord_server_id=server.id).first()
     if db_server is None:
@@ -207,6 +214,7 @@ def get_discord_server(server: discord.Guild):
         session.add(db_server)
         session.commit()
     return db_server
+
 
 def get_discord_channel(channel: discord.TextChannel):
     db_channel = session.query(discord_channel).filter_by(discord_channel_id=channel.id).first()
@@ -227,6 +235,7 @@ def convert_db(version):
     cursor.executescript(sql_as_string)
     connection.commit()
     connection.close()
+
 
 # Creates database tables if the don't exist
 def create_database():
