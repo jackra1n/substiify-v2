@@ -3,16 +3,16 @@ import sqlite3
 from datetime import datetime
 
 import discord
+from core import values
 from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, String,
                         create_engine)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-from utils import store
 
 logger = logging.getLogger('discord')
 
-engine = create_engine(f'sqlite:///{store.DB_PATH}')
+engine = create_engine(f'sqlite:///{values.DB_PATH}')
 session = sessionmaker(bind=engine)()
 
 Base = declarative_base()
@@ -218,11 +218,11 @@ def get_discord_channel(channel: discord.TextChannel):
 
 
 def convert_db(version):
-    connection = sqlite3.connect(store.DB_PATH)
+    connection = sqlite3.connect(values.DB_PATH)
 
     cursor = connection.cursor()
 
-    sql_file = open(f'{store.RESOURCES_PATH}/db_conversion/ConvertDatabaseVersion{version}.sql')
+    sql_file = open(f'{values.RESOURCES_PATH}/db_conversion/ConvertDatabaseVersion{version}.sql')
     sql_as_string = sql_file.read()
     cursor.executescript(sql_as_string)
     connection.commit()

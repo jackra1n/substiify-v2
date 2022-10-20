@@ -5,10 +5,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import discord
+from core import values
 from discord.ext import commands
 from sqlalchemy.sql import func
-
-from utils import db, store
+from utils import db
 
 logger = logging.getLogger('discord')
 
@@ -100,10 +100,10 @@ class Karma(commands.Cog):
         return [x.discord_channel_id for x in query] if query is not None else []
 
     def get_upvote_emote(self):
-        return self.bot.get_emoji(store.UPVOTE_EMOTE_ID)
+        return self.bot.get_emoji(values.UPVOTE_EMOTE_ID)
 
     def get_downvote_emote(self):
-        return self.bot.get_emoji(store.DOWNVOTE_EMOTE_ID)
+        return self.bot.get_emoji(values.DOWNVOTE_EMOTE_ID)
 
     @commands.group(aliases=["k"], usage="karma [user]", invoke_without_command=True,)
     async def karma(self, ctx, user: discord.User = None):
@@ -283,9 +283,9 @@ class Karma(commands.Cog):
         server_downvote_emotes = query.filter_by(action=1).all()
 
         server_upvote_emotes_ids = [emote.discord_emote_id for emote in server_upvote_emotes]
-        server_upvote_emotes_ids.append(store.UPVOTE_EMOTE_ID)
+        server_upvote_emotes_ids.append(values.UPVOTE_EMOTE_ID)
         server_downvote_emotes_ids = [emote.discord_emote_id for emote in server_downvote_emotes]
-        server_downvote_emotes_ids.append(store.DOWNVOTE_EMOTE_ID)
+        server_downvote_emotes_ids.append(values.DOWNVOTE_EMOTE_ID)
 
         channel = await self.bot.fetch_channel(post.discord_channel_id)
         message = await channel.fetch_message(post.discord_message_id)
@@ -487,13 +487,13 @@ class Karma(commands.Cog):
     def get_query_karma_add(self, guild_id):
         query = db.session.query(db.karma_emote.discord_emote_id).filter_by(discord_server_id=guild_id).filter_by(action=0).all()
         emote_list = [x[0] for x in query] if query is not None else []
-        emote_list.append(int(store.UPVOTE_EMOTE_ID))
+        emote_list.append(int(values.UPVOTE_EMOTE_ID))
         return emote_list
 
     def get_query_karma_remove(self, guild_id):
         query = db.session.query(db.karma_emote.discord_emote_id).filter_by(discord_server_id=guild_id).filter_by(action=1).all()
         emote_list = [x[0] for x in query] if query is not None else []
-        emote_list.append(int(store.DOWNVOTE_EMOTE_ID))
+        emote_list.append(int(values.DOWNVOTE_EMOTE_ID))
         return emote_list
 
     async def check_payload(self, payload):
@@ -616,9 +616,9 @@ class Karma(commands.Cog):
     def create_kasino_backup(self, kasino_id):
         today_string = datetime.now().strftime("%Y_%m_%d")
         now_time_string = datetime.now().strftime("%H%M")
-        backup_folder = f"{store.DATA_PATH}/backups/{today_string}"
+        backup_folder = f"{values.DATA_PATH}/backups/{today_string}"
         Path(backup_folder).mkdir(parents=True, exist_ok=True)
-        shutil.copy(store.DB_PATH, f"{backup_folder}/backup_{now_time_string}_{kasino_id}.sqlite")
+        shutil.copy(values.DB_PATH, f"{backup_folder}/backup_{now_time_string}_{kasino_id}.sqlite")
 
     def has_user_bet(self, kasino_id: int, user_id: int) -> bool:
         return db.session.query(db.kasino_bet).filter_by(discord_user_id=user_id).filter_by(kasino_id=kasino_id).first() is not None

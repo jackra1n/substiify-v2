@@ -1,27 +1,17 @@
 import contextlib
-import json
 import logging
 import platform
 
+from core import config
+from core.version import Version
 import discord
 from discord.ext import commands
-
-from helper.CustomLogFormatter import CustomLogFormatter
-from utils import db, store, util
+from utils import db
 from utils.colors import colors, get_colored
 
-util.prepareFiles()
-db.create_database()
 logger = logging.getLogger('discord')
 
-with open(store.SETTINGS_PATH, "r") as settings:
-    settings = json.load(settings)
 
-if not settings['token']:
-    logger.error(f'No token in {store.SETTINGS_PATH}! Please add it and try again.')
-    exit()
-
-prefix = settings["prefix"]
 initial_extensions = (
     'free_games',
     'fun',
@@ -43,13 +33,14 @@ class Substiify(commands.Bot):
     def __init__(self):
         intents = discord.Intents().all()
         super().__init__(
-            command_prefix=commands.when_mentioned_or(f'{prefix}'),
+            command_prefix=commands.when_mentioned_or(config.PREFIX),
             intents=intents,
             owner_id=276462585690193921
         )
+        self.version = Version()
 
     async def setup_hook(self):
-        cogs_folder = 'modules'
+        cogs_folder = 'cogs'
         for extension in initial_extensions:
             try:
                 await self.load_extension(f"{cogs_folder}.{extension}")
@@ -59,7 +50,7 @@ class Substiify(commands.Bot):
 
     async def on_ready(self):
         servers = len(self.guilds)
-        activityName = f"{prefix}help | {servers} servers"
+        activityName = f"{config.PREFIX}help | {servers} servers"
         activity = discord.Activity(type=discord.ActivityType.listening, name=activityName)
         await self.change_presence(activity=activity)
 
@@ -86,9 +77,3 @@ class Substiify(commands.Bot):
         with contextlib.suppress(Exception):
             await ctx.message.add_reaction('🆘')
         logger.error(f'[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]')
-
-
-custom_formatter = CustomLogFormatter()
-
-bot = Substiify()
-bot.run(settings['token'], log_formatter=custom_formatter)

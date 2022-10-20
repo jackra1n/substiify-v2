@@ -1,18 +1,17 @@
 
 import asyncio
 import datetime
-import json
 import logging
 import random
 import re
 
 import discord
 import wavelink
+from core import config
 from discord.ext import commands
+from utils import db
 from wavelink import Player, Track
 from wavelink.ext import spotify
-
-from utils import db, store
 
 logger = logging.getLogger('discord')
 
@@ -25,20 +24,16 @@ class Music(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        with open(store.SETTINGS_PATH, "r") as settings:
-            self.settings_json = json.load(settings)
         bot.loop.create_task(self.connect_nodes())
 
     async def connect_nodes(self):
         await self.bot.wait_until_ready()
-        spotify_client_id = self.settings_json['spotify_client_id']
-        spotify_client_secret = self.settings_json['spotify_client_secret']
-        if not spotify_client_id or not spotify_client_secret:
+        if not config.SPOTIFY_CLIENT_ID or not config.SPOTIFY_CLIENT_SECRET:
             logger.warning("Spotify client id or secret not found. Spotify support disabled.")
             spotify_client = None
         else:
-            spotify_client = spotify.SpotifyClient(client_id=spotify_client_id, client_secret=spotify_client_secret)
-        await wavelink.NodePool.create_node(bot=self.bot, host='0.0.0.0', port=2333, password='youshallnotpass', spotify_client=spotify_client)
+            spotify_client = spotify.SpotifyClient(client_id=config.SPOTIFY_CLIENT_ID, client_secret=config.SPOTIFY_CLIENT_SECRET)
+        await wavelink.NodePool.create_node(bot=self.bot, host=config.LAVALINK_HOST, port=config.LAVALINK_PORT, password=config.LAVALINK_PASSWORD, spotify_client=spotify_client)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -471,4 +466,7 @@ class NoMoreTracks(commands.CommandError):
 
 
 async def setup(bot):
-    await bot.add_cog(Music(bot))
+    if all([config.LAVALINK_HOST, config.LAVALINK_PORT, config.LAVALINK_PASSWORD]):
+        await bot.add_cog(Music(bot))
+    else:
+        logger.warning("Lavalink is not configured. Skipping Music cog.")
