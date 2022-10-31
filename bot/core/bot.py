@@ -70,10 +70,12 @@ class Substiify(commands.Bot):
         db.session.commit()
 
     async def on_command_error(self, ctx, error):
+        if not ctx.command:
+            logger.warning(f'Error without command occurred: [{ctx.author}] -> {error}')
+        logger.error(f'[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]')
         if isinstance(error, commands.CommandNotFound):
             return
         if isinstance(error, commands.CheckFailure):
             await ctx.send('You do not have permission to use this command.')
         with contextlib.suppress(Exception):
             await ctx.message.add_reaction('🆘')
-        logger.error(f'[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]')

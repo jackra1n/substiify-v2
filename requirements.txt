@@ -6,3 +6,4 @@ pytz
 sqlalchemy
 wavelink
 vacefron.py
+toml
