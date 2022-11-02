@@ -5,6 +5,10 @@ from discord import Embed
 from discord.ext import commands
 
 
+HELP_COLOR = 0x292B3E
+DELETE_AFTER = 90
+
+
 class Help(commands.MinimalHelpCommand):
     """Shows help info for commands and cogs"""
 
@@ -20,12 +24,12 @@ class Help(commands.MinimalHelpCommand):
             set_author=True,
         )
         embed.set_footer(text=f"Use {self.context.clean_prefix}help <command / category> to get more information.")
-        self.response = await self.get_destination().send(embed=embed)
+        self.response = await self.get_destination().send(embed=embed, delete_after=DELETE_AFTER)
 
     # help <cog>
     async def send_cog_help(self, cog: commands.Cog):
         embed = await self.cog_help_embed(cog)
-        await self.get_destination().send(embed=embed)
+        await self.get_destination().send(embed=embed, delete_after=DELETE_AFTER)
 
     # help <group>
     async def send_group_help(self, group):
@@ -35,7 +39,7 @@ class Help(commands.MinimalHelpCommand):
         if len(command_chain := group.full_parent_name) > 0:
             command_chain = f"{group.full_parent_name} "
         embed.set_footer(text=f"This command has subcommands. Check their help page with `{self.context.clean_prefix}help {command_chain}{group.name} <subcommand>`")
-        await self.context.send(embed=embed)
+        await self.context.send(embed=embed, delete_after=DELETE_AFTER)
 
     async def cog_help_embed(self, cog: Optional[commands.Cog]) -> Embed:
         if cog is None:
@@ -51,13 +55,13 @@ class Help(commands.MinimalHelpCommand):
     # help <command>
     async def send_command_help(self, command: commands.Command):
         embed = self.create_command_help_embed(command)
-        await self.get_destination().send(embed=embed)
+        await self.get_destination().send(embed=embed, delete_after=DELETE_AFTER)
 
     async def _help_embed(
         self, title: str, description: Optional[str] = None, mapping: Optional[str] = None,
         command_set: Optional[Set[commands.Command]] = None, set_author: bool = False
     ) -> Embed:
-        embed = Embed(title=title, color=0xE3621E)
+        embed = Embed(title=title, color=HELP_COLOR)
         if description:
             embed.description = description
         if set_author:
@@ -113,7 +117,7 @@ class Help(commands.MinimalHelpCommand):
                 usage = f"{command.full_parent_name} {usage}"
             usage = self.context.clean_prefix + usage
 
-        embed = Embed(title=command_name, color=0xE3621E)
+        embed = Embed(title=command_name, color=HELP_COLOR)
         embed.add_field(name="Info", value=help_msg.replace("{prefix}", self.context.clean_prefix), inline=False)
         embed.add_field(name="Aliases", value=f"```asciidoc\n{aliases_msg}```")
         embed.add_field(name="Usage", value=f"```asciidoc\n{usage}```", inline=False)
