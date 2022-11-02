@@ -64,13 +64,9 @@ class Music(commands.Cog):
         logger.info(f'Node: <{node.identifier}> is ready!')
 
     @commands.Cog.listener()
-    async def on_wavelink_websocket_closed(self, reason: str, code):
+    async def on_wavelink_websocket_closed(self, player: wavelink.Player, reason: str, code: int):
         """Event fired when a node's websocket connection is closed."""
-        if wavelink.NodePool.nodes is None:
-            msg = 'Lavalink node connection closed. No other nodes are available!'
-            logger.warn(msg)
-            owner = await self.bot.fetch_user(self.bot.owner_id)
-            await owner.send(msg)
+        logger.warn(f'Websocket closed! Guild: {player.guild} | Reason: {reason} | Code: {code}')
 
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, player: Player, track: Track, reason):
