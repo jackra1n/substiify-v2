@@ -416,8 +416,7 @@ class Util(commands.Cog):
     @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
     async def clear_bot(self, ctx, amount: int):
         """Clears the bot's messages even in DMs"""
-        messages = await ctx.channel.history(limit=amount + 1).flatten()
-        bots_messages = [m for m in messages if m.author == self.bot.user]
+        bots_messages = [messages async for messages in ctx.channel.history(limit=amount + 1) if messages.author == self.bot.user]
 
         if len(bots_messages) <= 100 and type(ctx.channel) == discord.TextChannel:
             await ctx.message.delete()
