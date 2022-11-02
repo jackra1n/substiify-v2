@@ -11,7 +11,7 @@ services:
       - ./resources/lavalink/logs:/opt/Lavalink/logs
     # If it comes to serving a large amount of guilds, increasing the allocated memory is a must.
     # Change -Xmx to your prefered size. E.g: -Xmx2G for 2GB memory allocated.
-    entrypoint: java -Xmx1G -jar Lavalink.jar
+    entrypoint: java -Xmx2G -jar Lavalink.jar
 
   bot:
     build: .
