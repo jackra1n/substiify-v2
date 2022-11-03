@@ -193,7 +193,7 @@ class Music(commands.Cog):
             track.requester = requester
             player.queue.put(track)
             embed.title = 'Song Queued'
-            embed.description = f'[{track.title}]({track.uri})'
+            msg = f'[{track.title}]({track.uri})'
 
         if not player.is_playing():
             track = await player.play(await player.queue.get_wait())
