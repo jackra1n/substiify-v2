@@ -33,7 +33,10 @@ def setup_logger_file() -> None:
     logger.setLevel(logging.DEBUG)
     handler = TimedRotatingFileHandler(f'{values.LOGS_PATH}/substiify_', when="midnight", interval=1, encoding='utf-8')
     handler.suffix = "%Y-%m-%d.log"
-    handler.setFormatter(CustomLogFormatter())
+    format_string = '[{asctime}] [{levelname:<7}] {name}: {message}'
+    date_format = '%Y-%m-%d %H:%M:%S'
+    file_formatter = logging.Formatter(format_string, date_format, style='{')
+    handler.setFormatter(file_formatter)
     logger.addHandler(handler)
 
 

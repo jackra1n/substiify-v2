@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import platform
 import random
@@ -104,10 +105,8 @@ class Util(commands.Cog):
                 return await ctx.send("You didn't answer the questions in Time", delete_after=60)
             answers.append(message.content)
             await question_message.delete()
-            try:
+            with contextlib.suppress(Exception):
                 await message.delete()
-            except Exception:
-                pass
 
         # Check if Channel Id is valid
         try:
@@ -484,7 +483,7 @@ class Util(commands.Cog):
             timestamp=datetime.now(timezone("Europe/Zurich"))
         )
         embed.set_thumbnail(url=self.bot.user.avatar)
-        embed.set_footer(text=f"Requested by by {ctx.author}", icon_url=ctx.author.avatar)
+        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar)
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
