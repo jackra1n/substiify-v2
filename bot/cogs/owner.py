@@ -1,10 +1,9 @@
-import json
 import logging
 import subprocess
 from os import path, walk
 
 import discord
-from core import config
+from core import config, values
 from core.version import VersionType
 from discord import Activity, ActivityType
 from discord.ext import commands, tasks
@@ -358,7 +357,7 @@ class Owner(commands.Cog):
         for command in commands_used_query:
             formated_date = command[0].date.strftime("%d/%m/%Y %H:%M:%S")
             commands_used += f"`{command[0].command}` used by `{command[1].username}` at {formated_date}\n"
-        embed = discord.Embed(title=f"Top {amount} used commands on: **{ctx.guild.name}**", color=0xE3621E)
+        embed = discord.Embed(title=f"Top {amount} used commands on: **{ctx.guild.name}**", color=values.PRIMARY_COLOR)
         embed.description = commands_used
         await ctx.send(embed=embed, delete_after=60)
         await ctx.message.delete()
@@ -375,7 +374,7 @@ class Owner(commands.Cog):
         for row in commands_used_query:
             commands_used += f"`{row[1].server_name}`\n"
             commands_count += f"{row[2]}\n"
-        embed = discord.Embed(title="Top servers used commands", color=0xE3621E)
+        embed = discord.Embed(title="Top servers used commands", color=values.PRIMARY_COLOR)
         embed.add_field(name="Command", value=commands_used, inline=True)
         embed.add_field(name="Count", value=commands_count, inline=True)
         await ctx.send(embed=embed, delete_after=30)
@@ -456,7 +455,7 @@ def create_command_usage_embed(commands_used_query, embed_title):
     for row in commands_used_query:
         commands_used += f"`{row[0]}`\n"
         commands_count += f"{row[1]}\n"
-    embed = discord.Embed(title=embed_title, color=0xE3621E)
+    embed = discord.Embed(title=embed_title, color=values.PRIMARY_COLOR)
     embed.add_field(name="Command", value=commands_used, inline=True)
     embed.add_field(name="Count", value=commands_count, inline=True)
     return embed

@@ -7,3 +7,4 @@ sqlalchemy
 wavelink
 vacefron.py
 toml
+jishaku

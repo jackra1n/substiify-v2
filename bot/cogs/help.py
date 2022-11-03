@@ -1,11 +1,10 @@
 from typing import Optional, Set
 
 import discord
+from core import values
 from discord import Embed
 from discord.ext import commands
 
-
-HELP_COLOR = 0x292B3E
 DELETE_AFTER = 90
 
 
@@ -61,7 +60,7 @@ class Help(commands.MinimalHelpCommand):
         self, title: str, description: Optional[str] = None, mapping: Optional[str] = None,
         command_set: Optional[Set[commands.Command]] = None, set_author: bool = False
     ) -> Embed:
-        embed = Embed(title=title, color=HELP_COLOR)
+        embed = Embed(title=title, color=values.SECONDARY_COLOR)
         if description:
             embed.description = description
         if set_author:
@@ -117,7 +116,7 @@ class Help(commands.MinimalHelpCommand):
                 usage = f"{command.full_parent_name} {usage}"
             usage = self.context.clean_prefix + usage
 
-        embed = Embed(title=command_name, color=HELP_COLOR)
+        embed = Embed(title=command_name, color=values.SECONDARY_COLOR)
         embed.add_field(name="Info", value=help_msg.replace("{prefix}", self.context.clean_prefix), inline=False)
         embed.add_field(name="Aliases", value=f"```asciidoc\n{aliases_msg}```")
         embed.add_field(name="Usage", value=f"```asciidoc\n{usage}```", inline=False)

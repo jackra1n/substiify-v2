@@ -187,7 +187,7 @@ class Util(commands.Cog):
         newEmbed = discord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!!")
         await msg.edit(embed=newEmbed)
 
-    @tasks.loop(seconds=45.0)
+    @tasks.loop(minutes=1)
     async def giveaway_task(self):
         giveaways = db.session.query(db.giveaway).all()
         random_seed_value = datetime.now().timestamp()
@@ -438,7 +438,11 @@ class Util(commands.Cog):
         Shows the ping of the bot
         """
         title = 'Donk!' if 'dink' in ctx.message.content.lower() else 'Pong!'
-        embed = discord.Embed(title=f'{title} 🏓', description=f'⏱️Ping: `{round(self.bot.latency*1000)}`ms', color=0xE3621E)
+        embed = discord.Embed(
+            title=f'{title} 🏓',
+            description=f'⏱️Ping: `{round(self.bot.latency*1000)}`ms',
+            color=values.PRIMARY_COLOR
+        )
         await ctx.message.delete()
         await ctx.send(embed=embed)
 
@@ -449,7 +453,7 @@ class Util(commands.Cog):
         embed = discord.Embed(
             title="Special thanks for any help to those people",
             description=" ".join(peeople_who_helped),
-            color=0xE3621E,
+            color=values.PRIMARY_COLOR,
         )
 
         await ctx.message.delete()
@@ -475,7 +479,8 @@ class Util(commands.Cog):
 
         embed = discord.Embed(
             title=f'Info about {self.bot.user.display_name}',
-            description=content, color=0xE3621E,
+            description=content,
+            color=values.PRIMARY_COLOR,
             timestamp=datetime.now(timezone("Europe/Zurich"))
         )
         embed.set_thumbnail(url=self.bot.user.avatar)

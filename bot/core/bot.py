@@ -11,15 +11,15 @@ from utils.colors import colors, get_colored
 
 logger = logging.getLogger('discord')
 
-
-initial_extensions = (
-    'free_games',
-    'fun',
-    'help',
-    'karma',
-    'music',
-    'owner',
-    'util'
+INITIAL_EXTENSIONS = (
+    'cogs.free_games',
+    'cogs.fun',
+    'cogs.help',
+    'cogs.karma',
+    'cogs.music',
+    'cogs.owner',
+    'cogs.util',
+    'jishaku'
 )
 
 
@@ -40,10 +40,9 @@ class Substiify(commands.Bot):
         self.version = Version()
 
     async def setup_hook(self):
-        cogs_folder = 'cogs'
-        for extension in initial_extensions:
+        for extension in INITIAL_EXTENSIONS:
             try:
-                await self.load_extension(f"{cogs_folder}.{extension}")
+                await self.load_extension(extension)
             except Exception as e:
                 exc = f'{type(e).__name__}: {e}'
                 logger.warning(f'Failed to load extension {extension}\n{exc}')
@@ -70,11 +69,12 @@ class Substiify(commands.Bot):
         db.session.commit()
 
     async def on_command_error(self, ctx, error):
-        if not ctx.command:
-            logger.warning(f'Error without command occurred: [{ctx.author}] -> {error}')
-        logger.error(f'[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]')
         if isinstance(error, commands.CommandNotFound):
             return
+        if not ctx.command:
+            logger.warning(f'Error without command occurred: [{ctx.author}] -> {error}')
+            return
+        logger.error(f'[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]')
         if isinstance(error, commands.CheckFailure):
             await ctx.send('You do not have permission to use this command.')
         with contextlib.suppress(Exception):
