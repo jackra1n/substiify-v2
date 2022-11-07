@@ -1,4 +1,3 @@
-import logging
 import sqlite3
 from datetime import datetime
 
@@ -8,8 +7,6 @@ from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, String,
                         create_engine)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-
-logger = logging.getLogger('discord')
 
 engine = create_engine(f'sqlite:///{values.DB_PATH}')
 session = sessionmaker(bind=engine)()

@@ -14,7 +14,7 @@ from utils import db
 from wavelink import Player, Track
 from wavelink.ext import spotify
 
-logger = logging.getLogger('discord')
+logger = logging.getLogger(__name__)
 
 URL = re.compile(r'https?://(?:www\.)?.+')
 EMBED_COLOR = 0x292B3E
