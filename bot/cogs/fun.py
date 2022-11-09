@@ -6,7 +6,7 @@ import discord
 import vacefron
 from discord.ext import commands
 
-logger = logging.getLogger('discord')
+logger = logging.getLogger(__name__)
 
 
 class Fun(commands.Cog):

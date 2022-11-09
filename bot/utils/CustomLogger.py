@@ -32,3 +32,11 @@ class CustomLogFormatter(logging.Formatter):
         log_fmt = self.FORMATS.get(record.levelno)
         formatter = logging.Formatter(log_fmt, self.dt_fmt, style='{')
         return formatter.format(record)
+
+
+class RemoveNoise(logging.Filter):
+    def __init__(self):
+        super().__init__(name='discord.gateway')
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.name not in 'discord.gateway' or "successfully RESUMED session" not in record.msg

@@ -17,7 +17,7 @@ from discord.ext.commands import BucketType
 from pytz import timezone
 from utils import db
 
-logger = logging.getLogger('discord')
+logger = logging.getLogger(__name__)
 
 
 class Util(commands.Cog):
