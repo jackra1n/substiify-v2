@@ -1,10 +1,10 @@
 #install with "pip3 install -r requirements.txt"
 
-discord.py[voice]
+discord.py[voice,speed]
 psutil
 pytz
 sqlalchemy
 wavelink
 vacefron.py
 toml
-#jishaku
+#jishaku  # for debugging, not needed for normal use

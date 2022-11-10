@@ -105,8 +105,10 @@ class Util(commands.Cog):
                 return await ctx.send("You didn't answer the questions in Time", delete_after=60)
             answers.append(message.content)
             await question_message.delete()
-            with contextlib.suppress(Exception):
+            try:
                 await message.delete()
+            except discord.errors.NotFound:
+                pass
 
         # Check if Channel Id is valid
         try:

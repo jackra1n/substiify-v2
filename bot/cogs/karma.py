@@ -604,9 +604,12 @@ class Karma(commands.Cog):
         kasino = db.session.query(db.kasino).filter_by(id=kasino_id).first()
         if kasino is None:
             return
-        with contextlib.suppress(discord.errors.NotFound):
-            kasino_msg = await (await self.bot.fetch_channel(kasino.discord_channel_id)).fetch_message(kasino.discord_message_id)
+        try:
+            kasino_channel = await self.bot.fetch_channel(kasino.discord_channel_id)
+            kasino_msg = await kasino_channel.fetch_message(kasino.discord_message_id)
             await kasino_msg.delete()
+        except discord.errors.NotFound:
+            pass
         db.session.delete(kasino)
         bets = db.session.query(db.kasino_bet).filter_by(kasino_id=kasino_id).all()
         for bet in bets:

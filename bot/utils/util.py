@@ -1,10 +1,10 @@
+import importlib.resources
 import os
 import platform
-import importlib.resources
 
 import discord
-from utils.colors import colors, get_colored
 from core.version import Version
+from utils.colors import colors, get_colored
 
 
 def get_system_description() -> str:

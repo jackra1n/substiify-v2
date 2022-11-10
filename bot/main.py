@@ -5,7 +5,6 @@ from pathlib import Path
 from core import bot, config, values
 from core.version import Version
 from utils import db, util
-
 from utils.CustomLogger import CustomLogFormatter, RemoveNoise
 
 logger = logging.getLogger(__name__)
