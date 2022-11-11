@@ -1,4 +1,3 @@
-import contextlib
 import logging
 
 import discord
@@ -68,6 +67,8 @@ class Substiify(commands.Bot):
         logger.error(f'[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]')
         if isinstance(error, commands.CheckFailure):
             await ctx.send('You do not have permission to use this command.')
+        if hasattr(error, 'is_handled') and error.is_handled:
+            return
         try:
             await ctx.message.add_reaction('🆘')
         except discord.HTTPException:
