@@ -39,17 +39,10 @@ class Music(commands.Cog):
 
     async def cog_command_error(self, ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.reply("Please provide a search query or URL.")
-        if isinstance(error, NoVoiceChannel):
-            await ctx.send("You are not in a voice channel.")
-        if isinstance(error, NoPlayerFound):
-            await ctx.send('No active player found.')
-        if isinstance(error, NoPermissions):
-            await ctx.send('I do not have the permissions to join your voice channel.')
-        if isinstance(error, DifferentVoiceChannel):
-            await ctx.send('You are not in the same voice channel as the bot.')
-        if isinstance(error, NoNodeAccessible):
-            await ctx.send('No playing agent is available at the moment. Please try again later or contact support.')
+            await ctx.reply('Please provide a search query or URL.')
+        if isinstance(error, MusicError):
+            error.is_handled = True
+            await ctx.send(error)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -138,9 +131,12 @@ class Music(commands.Cog):
         `<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
         """
         player: Player = ctx.voice_client
-        embed = discord.Embed(color=EMBED_COLOR)
+
+        embed = None
+        tracks = None
 
         search = search.strip('<>')
+        await ctx.message.delete()
 
         # Check spotify
         if (decoded := spotify.decode_url(search)) is not None:
@@ -148,33 +144,26 @@ class Music(commands.Cog):
                 return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
             embed = await self._queue_spotify(decoded, player, ctx.author)
 
-        # Check if URL
         elif URL.match(search):
             if 'list=' in search:
-                songs = await wavelink.NodePool.get_node().get_playlist(wavelink.YouTubePlaylist, search)
+                tracks = await player.node.get_playlist(wavelink.YouTubePlaylist, search)
             else:
-                songs = await wavelink.NodePool.get_node().get_tracks(wavelink.Track, search)
-            if songs is None:
-                return await ctx.reply("No results found.", delete_after=15)
-            embed = await self._queue_songs(songs, player, ctx.author)
+                tracks = await player.node.get_tracks(wavelink.Track, search)
 
-        # Search for query string
         else:
             try:
                 track = await wavelink.YouTubeTrack.search(query=search, return_first=True)
-            except IndexError:
-                await ctx.message.delete()
-                return await ctx.send("No results found.", delete_after=15)
-            # Seems like should be this instead of try except
-            if track is None:
-                await ctx.message.delete()
-                return await ctx.send("No results found.", delete_after=15)
-            embed = await self._queue_songs([track], player, ctx.author)
+                tracks = [track]
+            except IndexError as e:
+                raise NoTracksFound() from e
+
+        if embed is None and tracks is None:
+            raise NoTracksFound()
+        if embed is None:
+            embed = await self._queue_songs(tracks, player, ctx.author)
 
         server = db.get_discord_server(ctx.guild)
         delete_after = 60 if server.music_cleanup else None
-
-        await ctx.message.delete()
         await ctx.send(embed=embed, delete_after=delete_after)
 
     async def _queue_spotify(self, decoded, player, requester):
@@ -182,9 +171,9 @@ class Music(commands.Cog):
         embed = discord.Embed(color=EMBED_COLOR)
         if decoded["type"] in (spotify.SpotifySearchType.playlist, spotify.SpotifySearchType.album):
             tracks_count = 0
-            async for partial in spotify.SpotifyTrack.iterator(query=decoded["id"], partial_tracks=True, type=decoded["type"]):
-                partial.requester = requester
-                player.queue.put(partial)
+            async for track in spotify.SpotifyTrack.iterator(query=decoded["id"], partial_tracks=True, type=decoded["type"]):
+                track.requester = requester
+                player.queue.put(track)
                 tracks_count += 1
             embed.title = 'Playlist Queued'
             msg = f'{tracks_count} tracks'
@@ -193,12 +182,11 @@ class Music(commands.Cog):
             track.requester = requester
             player.queue.put(track)
             embed.title = 'Song Queued'
-            msg = f'[{track.title}]({track.uri})'
+            msg = f'Now playing: [{track.title}]({track.uri})'
 
         if not player.is_playing():
             track = await player.play(await player.queue.get_wait())
             track.requester = requester
-            msg += f'\nNow playing: [{track.title}]({track.uri})'
         embed.description = msg
         return embed
 
@@ -229,10 +217,10 @@ class Music(commands.Cog):
         player: Player = ctx.voice_client
 
         if not player.is_connected():
-            return await ctx.send('Not connected.', delete_after=30)
+            raise NoPlayerFound()
 
         if ctx.author.voice.channel != player.channel:
-            return await ctx.reply('You\'re not in my voicechannel!', delete_after=30)
+            raise DifferentVoiceChannel()
 
         await player.stop()
         player.queue.reset()
@@ -270,7 +258,7 @@ class Music(commands.Cog):
         await ctx.message.delete()
 
         if not player.is_connected():
-            return await ctx.send('Not connected.', delete_after=10)
+            raise NoPlayerFound()
 
         if not player.is_playing():
             return await ctx.send('Nothing playing.', delete_after=10)
@@ -458,40 +446,38 @@ class PaginatorView(discord.ui.View):
         button.disabled = False
 
 
-class AlreadyConnectedToChannel(commands.CommandError):
+class MusicError(commands.CommandError):
     pass
 
 
-class NoVoiceChannel(commands.CommandError):
-    pass
+class NoVoiceChannel(MusicError):
+    def __init__(self):
+        super().__init__('You are not in a voice channel.')
 
 
-class NoPermissions(commands.CommandError):
-    pass
+class NoPermissions(MusicError):
+    def __init__(self):
+        super().__init__('I do not have the permissions to join your voice channel.')
 
 
-class NoPlayerFound(commands.CommandError):
-    pass
+class NoPlayerFound(MusicError):
+    def __init__(self):
+        super().__init__('No active player found.')
 
 
-class QueueIsEmpty(commands.CommandError):
-    pass
+class NoTracksFound(MusicError):
+    def __init__(self):
+        super().__init__('No tracks were found.')
 
 
-class NoTracksFound(commands.CommandError):
-    pass
+class DifferentVoiceChannel(MusicError):
+    def __init__(self):
+        super().__init__('You are not in the same voice channel as the bot.')
 
 
-class NoMoreTracks(commands.CommandError):
-    pass
-
-
-class DifferentVoiceChannel(commands.CommandError):
-    pass
-
-
-class NoNodeAccessible(commands.CommandError):
-    pass
+class NoNodeAccessible(MusicError):
+    def __init__(self):
+        super().__init__('No playing agent is available at the moment. Please try again later or contact support.')
 
 
 async def setup(bot):
