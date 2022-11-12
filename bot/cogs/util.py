@@ -379,8 +379,6 @@ class Util(commands.Cog):
         """
         Enlarge and view your profile picture or another member
         """
-        if member is None:
-            await ctx.message.delete()
         member = ctx.author if member is None else member
         embed = discord.Embed(
             title=f"{str(member.display_name)}'s avatar",
