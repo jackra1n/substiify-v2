@@ -64,7 +64,7 @@ class Music(commands.Cog):
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, player: Player, track: Track, reason):
         """Event fired when a track ends."""
-        if player.loop:
+        if hasattr(player, 'loop') and player.loop:
             return await player.play(track)
         if not player.queue.is_empty:
             partial = await player.queue.get_wait()
