@@ -15,7 +15,7 @@ class CustomLogFormatter(logging.Formatter):
 
     format_prefix = "[" + green + "{asctime}" + reset + "] ["
     level_name = "{levelname:<7}" + reset + "] "
-    source_line = purple + "line {lineno} in" + reset + " -> "
+    source_line = purple + "{lineno}" + reset + "@"
     format_suffix = light_blue + "{name}" + reset + ": {message} "
 
     dt_fmt = '%Y-%m-%d %H:%M:%S'

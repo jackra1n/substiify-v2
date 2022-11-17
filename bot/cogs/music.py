@@ -64,6 +64,8 @@ class Music(commands.Cog):
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, player: Player, track: Track, reason):
         """Event fired when a track ends."""
+        if player.loop:
+            return await player.play(track)
         if not player.queue.is_empty:
             partial = await player.queue.get_wait()
             track = await player.play(partial)
@@ -208,6 +210,20 @@ class Music(commands.Cog):
             track = await player.play(await player.queue.get_wait())
             track.requester = requester
         return embed
+
+    @commands.hybrid_command(name="loop")
+    async def _loop(self, ctx):
+        """ Loops the current song. """
+        player: Player = ctx.voice_client
+        if hasattr(player, 'loop'):
+            player.loop = not player.loop
+        else:
+            player.loop = True
+        embed_color = discord.Color.green() if player.loop else discord.Color.red()
+        embed = discord.Embed(color=embed_color)
+        embed.title = '🔁 Looping' if player.loop else '⏭️ Not looping'
+        embed.description = 'Now looping the current song.' if player.loop else 'Stopped looping.'
+        await ctx.send(embed=embed)
 
     @commands.command(aliases=['disconnect', 'stop'])
     async def leave(self, ctx):

@@ -15,10 +15,9 @@ def prepareFiles() -> None:
     Path(values.LOGS_PATH).mkdir(parents=True, exist_ok=True)
 
     # Create 'data' folder if it doesn't exist
-    Path('bot/data').mkdir(parents=True, exist_ok=True)
+    Path(values.DATA_PATH).mkdir(parents=True, exist_ok=True)
 
     if not Path(values.VERSION_CONFIG_PATH).is_file():
-        logger.info(f'Creating {values.VERSION_CONFIG_PATH}')
         Version.create_version_file()
 
     # Create database file if it doesn't exist
@@ -51,8 +50,8 @@ if not config.TOKEN:
     exit()
 
 if __name__ == "__main__":
-    util.print_system_info()
     prepareFiles()
+    util.print_system_info()
     setup_logging()
     db.create_database()
 
