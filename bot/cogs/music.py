@@ -124,7 +124,7 @@ class Music(commands.Cog):
         if player.channel != ctx.author.voice.channel:
             raise DifferentVoiceChannel()
 
-    @commands.command(aliases=['p'], usage='play <url/query>')
+    @commands.hybrid_command(aliases=['p'], usage='play <url/query>')
     async def play(self, ctx, *, search: str):
         """ Plays or queues a song/playlist. Can be a YouTube URL, Soundcloud URL or a search query.
 
@@ -138,7 +138,8 @@ class Music(commands.Cog):
         tracks = None
 
         search = search.strip('<>')
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
         # Check spotify
         if (decoded := spotify.decode_url(search)) is not None:
@@ -225,7 +226,7 @@ class Music(commands.Cog):
         embed.description = 'Now looping the current song.' if player.loop else 'Stopped looping.'
         await ctx.send(embed=embed)
 
-    @commands.command(aliases=['disconnect', 'stop'])
+    @commands.hybrid_command(aliases=['disconnect', 'stop'])
     async def leave(self, ctx):
         """
         Disconnects the player from the voice channel and clears its queue.
@@ -244,9 +245,10 @@ class Music(commands.Cog):
 
         embed = discord.Embed(title='*⃣ | Disconnected', color=EMBED_COLOR)
         await ctx.send(embed=embed, delete_after=30)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
-    @commands.command()
+    @commands.hybrid_command()
     async def skip(self, ctx):
         """
         Skips the current track. If there no more tracks in the queue, disconnects the player.
@@ -263,15 +265,17 @@ class Music(commands.Cog):
         embed = discord.Embed(color=EMBED_COLOR, title='⏭ | Skipped.', description=old_song)
         embed.set_footer(text=f'Requested by {ctx.author}', icon_url=ctx.author.avatar)
         await ctx.send(embed=embed, delete_after=30)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
-    @commands.command(name="now", aliases=['np', 'current'])
+    @commands.hybrid_command(name="now", aliases=['np', 'current'])
     async def now_playing(self, ctx):
         """
         Shows info about the currently playing track.
         """
         player: Player = ctx.voice_client
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
         if not player.is_connected():
             raise NoPlayerFound()
@@ -282,7 +286,7 @@ class Music(commands.Cog):
         embed = self._create_current_song_embed(player)
         await ctx.send(embed=embed, delete_after=60)
 
-    @commands.command()
+    @commands.hybrid_command()
     async def shuffle(self, ctx):
         """
         Randomly shuffles the queue.
@@ -295,15 +299,21 @@ class Music(commands.Cog):
         random.shuffle(player.queue._queue)
         embed = discord.Embed(color=EMBED_COLOR, title='🔀 | Queue shuffled.')
         await ctx.send(embed=embed, delete_after=15)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
-    @commands.group(aliases=['q'], invoke_without_command=True)
+    @commands.hybrid_group()
     async def queue(self, ctx):
+        pass
+
+    @queue.command(name='show')
+    async def _show(self, ctx):
         """
-        Shows the queue in a paginated menu. Use the subcommand `clear` to clear the queue.
+        Shows the queue in a paginated menu.
         """
         player: Player = ctx.voice_client
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
         if player.queue.count < 1:
             if player.track:
                 embed = self._create_current_song_embed(player)
@@ -320,7 +330,8 @@ class Music(commands.Cog):
         Moves a track from one position in the queue to another.
         """
         player: Player = ctx.voice_client
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
         if not player.queue:
             embed = discord.Embed(color=EMBED_COLOR, title='*⃣ | Queue is empty.')
             return await ctx.send(embed=embed, delete_after=15)
@@ -341,7 +352,8 @@ class Music(commands.Cog):
         player.queue.clear()
         embed = discord.Embed(color=EMBED_COLOR, title='*⃣ | Queue cleared.')
         await ctx.send(embed=embed, delete_after=30)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     @commands.is_owner()
     @commands.command(hidden=True)
@@ -350,8 +362,9 @@ class Music(commands.Cog):
         Shows all active players. Mostly used to check before deploying a new version.
         """
         players = wavelink.NodePool.get_node().players
-        if not players:
+        if not ctx.interaction:
             await ctx.message.delete()
+        if not players:
             embed = discord.Embed(color=EMBED_COLOR, title='*⃣ | No active players found.')
             return await ctx.send(embed=embed, delete_after=15)
 
@@ -362,9 +375,8 @@ class Music(commands.Cog):
         embed.title = 'Active players'
         embed.description = '\n'.join(f'{server_name}' for server_name in server_names)
         await ctx.send(embed=embed, delete_after=60)
-        await ctx.message.delete()
 
-    @commands.command()
+    @commands.hybrid_command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def cleanup(self, ctx, enable: bool = None):
         """
@@ -378,7 +390,8 @@ class Music(commands.Cog):
 
         embed = self.create_song_cleanup_embed(ctx, enable, server)
         await ctx.send(embed=embed)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     def create_song_cleanup_embed(self, ctx, enable, server):
         embed = discord.Embed(color=discord.Color.red())
