@@ -46,10 +46,24 @@ class Music(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        if member == self.bot.user and after.channel is None:
+        if self.is_bot_force_disconnected(member, after):
             player = wavelink.NodePool.get_node().get_player(before.channel.guild)
             if player is not None:
                 await player.disconnect()
+
+        if self.is_bot_last_vc_member(before.channel):
+            player = wavelink.NodePool.get_node().get_player(before.channel.guild)
+            if player is not None:
+                await player.disconnect()
+
+    def is_bot_last_vc_member(self, channel: discord.VoiceChannel):
+        return channel and self.bot.user in channel.members and len(self.get_vc_users(channel)) == 0
+
+    def get_vc_users(self, channel: discord.VoiceChannel):
+        return [member for member in channel.members if not member.bot and member.id != self.bot.user.id]
+
+    def is_bot_force_disconnected(self, member: discord.Member, after: discord.VoiceState):
+        return member == self.bot.user and after.channel is None
 
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
@@ -185,7 +199,7 @@ class Music(commands.Cog):
             track.requester = requester
             player.queue.put(track)
             embed.title = 'Song Queued'
-            msg = f'Now playing: [{track.title}]({track.uri})'
+            msg = f'[{track.title}]({track.uri})'
 
         if not player.is_playing():
             track = await player.play(await player.queue.get_wait())
