@@ -329,8 +329,7 @@ class Music(commands.Cog):
         if not ctx.interaction:
             await ctx.message.delete()
         if player.queue.count < 1:
-            if player.track:
-                embed = self._create_current_song_embed(player)
+            embed = self._create_current_song_embed(player) if player.track else None
             await ctx.send('Nothing queued.', embed=embed, delete_after=15)
             return
 
