@@ -447,7 +447,13 @@ class Util(commands.Cog):
 
     @commands.command(hidden=True)
     async def specialThanks(self, ctx):
-        peeople_who_helped = ["<@205704051856244736>", "<@812414532563501077>", "<@299478604809764876>", "<@291291715598286848>", "<@224618877626089483>", "<@231151428167663616>, <@153929916977643521>"]
+        peeople_who_helped = [
+            "<@205704051856244736>", # Sprütz#2222
+            "<@299478604809764876>", # TheBadGod#7826
+            "<@291291715598286848>", # joniiii#0742
+            "<@231151428167663616>", # Acurisu#0001
+            "<@153929916977643521>"  # BattleRush#1960
+        ]
         shuffle(peeople_who_helped)
         embed = discord.Embed(
             title="Special thanks for any help to those people",
