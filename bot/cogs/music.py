@@ -113,7 +113,7 @@ class Music(commands.Cog):
 
         player = ctx.voice_client
 
-        if ctx.command.name in ['queue', 'now']:
+        if ctx.command.name in ['show', 'now']:
             if player is None:
                 raise NoPlayerFound()
             return True
