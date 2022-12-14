@@ -1,4 +1,3 @@
-import contextlib
 import logging
 import shutil
 from datetime import datetime, timedelta
@@ -460,6 +459,15 @@ class Karma(commands.Cog):
         await ctx.send(embed=embed, delete_after=300)
         await ctx.message.delete()
 
+    async def __get_message_from_payload(self, payload: discord.RawReactionActionEvent) -> discord.Message | None:
+        potential_message = [message for message in self.bot.cached_messages if message.id == payload.message_id]
+        cached_message = potential_message[0] if potential_message else None
+
+        if cached_message:
+            return cached_message
+        else:
+            return await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
         user = await self.check_payload(payload)
@@ -500,13 +508,13 @@ class Karma(commands.Cog):
         if payload.event_type == 'REACTION_ADD' and payload.member.bot:
             return None
         try:
-            message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+            message = await self.__get_message_from_payload(payload)
         except discord.errors.NotFound:
             return None
         if message.author.bot:
             return None
-        user = await self.bot.fetch_user(payload.user_id)
-        if user == message.author:
+        reaction_user = payload.member or await self.bot.fetch_user(payload.user_id)
+        if reaction_user == message.author:
             return None
         return message.author
 
