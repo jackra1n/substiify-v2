@@ -464,7 +464,7 @@ class PaginatorView(discord.ui.View):
 
     async def interaction_check(self, interaction: Interaction) -> bool:
         if interaction.user != self.author:
-            interaction.response.send_message(f':warn: {interaction.user.mention} **You aren\'t the author of this embed**')
+            await interaction.response.send_message(f':warn: {interaction.user.mention} **You aren\'t the author of this embed**')
             return False
         return True
 
