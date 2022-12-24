@@ -318,7 +318,9 @@ class Music(commands.Cog):
 
     @commands.hybrid_group()
     async def queue(self, ctx):
-        pass
+        if ctx.invoked_subcommand is None:
+             embed = discord.Embed(color=EMBED_COLOR)
+             embed.description = "You probably want to call `<<queue show`.\nUsing a slash command for that might be even handier."
 
     @queue.command(name='show')
     async def _show(self, ctx):
@@ -330,12 +332,12 @@ class Music(commands.Cog):
             await ctx.message.delete()
         if player.queue.count < 1:
             embed = self._create_current_song_embed(player) if player.track else None
-            await ctx.send('Nothing queued.', embed=embed, delete_after=15)
+            await ctx.send('Nothing queued.', embed=embed, delete_after=120)
             return
 
         queue_pages = self._create_queue_embed_list(ctx)
         view = PaginatorView(ctx.author, queue_pages) if len(queue_pages) > 1 else None
-        await ctx.send(embed=queue_pages[0], delete_after=180, view=view)
+        await ctx.send(embed=queue_pages[0], delete_after=120, view=view)
 
     @queue.command(name='move')
     async def queue_move(self, ctx, from_index: int, to_index: int):
