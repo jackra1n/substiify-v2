@@ -1,6 +1,7 @@
 import logging
 import subprocess
 from os import path, walk
+from typing import Literal, Optional
 
 import discord
 from core import config, values
@@ -10,7 +11,6 @@ from discord.ext import commands, tasks
 from discord.ext.commands import Context, Greedy
 from sqlalchemy import func
 from utils import db
-from typing import Optional, Literal
 
 logger = logging.getLogger(__name__)
 
