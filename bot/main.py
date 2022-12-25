@@ -1,8 +1,11 @@
 import logging
+import asyncio
+import asyncpg
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
-from core import bot, config, values
+from core import config, values
+from core.bot import Substiify
 from core.version import Version
 from utils import db, util
 from utils.CustomLogger import CustomLogFormatter, RemoveNoise
@@ -49,11 +52,23 @@ if not config.TOKEN:
     logger.error('No token in config.py! Please add it and try again.')
     exit()
 
+
+async def main():
+    async with Substiify() as substiify, asyncpg.create_pool(
+        dsn=config.POSTGRESQL_DSN, command_timeout=60, max_inactive_connection_lifetime=0, init=db_init
+    ) as pool:
+        if pool is None:
+            # thanks asyncpg...
+            raise RuntimeError("Could not connect to database.")
+
+        substiify.pool = pool
+        substiify.start(config.TOKEN, log_handler=None)
+
+
 if __name__ == "__main__":
     prepareFiles()
     util.print_system_info()
     setup_logging()
     db.create_database()
 
-    substiify = bot.Substiify()
-    substiify.run(config.TOKEN, log_handler=None)
+    asyncio.run(main())

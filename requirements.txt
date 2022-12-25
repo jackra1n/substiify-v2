@@ -3,6 +3,7 @@
 discord.py[voice,speed]
 psutil
 pytz
+asyncpg
 sqlalchemy
 wavelink
 vacefron.py

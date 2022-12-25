@@ -1,4 +1,6 @@
 import logging
+import asyncpg
+import datetime
 
 import discord
 from core import config
@@ -28,7 +30,11 @@ else:
 
 
 class Substiify(commands.Bot):
-    def __init__(self):
+
+    pool: asyncpg.Pool
+    start_time: datetime.datetime
+
+    def __init__(self) -> None:
         intents = discord.Intents().all()
         super().__init__(
             command_prefix=commands.when_mentioned_or(config.PREFIX),
@@ -37,7 +43,8 @@ class Substiify(commands.Bot):
         )
         self.version = Version()
 
-    async def setup_hook(self):
+    async def setup_hook(self) -> None:
+        self.start_time: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
         for extension in INITIAL_EXTENSIONS:
             try:
                 await self.load_extension(extension)
@@ -45,7 +52,7 @@ class Substiify(commands.Bot):
                 exc = f'{type(e).__name__}: {e}'
                 logger.warning(f'Failed to load extension {extension}\n{exc}')
 
-    async def on_ready(self):
+    async def on_ready(self) -> None:
         servers = len(self.guilds)
         activityName = f"{config.PREFIX}help | {servers} servers"
         activity = discord.Activity(type=discord.ActivityType.listening, name=activityName)
@@ -53,12 +60,12 @@ class Substiify(commands.Bot):
 
         logger.info(f'Logged on as {self.user} (ID: {self.user.id})')
 
-    async def on_command_completion(self, ctx):
+    async def on_command_completion(self, ctx) -> None:
         logger.info(f'[{ctx.command.qualified_name}] executed for -> [{ctx.author}]')
         db.session.add(db.command_history(ctx))
         db.session.commit()
 
-    async def on_command_error(self, ctx, error):
+    async def on_command_error(self, ctx, error) -> None:
         if isinstance(error, commands.CommandNotFound):
             return
         if not ctx.command:
@@ -73,3 +80,7 @@ class Substiify(commands.Bot):
             await ctx.message.add_reaction('🆘')
         except discord.HTTPException:
             pass
+
+    async def close(self) -> None:
+        await self.pool.close()
+        await super().close()

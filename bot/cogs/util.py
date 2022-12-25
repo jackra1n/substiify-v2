@@ -470,7 +470,7 @@ class Util(commands.Cog):
         """
         Shows different technical information about the bot
         """
-        bot_time = time_up((datetime.now() - values.SCRIPT_START).total_seconds())  # uptime of the bot
+        bot_time = time_up((datetime.now() - self.bot.start_time).total_seconds())  # uptime of the bot
         last_commit_date = subprocess.check_output(['git', 'log', '-1', '--date=format:"%Y/%m/%d"', '--format=%ad']).decode('utf-8').strip().strip('"')
         cpu_percent = psutil.cpu_percent()
         ram = psutil.virtual_memory()
