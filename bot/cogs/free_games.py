@@ -79,8 +79,13 @@ class FreeGames(commands.Cog):
             except Exception as e:
                 logger.error(f'Error while creating \'Game\' object: {e}')
 
-        try:
-            for game in current_free_games:
+        if not current_free_games:
+            embed = discord.Embed(color=0x000000)
+            embed.description = 'Could not find any currently free games'
+            await ctx.send(embed=embed, delete_after=60)
+
+        for game in current_free_games:
+            try:
                 start_date_str = game.start_date.strftime('%d %B %Y')
                 end_date_str = game.end_date.strftime('%d %B %Y')
                 embed = discord.Embed(title=game.title, url=game.epic_store_link, color=0x000000)
@@ -90,8 +95,8 @@ class FreeGames(commands.Cog):
                 embed.set_image(url=f"{game.cover_image_url}")
 
                 await ctx.send(embed=embed)
-        except Exception as e:
-            logger.error(f'Fail while sending free game: {e}')
+            except Exception as e:
+                logger.error(f'Fail while sending free game: {e}')
 
 
 async def setup(bot):

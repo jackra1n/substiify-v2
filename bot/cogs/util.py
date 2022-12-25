@@ -26,10 +26,10 @@ class Util(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.bug_channel = bot.get_channel(876412993498398740)
-        self.suggestion_channel = bot.get_channel(876413286978031676)
-        self.accept_emoji = ':greenTick:876177251832590348'
-        self.deny_emoji = ':redCross:876177262813278288'
+        self.suggestion_channel_id = 876413286978031676
+        self.bug_channel_id = 876412993498398740
+        self.accept_emoji = discord.PartialEmoji.from_str('greenTick:876177251832590348')
+        self.deny_emoji = discord.PartialEmoji.from_str('redCross:876177262813278288')
         self.giveaway_task.start()
 
     @commands.command(name='teams', aliases=['team'])
@@ -253,24 +253,24 @@ class Util(commands.Cog):
             return
         if payload.member.bot:
             return
-        if self.bug_channel is None or self.suggestion_channel is None:
-            return
-        if payload.channel_id == self.bug_channel.id:
+
+        channel_map = {
+            self.bug_channel_id: 'bug',
+            self.suggestion_channel_id: 'suggestion',
+        }
+
+        if payload.channel_id in channel_map:
             message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
             if message.author != self.bot.user:
                 return
-            if self.accept_emoji in str(payload.emoji):
-                await self.send_accepted_user_reply(payload, 'bug')
-            if self.deny_emoji in str(payload.emoji):
-                await self.send_denied_user_reply(payload, 'bug')
-        if payload.channel_id == self.suggestion_channel.id:
-            message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
-            if message.author != self.bot.user:
+            message_type = channel_map[payload.channel_id]
+            if payload.emoji == self.accept_emoji:
+                await self.send_accepted_user_reply(payload, message_type)
+            elif payload.emoji == self.deny_emoji:
+                await self.send_denied_user_reply(payload, message_type)
+            else:
                 return
-            if self.accept_emoji in str(payload.emoji):
-                await self.send_accepted_user_reply(payload, 'suggestion')
-            if self.deny_emoji in str(payload.emoji):
-                await self.send_denied_user_reply(payload, 'suggestion')
+            await message.clear_reactions()
 
     @commands.group(aliases=['report'], invoke_without_command=True)
     async def submit(self, ctx):
@@ -295,7 +295,8 @@ class Util(commands.Cog):
         if len(sentence) <= 20:
             await self.submission_error(ctx, sentence)
         else:
-            await self.send_submission(ctx, self.bug_channel, sentence, ctx.command.name)
+            bug_channel = self.bot.get_channel(self.bug_channel_id)
+            await self.send_submission(ctx, bug_channel, sentence, ctx.command.name)
         await ctx.message.delete()
 
     @submit.command(aliases=['improvement', 'better'], usage='suggestion <message>')
@@ -312,7 +313,8 @@ class Util(commands.Cog):
         if len(sentence) <= 10:
             await self.submission_error(ctx, sentence)
         else:
-            await self.send_submission(ctx, self.suggestion_channel, sentence, ctx.command.name)
+            suggestion_channel = self.bot.get_channel(self.suggestion_channel_id)
+            await self.send_submission(ctx, suggestion_channel, sentence, ctx.command.name)
         await ctx.message.delete()
 
     async def submission_error(self, ctx, sentence):
@@ -332,14 +334,14 @@ class Util(commands.Cog):
         embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar)
         message = await channel.send(embed=embed)
         await ctx.send(f'Thank you for submitting the {submission_type}!', delete_after=30)
-        await message.add_reaction(f'<{self.accept_emoji}>')
-        await message.add_reaction(f'<{self.deny_emoji}>')
+        await message.add_reaction(f'{self.accept_emoji}')
+        await message.add_reaction(f'{self.deny_emoji}')
 
     async def send_accepted_user_reply(self, payload, submission_type):
-        await self.send_user_reply(payload, submission_type, f'**accepted** <{self.accept_emoji}>')
+        await self.send_user_reply(payload, submission_type, f'**accepted** {self.accept_emoji}')
 
     async def send_denied_user_reply(self, payload, submission_type):
-        await self.send_user_reply(payload, submission_type, f'**denied** <{self.deny_emoji}>')
+        await self.send_user_reply(payload, submission_type, f'**denied** {self.deny_emoji}')
 
     async def send_user_reply(self, payload, submission_type, action):
         channel = await self.bot.fetch_channel(payload.channel_id)
