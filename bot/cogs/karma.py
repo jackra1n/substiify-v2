@@ -447,8 +447,8 @@ class Karma(commands.Cog):
         output_embed.color = discord.Colour.from_rgb(52, 79, 235)
         output_embed.description = f'Remaining karma: {user_karma}'
 
-        await ctx.author.send(embed=output)
         await self.update_kasino(ctx, kasino_id)
+        await ctx.author.send(embed=output_embed)
 
     @kasino.command(name='list', aliases=['l'], usage="list")
     async def kasino_list(self, ctx):
