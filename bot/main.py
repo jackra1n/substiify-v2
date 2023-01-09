@@ -55,7 +55,7 @@ if not config.TOKEN:
 
 async def main():
     async with Substiify() as substiify, asyncpg.create_pool(
-        dsn=config.POSTGRESQL_DSN, command_timeout=60, max_inactive_connection_lifetime=0, init=db_init
+        dsn=config.POSTGRESQL_DSN, max_inactive_connection_lifetime=0
     ) as pool:
         if pool is None:
             # thanks asyncpg...

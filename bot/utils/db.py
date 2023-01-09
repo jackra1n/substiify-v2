@@ -2,6 +2,7 @@ import sqlite3
 from datetime import datetime
 
 import discord
+import asyncpg
 from core import values
 from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, String,
                         create_engine)
@@ -12,6 +13,10 @@ engine = create_engine(f'sqlite:///{values.DB_PATH}')
 session = sessionmaker(bind=engine)()
 
 Base = declarative_base()
+
+async def get_user_karma(pool: asyncpg.Pool, user: discord.Member):
+    async with pool.acquire() as con:
+        await con.fetch("SELECT 1")
 
 
 class discord_server(Base):
