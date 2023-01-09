@@ -2,6 +2,16 @@ version: "3.7"
 
 services:
 
+  postgres:
+    image: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./bot/data/postgres:/var/lib/postgresql/data
+    restart: always 
+    environment:
+      POSTGRES_PASSWORD: example
+
   lavalink:
     image: fredboat/lavalink:master
     ports:

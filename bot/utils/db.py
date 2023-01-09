@@ -1,8 +1,10 @@
-from datetime import datetime
-
 import discord
 import asyncpg
-from core import values
+import logging
+
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 async def get_user_karma(pool: asyncpg.Pool, user: discord.Member):
     async with pool.acquire() as con:
@@ -26,7 +28,7 @@ def get_discord_channel(channel: discord.TextChannel):
     return db_channel
 
 
-
 # Creates database tables if the don't exist
-def create_database():
-    Base.metadata.create_all(engine)
+async def create_database(pool: asyncpg.Pool):
+    db_script = Path("./bot/db/CreateDatabase.sql").read_text('utf-8')
+    await pool.execute(db_script)

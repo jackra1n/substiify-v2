@@ -23,11 +23,6 @@ def prepareFiles() -> None:
     if not Path(values.VERSION_CONFIG_PATH).is_file():
         Version.create_version_file()
 
-    # Create database file if it doesn't exist
-    if not Path(values.DB_PATH).is_file():
-        logger.info(f'Creating {values.DB_PATH}')
-        open(values.DB_PATH, 'a')
-
     logger.info('All system files ready')
 
 
@@ -62,13 +57,13 @@ async def main():
             raise RuntimeError("Could not connect to database.")
 
         substiify.pool = pool
-        substiify.start(config.TOKEN, log_handler=None)
+        await db.create_database(pool)
+        await substiify.start(config.TOKEN)
 
 
 if __name__ == "__main__":
     prepareFiles()
     util.print_system_info()
     setup_logging()
-    db.create_database()
 
     asyncio.run(main())
