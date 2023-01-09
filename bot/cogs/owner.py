@@ -449,8 +449,7 @@ class Owner(commands.Cog):
         Converts the database to the specified version
         """
         try:
-            db.convert_db(version)
-            await ctx.send("Database converted", delete_after=30)
+            await ctx.send("Not implemented", delete_after=30)
         except Exception as e:
             await ctx.send(e, delete_after=30)
 
