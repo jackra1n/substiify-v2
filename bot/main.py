@@ -17,9 +17,6 @@ def prepareFiles() -> None:
     # Create 'logs' folder if it doesn't exist
     Path(values.LOGS_PATH).mkdir(parents=True, exist_ok=True)
 
-    # Create 'data' folder if it doesn't exist
-    Path(values.DATA_PATH).mkdir(parents=True, exist_ok=True)
-
     if not Path(values.VERSION_CONFIG_PATH).is_file():
         Version.create_version_file()
 

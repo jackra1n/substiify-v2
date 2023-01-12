@@ -1,10 +1,10 @@
 #install with "pip3 install -r requirements.txt"
 
 discord.py[voice,speed]
-psutil
-pytz
 asyncpg
+pytz
+toml
+psutil
 wavelink
 vacefron.py
-toml
 #jishaku  # for debugging, not needed for normal use

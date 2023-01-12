@@ -2,7 +2,7 @@ FROM python:3.11
 
 WORKDIR /bot
 
-VOLUME /bot/data /bot/logs
+VOLUME /bot/logs
 
 COPY . .
 COPY requirements.txt .

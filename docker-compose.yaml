@@ -7,8 +7,8 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./bot/data/postgres:/var/lib/postgresql/data
-    restart: always 
+      - ./bot/db/postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: example
 
@@ -25,8 +25,9 @@ services:
 
   bot:
     build: .
+    depends_on:
+      - postgres
     restart: unless-stopped
     volumes:
-      - ./data:/bot/data
       - ./logs:/bot/logs
       - "/etc/localtime:/etc/localtime:ro"

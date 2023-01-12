@@ -139,9 +139,7 @@ cython_debug/
 
 
 # substiify custom
-bot/data/main.sqlite
-bot/data/version.toml
-bot/data/backups/
+bot/core/version.toml
 bot/core/config.py
 
 logs/
