@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import discord
-from core import values
+from core import values, bot
 from discord.ext import commands
 from utils import db
 
@@ -15,7 +15,7 @@ class Karma(commands.Cog):
 
     COG_EMOJI = "☯️"
 
-    def __init__(self, bot):
+    def __init__(self, bot: bot.Substiify):
         self.bot = bot
         self.vote_channels = self.load_vote_channels()
 

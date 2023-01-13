@@ -1,12 +1,11 @@
 import datetime
 import logging
 
-import asyncpg
 import discord
 from core import config
 from core.version import Version
 from discord.ext import commands
-from utils import db
+from utils.db import Database
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,7 @@ else:
 
 class Substiify(commands.Bot):
 
-    pool: asyncpg.Pool
+    db: Database
     start_time: datetime.datetime
 
     def __init__(self) -> None:

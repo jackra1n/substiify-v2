@@ -3,6 +3,7 @@ from datetime import datetime
 
 import aiohttp
 import discord
+from core import bot
 from discord.ext import commands
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class FreeGames(commands.Cog):
 
     COG_EMOJI = "🕹️"
 
-    def __init__(self, bot):
+    def __init__(self, bot: bot.Substiify):
         self.bot = bot
 
     @commands.cooldown(3, 30)

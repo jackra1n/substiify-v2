@@ -4,7 +4,7 @@ from os import path, walk
 from typing import Literal, Optional
 
 import discord
-from core import config, values
+from core import config, values, bot
 from core.version import VersionType
 from discord import Activity, ActivityType
 from discord.ext import commands, tasks
@@ -18,7 +18,7 @@ class Owner(commands.Cog):
 
     COG_EMOJI = "👑"
 
-    def __init__(self, bot):
+    def __init__(self, bot: bot.Substiify):
         self.bot = bot
         self.status_task.start()
         self.message_server = None

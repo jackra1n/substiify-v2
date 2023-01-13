@@ -7,7 +7,8 @@ import asyncpg
 from core import config, values
 from core.bot import Substiify
 from core.version import Version
-from utils import db, util
+from utils import util
+from utils.db import Database
 from utils.CustomLogger import CustomLogFormatter, RemoveNoise
 
 logger = logging.getLogger(__name__)
@@ -53,8 +54,7 @@ async def main():
             # thanks asyncpg...
             raise RuntimeError("Could not connect to database.")
 
-        substiify.pool = pool
-        await db.create_database(pool)
+        substiify.db = Database(substiify, pool)
         await substiify.start(config.TOKEN)
 
 

@@ -4,6 +4,7 @@ import random
 
 import discord
 import vacefron
+from core import bot
 from discord.ext import commands
 
 logger = logging.getLogger(__name__)
@@ -13,7 +14,7 @@ class Fun(commands.Cog):
 
     COG_EMOJI = "🎱"
 
-    def __init__(self, bot):
+    def __init__(self, bot: bot.Substiify):
         self.bot = bot
         self.vac_api = vacefron.Client()
 

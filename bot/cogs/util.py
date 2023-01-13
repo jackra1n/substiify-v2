@@ -9,7 +9,7 @@ from random import choice, seed, shuffle
 
 import discord
 import psutil
-from core import values
+from core import values, bot
 from discord import MessageType
 from discord.ext import commands, tasks
 from discord.ext.commands import BucketType
@@ -23,7 +23,7 @@ class Util(commands.Cog):
 
     COG_EMOJI = "📦"
 
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: bot.Substiify):
         self.bot = bot
         self.suggestion_channel_id = 876413286978031676
         self.bug_channel_id = 876412993498398740
@@ -189,7 +189,7 @@ class Util(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def giveaway_task(self):
-        giveaways = db.session.query(db.giveaway).all()
+        giveaways = self.bot.db.get_all_giveaways()
         random_seed_value = datetime.now().timestamp()
         for giveaway in giveaways:
             if datetime.now() < giveaway.end_date:

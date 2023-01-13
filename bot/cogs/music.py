@@ -7,7 +7,7 @@ import re
 
 import discord
 import wavelink
-from core import config
+from core import config, bot
 from discord import Interaction
 from discord.ext import commands
 from utils import db
@@ -24,7 +24,7 @@ class Music(commands.Cog):
 
     COG_EMOJI = "🎵"
 
-    def __init__(self, bot):
+    def __init__(self, bot: bot.Substiify):
         self.bot = bot
         bot.loop.create_task(self.connect_nodes())
 
