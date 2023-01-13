@@ -15,9 +15,16 @@ class Database:
 
     async def get_all_giveaways(self) -> list:
         async with self.pool.acquire() as con:
-            await con.fetch("SELECT * FROM giveaway")
+            return await con.fetch('SELECT * FROM giveaway')
 
-    def get_discord_server(self, server: discord.Guild):
+    async def get_discord_server(self, server: discord.Guild):
+        async with self.pool.acquire() as con:
+            stmt = f'SELECT * FROM giveaway WHERE discord_server_id = {server.id}'
+            if server := await con.fetchrow(stmt):
+                return server
+            stmt = await con.prepare('INSERT INTO discord_server VALUES ($1, $2)')
+            await stmt.execute()
+
         db_server = session.query(discord_server).filter_by(discord_server_id=server.id).first()
         if db_server is None:
             db_server = discord_server(server)

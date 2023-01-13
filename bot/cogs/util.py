@@ -189,9 +189,9 @@ class Util(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def giveaway_task(self):
-        giveaways = self.bot.db.get_all_giveaways()
-        random_seed_value = datetime.now().timestamp()
+        giveaways = await self.bot.db.get_all_giveaways()
         for giveaway in giveaways:
+            random_seed_value = datetime.now().timestamp()
             if datetime.now() < giveaway.end_date:
                 return
             channel = await self.bot.fetch_channel(giveaway.discord_channel_id)

@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS discord_server (
   discord_server_id BIGINT PRIMARY KEY,
   server_name VARCHAR(255),
-  music_cleanup BOOLEAN
+  music_cleanup BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS discord_channel (
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS discord_user (
   username VARCHAR(255),
   discriminator VARCHAR(10),
   avatar VARCHAR(255),
-  is_bot BOOLEAN
+  is_bot BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS command_history (
