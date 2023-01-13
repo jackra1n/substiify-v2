@@ -9,7 +9,6 @@ from core.version import VersionType
 from discord import Activity, ActivityType
 from discord.ext import commands, tasks
 from discord.ext.commands import Context, Greedy
-from sqlalchemy import func
 from utils import db
 
 logger = logging.getLogger(__name__)

@@ -1,7 +1,7 @@
-import logging
-import asyncpg
 import datetime
+import logging
 
+import asyncpg
 import discord
 from core import config
 from core.version import Version

@@ -6,7 +6,6 @@ from pathlib import Path
 import discord
 from core import values
 from discord.ext import commands
-from sqlalchemy.sql import func
 from utils import db
 
 logger = logging.getLogger(__name__)
@@ -51,13 +50,13 @@ class Karma(commands.Cog):
 
     @votes.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def setup(self, ctx, channel: discord.TextChannel = None):
+    async def start(self, ctx, channel: discord.TextChannel = None):
         """
-        Enables votes in the current channel. Requires Manage Channels permission.
-        After enabling votes, the bot will add the upvote and downvote emojis to every message in the channel.
+        Enables votes in the current or specified channel. Requires Manage Channels permission.
+        After enabling votes, the bot will add the upvote and downvote reactions to every message in the channel.
         This is good for something like a meme channel if you want to give upvotes and downvotes to the messages.
 
-        If users click the reactions user karma will be updated.
+        If users click the reactions, user karma will be updated.
         """
         channel = ctx.channel if channel is None else channel
         if channel.id not in self.vote_channels:

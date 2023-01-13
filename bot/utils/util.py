@@ -1,6 +1,6 @@
 import importlib.resources
-import shutil
 import platform
+import shutil
 
 import discord
 from core.version import Version

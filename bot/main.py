@@ -1,9 +1,9 @@
-import logging
 import asyncio
-import asyncpg
+import logging
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
+import asyncpg
 from core import config, values
 from core.bot import Substiify
 from core.version import Version

@@ -1,8 +1,8 @@
-import discord
-import asyncpg
 import logging
-
 from pathlib import Path
+
+import asyncpg
+import discord
 
 logger = logging.getLogger(__name__)
 
