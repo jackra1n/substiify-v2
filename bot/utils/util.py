@@ -1,5 +1,5 @@
 import importlib.resources
-import os
+import shutil
 import platform
 
 import discord
@@ -20,7 +20,7 @@ def print_system_info() -> None:
     substiify_label = get_colored("substiify:", colors.red, True)
 
     ascii_art = importlib.resources.read_text("utils", "art.txt")
-    shell_width = os.get_terminal_size().columns
+    shell_width = shutil.get_terminal_size().columns
     center_art = shell_width - (shell_width // 15)
     for line in ascii_art.splitlines():
         print(line.center(center_art))
