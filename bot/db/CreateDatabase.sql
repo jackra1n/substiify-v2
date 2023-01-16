@@ -24,11 +24,11 @@ CREATE TABLE IF NOT EXISTS discord_user (
 CREATE TABLE IF NOT EXISTS command_history (
   id BIGINT PRIMARY KEY,
   command_name VARCHAR(255),
-  date TIMESTAMP,
   discord_user_id BIGINT REFERENCES discord_user(discord_user_id),
   discord_server_id BIGINT REFERENCES discord_server(discord_server_id),
   discord_channel_id BIGINT REFERENCES discord_channel(discord_channel_id),
-  discord_message_id BIGINT
+  discord_message_id BIGINT,
+  date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS giveaway (

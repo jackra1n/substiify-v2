@@ -61,8 +61,7 @@ class Substiify(commands.Bot):
 
     async def on_command_completion(self, ctx) -> None:
         logger.info(f'[{ctx.command.qualified_name}] executed for -> [{ctx.author}]')
-        db.session.add(db.command_history(ctx))
-        db.session.commit()
+        await self.db.insert_to_cmd_history(ctx)
 
     async def on_command_error(self, ctx, error) -> None:
         if isinstance(error, commands.CommandNotFound):

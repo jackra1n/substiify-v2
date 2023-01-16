@@ -55,6 +55,7 @@ async def main():
             raise RuntimeError("Could not connect to database.")
 
         substiify.db = Database(substiify, pool)
+        await substiify.db.create_database()
         await substiify.start(config.TOKEN)
 
 
