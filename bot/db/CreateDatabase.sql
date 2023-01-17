@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS discord_user (
 );
 
 CREATE TABLE IF NOT EXISTS command_history (
-  id BIGINT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   command_name VARCHAR(255),
   discord_user_id BIGINT REFERENCES discord_user(discord_user_id),
   discord_server_id BIGINT REFERENCES discord_server(discord_server_id),
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS command_history (
 );
 
 CREATE TABLE IF NOT EXISTS giveaway (
-  id BIGINT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   start_date TIMESTAMP,
   end_date TIMESTAMP NOT NULL,
   prize VARCHAR(255),
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS giveaway (
 );
 
 CREATE TABLE IF NOT EXISTS karma (
-  id BIGINT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   discord_user_id BIGINT REFERENCES discord_user(discord_user_id),
   discord_server_id BIGINT REFERENCES discord_server(discord_server_id),
   amount BIGINT
@@ -60,13 +60,14 @@ CREATE TABLE IF NOT EXISTS post (
 );
 
 CREATE TABLE IF NOT EXISTS karma_emote (
-  discord_emote_id BIGINT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
+  discord_emote_id BIGINT,
   discord_server_id BIGINT REFERENCES discord_server(discord_server_id),
   increase_karma BOOLEAN
 );
 
 CREATE TABLE IF NOT EXISTS kasino (
-  id BIGINT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   question VARCHAR(255) NOT NULL,
   option1 VARCHAR(255) NOT NULL,
   option2 VARCHAR(255) NOT NULL,
@@ -78,7 +79,7 @@ CREATE TABLE IF NOT EXISTS kasino (
 );
 
 CREATE TABLE IF NOT EXISTS kasino_bet (
-  id BIGINT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   kasino_id BIGINT REFERENCES kasino(id),
   discord_user_id BIGINT REFERENCES discord_user(discord_user_id),
   amount BIGINT,
