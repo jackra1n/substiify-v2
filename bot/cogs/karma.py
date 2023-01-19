@@ -559,9 +559,8 @@ class Karma(commands.Cog):
         db.session.commit()
 
     async def send_conclusion(self, ctx, kasino_id, winner, author, author_img):
-        kasino = db.session.query(db.kasino).filter_by(id=kasino_id).first()
-        qry = db.session.query(func.sum(db.kasino_bet.amount).label("total_amount"))
-        total_karma = qry.filter_by(kasino_id=kasino_id).first().total_amount
+        kasino = await self.bot.db.get_kasino(kasino_id)
+        total_karma = await self.bot.db.get_total_kasino_karma(kasino_id)
         to_embed = None
 
         if winner == 1:
@@ -592,20 +591,11 @@ class Karma(commands.Cog):
         return
 
     async def add_kasino(self, ctx, question, option_1, option_2):
-        if db.session.query(db.discord_server).filter_by(discord_server_id=ctx.guild.id).first() is None:
-            db.session.add(db.discord_server(ctx.guild))
-        if db.session.query(db.discord_channel).filter_by(discord_channel_id=ctx.channel.id).first() is None:
-            db.session.add(db.discord_channel(ctx.channel))
-        if db.session.query(db.discord_user).filter_by(discord_user_id=ctx.author.id).first() is None:
-            db.session.add(db.discord_user(ctx.author))
-
         to_embed = discord.Embed(description="Opening kasino, hold on tight...")
         kasino_msg = await ctx.send(embed=to_embed)
 
-        kasino = db.kasino(question, option_1, option_2, kasino_msg)
-        db.session.add(kasino)
-        db.session.commit()
-        return kasino
+        await self.bot.db.insert_foundation(ctx)
+        return await self.bot.db.insert_kasino(question, option_1, option_2, kasino_msg)
 
     async def remove_kasino(self, kasino_id):
         kasino = db.session.query(db.kasino).filter_by(id=kasino_id).first()

@@ -58,7 +58,6 @@ async def main():
         await substiify.db.create_database()
         await substiify.start(config.TOKEN)
 
-
 if __name__ == "__main__":
     prepareFiles()
     util.print_system_info()

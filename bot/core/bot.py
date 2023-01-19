@@ -2,6 +2,7 @@ import datetime
 import logging
 
 import discord
+import time
 from core import config
 from core.version import Version
 from discord.ext import commands
@@ -74,6 +75,8 @@ class Substiify(commands.Bot):
             await ctx.send('You do not have permission to use this command.')
         if hasattr(error, 'is_handled') and error.is_handled:
             return
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send('A required argument is missing.')
         try:
             await ctx.message.add_reaction('🆘')
         except discord.HTTPException:
