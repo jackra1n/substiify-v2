@@ -7,6 +7,33 @@ from discord.ext.commands import Context
 
 logger = logging.getLogger(__name__)
 
+user_insert_query = """INSERT INTO discord_user
+                       (discord_user_id, username, discriminator, avatar)
+                       VALUES ($1, $2, $3, $4)
+                       ON CONFLICT (discord_user_id) DO UPDATE
+                       SET
+                       username = EXCLUDED.username,
+                       discriminator = EXCLUDED.discriminator,
+                       avatar = EXCLUDED.avatar
+                    """
+
+server_insert_query = """INSERT INTO discord_server
+                         (discord_server_id, server_name)
+                         VALUES ($1, $2)
+                         ON CONFLICT (discord_server_id) DO UPDATE
+                         SET
+                         server_name = EXCLUDED.server_name
+                      """
+
+channel_insert_query = """INSERT INTO discord_channel
+                          (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id)
+                          VALUES ($1, $2, $3, $4)
+                          ON CONFLICT (discord_channel_id) DO UPDATE
+                          SET
+                          channel_name = EXCLUDED.channel_name,
+                          parent_discord_channel_id = EXCLUDED.parent_discord_channel_id
+                       """
+
 class Database:
 
     def __init__(self, bot: discord.Client, pool: asyncpg.Pool) -> None:
@@ -21,11 +48,15 @@ class Database:
         await ctx.send("Database populated", delete_after=30)
 
     async def insert_foundation(self, ctx):
-        await self.insert_discord_user(ctx.author)
-        await self.insert_discord_server(ctx.guild)
-        if hasattr(ctx.channel, 'parent'):
-            await self.insert_discord_channel(ctx.channel.parent)
-        await self.insert_discord_channel(ctx.channel)
+        user = ctx.author
+        server = ctx.guild
+        channel = ctx.channel
+        async with self.pool.acquire() as con:
+            await con.execute(user_insert_query, user.id, user.name, user.discriminator, user.avatar.url)
+            await con.execute(server_insert_query, server.id, server.name)
+            if pchannel := channel.parent if hasattr(channel, 'parent') else None:
+                await con.execute(channel_insert_query, pchannel.id, pchannel.name, pchannel.guild.id, None)
+            await con.execute(channel_insert_query, channel.id, channel.name, channel.guild.id, pchannel.id if pchannel else None)
 
     async def insert_to_cmd_history(self, ctx: Context) -> None:
         await self.insert_foundation(ctx)
@@ -39,41 +70,17 @@ class Database:
             await con.execute(query, cmd_name, ctx.author.id, server_id, ctx.channel.id, ctx.message.id)
 
     async def insert_discord_user(self, user: discord.Member):
-        query = """INSERT INTO discord_user
-                   (discord_user_id, username, discriminator, avatar)
-                   VALUES ($1, $2, $3, $4)
-                   ON CONFLICT (discord_user_id) DO UPDATE
-                   SET
-                   username = EXCLUDED.username,
-                   discriminator = EXCLUDED.discriminator,
-                   avatar = EXCLUDED.avatar
-                """
         async with self.pool.acquire() as con:
-            await con.execute(query, user.id, user.name, user.discriminator, user.avatar.url)
+            await con.execute(user_insert_query, user.id, user.name, user.discriminator, user.avatar.url)
 
     async def insert_discord_server(self, server: discord.Guild):
-        query = """INSERT INTO discord_server
-                   (discord_server_id, server_name)
-                   VALUES ($1, $2)
-                   ON CONFLICT (discord_server_id) DO UPDATE
-                   SET
-                   server_name = EXCLUDED.server_name
-                """
         async with self.pool.acquire() as con:
-            await con.execute(query, server.id, server.name)
+            await con.execute(server_insert_query, server.id, server.name)
 
     async def insert_discord_channel(self, channel: discord.abc.Messageable):
-        query = """INSERT INTO discord_channel
-                   (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id)
-                   VALUES ($1, $2, $3, $4)
-                   ON CONFLICT (discord_channel_id) DO UPDATE
-                   SET
-                   channel_name = EXCLUDED.channel_name,
-                   parent_discord_channel_id = EXCLUDED.parent_discord_channel_id
-                """
         parent_channel = channel.parent.id if hasattr(channel, 'parent') else None
         async with self.pool.acquire() as con:
-            await con.execute(query, channel.id, channel.name, channel.guild.id, parent_channel)
+            await con.execute(channel_insert_query, channel.id, channel.name, channel.guild.id, parent_channel)
 
     async def insert_kasino(self, question, option_1, option_2, kasino_msg):
         query = """INSERT INTO kasino

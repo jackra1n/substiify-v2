@@ -57,7 +57,6 @@ class Substiify(commands.Bot):
         activityName = f"{config.PREFIX}help | {servers} servers"
         activity = discord.Activity(type=discord.ActivityType.listening, name=activityName)
         await self.change_presence(activity=activity)
-
         logger.info(f'Logged on as {self.user} (ID: {self.user.id})')
 
     async def on_command_completion(self, ctx) -> None:
@@ -83,5 +82,5 @@ class Substiify(commands.Bot):
             pass
 
     async def close(self) -> None:
-        await self.pool.close()
+        await self.db.pool.close()
         await super().close()

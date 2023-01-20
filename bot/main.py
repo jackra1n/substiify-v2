@@ -33,7 +33,7 @@ def setup_logging() -> None:
     stream_handler.setFormatter(CustomLogFormatter())
     log.addHandler(stream_handler)
 
-    file_handler = TimedRotatingFileHandler(f'{values.LOGS_PATH}/substiify_', when="midnight", interval=1, encoding='utf-8')
+    file_handler = TimedRotatingFileHandler(f'{values.LOGS_PATH}/substiify', when="midnight", interval=1, encoding='utf-8')
     file_formatter = logging.Formatter('[{asctime}] [{levelname:<7}] {name}: {message}', '%Y-%m-%d %H:%M:%S', style='{')
     file_handler.suffix = "%Y-%m-%d.log"
     file_handler.setFormatter(file_formatter)
@@ -63,4 +63,7 @@ if __name__ == "__main__":
     util.print_system_info()
     setup_logging()
 
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
