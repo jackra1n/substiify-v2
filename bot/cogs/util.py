@@ -15,7 +15,6 @@ from discord import MessageType
 from discord.ext import commands, tasks
 from discord.ext.commands import BucketType
 from pytz import timezone
-from utils import db
 
 logger = logging.getLogger(__name__)
 
@@ -180,14 +179,14 @@ class Util(commands.Cog):
         Allows you to stop a giveaway. Takes the ID of the giveaway message as an argument.
         """
         # delete giveaway from db
-        giveaway = db.session.query(db.giveaway).filter(db.giveaway.discord_message_id == message_id).first()
-        if giveaway is None:
+        giveaway = await self.bot.db.delete_giveaway_by_msg_id(message_id)
+        if giveaway == 'DELETE 0':
             return await ctx.send("The message ID provided was wrong")
-        db.session.delete(giveaway)
-        db.session.commit()
         msg = await ctx.fetch_message(message_id)
-        newEmbed = discord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!!")
+        newEmbed = discord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!")
         await msg.edit(embed=newEmbed)
+        await ctx.send('Giveaway has been cancelled', delete_after=15)
+        await ctx.message.delete()
 
     @tasks.loop(minutes=1)
     async def giveaway_task(self):

@@ -99,9 +99,19 @@ class Database:
         async with self.pool.acquire() as con:
             await con.execute(query, creator.id, end_date, prize, msg.guild.id, msg.channel.id, msg.id)
 
+    async def update_server_music_cleanup(self, ctx: Context, do_cleanup: bool):
+        await self.insert_foundation(ctx)
+        query = 'UPDATE discord_server SET music_cleanup = $1 WHERE discord_server_id = $2'
+        async with self.pool.acquire() as con:
+            await con.execute(query, do_cleanup, ctx.guild.id)
+
     async def delete_giveaway(self, primary_key: int):
         async with self.pool.acquire() as con:
             await con.execute(f'DELETE FROM giveaway WHERE id = {primary_key}')
+
+    async def delete_giveaway_by_msg_id(self, msg_id: int):
+        async with self.pool.acquire() as con:
+            return await con.execute(f'DELETE FROM giveaway WHERE discord_message_id = {msg_id}')
 
     async def get_discord_user(self, user: discord.Member):
         async with self.pool.acquire() as con:

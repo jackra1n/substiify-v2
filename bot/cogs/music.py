@@ -397,29 +397,22 @@ class Music(commands.Cog):
         """
         Enables/disables the auto-cleanup of the music queue messages that appear after queueing a new song.
         """
-        server = db.get_discord_server(ctx.guild)
+        await self.bot.db.update_server_music_cleanup(ctx, enable)
 
-        if enable is not None:
-            server.music_cleanup = enable
-            db.session.commit()
-
-        embed = self.create_song_cleanup_embed(ctx, enable, server)
-        await ctx.send(embed=embed)
-        if not ctx.interaction:
-            await ctx.message.delete()
-
-    def create_song_cleanup_embed(self, ctx, enable, server):
-        embed = discord.Embed(color=discord.Color.red())
-        if enable or server.music_cleanup:
+        embed = None
+        if enable:
             embed = discord.Embed(color=discord.Color.green())
-        if server.music_cleanup:
             status_string = '`enabled` <:greenTick:876177251832590348>'
         else:
+            embed = discord.Embed(color=discord.Color.red())
             status_string = '`disabled` <:redCross:876177262813278288>'
+
         embed.title = 'Cleanup status'
         embed.description = f'Song messages auto-cleanup is {status_string}.'
         embed.set_footer(text=f'Use `{ctx.prefix}cleanup <enable/disable>` to toggle.')
-        return embed
+        await ctx.send(embed=embed)
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     def _create_current_song_embed(self, player):
         embed = discord.Embed(color=EMBED_COLOR)
