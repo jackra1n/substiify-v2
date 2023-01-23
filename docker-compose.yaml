@@ -11,6 +11,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: example
+      TZ: "Europe/Zurich"
 
   lavalink:
     image: fredboat/lavalink:master

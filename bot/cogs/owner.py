@@ -363,8 +363,9 @@ class Owner(commands.Cog):
         """
         Shows a lits of most used command on the current server
         """
-        commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(discord_server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).limit(10).all()
-        embed = create_command_usage_embed(commands_used_query, f"Top 10 used commands on: **{ctx.guild.name}**")
+        commands_used = await self.bot.db.get_command_usage_by_command(ctx)
+        embed = create_command_usage_embed(commands_used)
+        embed.title = f"Top 10 used commands on: **{ctx.guild.name}**"
         await ctx.send(embed=embed, delete_after=180)
         await ctx.message.delete()
 
@@ -373,8 +374,9 @@ class Owner(commands.Cog):
         """
         Shows a list of most used commands on all servers
         """
-        commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.command).order_by(func.count('*').desc()).limit(10).all()
-        embed = create_command_usage_embed(commands_used_query, "Top 10 total used commands")
+        commands_used = await self.bot.db.get_command_usage_all(ctx)
+        embed = create_command_usage_embed(commands_used)
+        embed.title = "Top 10 total used commands"
         await ctx.send(embed=embed, delete_after=180)
         await ctx.message.delete()
 
@@ -384,15 +386,24 @@ class Owner(commands.Cog):
         """
         Shows a list of most used commands on the last server
         """
-        commands_used_query = db.session.query(db.command_history, db.discord_user).join(db.command_history, db.command_history.discord_user_id == db.discord_user.discord_user_id).filter_by(discord_server_id=ctx.guild.id).order_by(db.command_history.date.desc()).limit(amount).all()
-        commands_used = ""
-        for command in commands_used_query:
-            formated_date = command[0].date.strftime("%d/%m/%Y %H:%M:%S")
-            commands_used += f"`{command[0].command}` used by `{command[1].username}` at {formated_date}\n"
-        embed = discord.Embed(title=f"Top {amount} used commands on: **{ctx.guild.name}**", color=values.PRIMARY_COLOR)
-        embed.description = commands_used
+        amount = min(amount, 20)
+        commands_used = await self.bot.db.get_last_command_usage(ctx, amount)
+        longest_user = self.get_longest_property_length(commands_used, 'username')
+        longest_cmd = self.get_longest_property_length(commands_used, 'command_name')
+        commands_used_string = ""
+        for command in commands_used:
+            discord_tmstmp = f"<t:{int(command['date'].timestamp())}:R>"
+            cmd = command['command_name'].center(longest_cmd)
+            user = command['username'].center(longest_user)
+            commands_used_string += f"`{user}` used `{cmd}` {discord_tmstmp}\n"
+        embed = discord.Embed(title=f"Last {amount} used commands on: **{ctx.guild.name}**", color=values.PRIMARY_COLOR)
+        embed.description = commands_used_string
         await ctx.send(embed=embed, delete_after=60)
         await ctx.message.delete()
+
+    def get_longest_property_length(self, record_list: list, prprty: str) -> len:
+        longest_record = max(record_list, key=lambda x: len(x[prprty]))
+        return len(longest_record[prprty])
 
     @usage.command(name="servers")
     @commands.is_owner()
@@ -400,12 +411,12 @@ class Owner(commands.Cog):
         """
         Shows a list of servers with most used commands
         """
-        commands_used_query = db.session.query(db.command_history.discord_server_id, db.discord_server, func.count('*')).join(db.command_history, db.command_history.discord_server_id == db.discord_server.discord_server_id).group_by(db.command_history.discord_server_id).order_by(func.count('*').desc()).all()
+        commands_used_query = await self.bot.db.get_command_usage_by_server(ctx)
         commands_used = ""
         commands_count = ""
         for row in commands_used_query:
-            commands_used += f"`{row[1].server_name}`\n"
-            commands_count += f"{row[2]}\n"
+            commands_used += f"`{row['server_name']}`\n"
+            commands_count += f"{row['count']}\n"
         embed = discord.Embed(title="Top servers used commands", color=values.PRIMARY_COLOR)
         embed.add_field(name="Command", value=commands_used, inline=True)
         embed.add_field(name="Count", value=commands_count, inline=True)
@@ -460,33 +471,26 @@ class Owner(commands.Cog):
         """
         servers = self.bot.guilds
         for server in servers:
-            if db.session.query(db.discord_server).filter_by(discord_server_id=server.id).first() is None:
-                db.session.add(db.discord_server(server))
+            await self.bot.db.insert_discord_server(server)
             for channel in server.channels:
-                if db.session.query(db.discord_channel).filter_by(discord_channel_id=channel.id).first() is None:
-                    db.session.add(db.discord_channel(channel))
-        db.session.commit()
-        for post in db.session.query(db.post).group_by(db.post.discord_user_id).all():
-            if db.session.query(db.discord_user).filter_by(discord_user_id=post.discord_user_id).first() is None:
-                discord_user = await self.bot.fetch_user(post.discord_user_id)
-                print(f"fetched user: {discord_user}...")
-                db.session.add(db.discord_user(discord_user))
-        db.session.commit()
-        for command in db.session.query(db.command_history).group_by(db.command_history.discord_user_id).all():
-            if db.session.query(db.discord_user).filter_by(discord_user_id=command.discord_user_id).first() is None:
-                discord_user = await self.bot.fetch_user(command.discord_user_id)
-                db.session.add(db.discord_user(discord_user))
-        db.session.commit()
+                await self.bot.db.insert_discord_channel(channel)
+        for post in await self.bot.db.get_all_posts():
+            discord_user = await self.bot.fetch_user(post['discord_user_id'])
+            print(f"fetched user: {discord_user}...")
+            await self.bot.db.insert_discord_user(discord_user)
+        for command in await self.bot.db.get_command_usage_all(ctx):
+            discord_user = await self.bot.fetch_user(command['discord_user_id'])
+            await self.bot.db.insert_discord_user(discord_user)
         await ctx.send("Database populated", delete_after=30)
 
 
-def create_command_usage_embed(commands_used_query, embed_title):
+def create_command_usage_embed(results):
     commands_used = ""
     commands_count = ""
-    for row in commands_used_query:
-        commands_used += f"`{row[0]}`\n"
-        commands_count += f"{row[1]}\n"
-    embed = discord.Embed(title=embed_title, color=values.PRIMARY_COLOR)
+    for result in results:
+        commands_used += f"`{result['command_name']}`\n"
+        commands_count += f"{result['count']}\n"
+    embed = discord.Embed(color=values.PRIMARY_COLOR)
     embed.add_field(name="Command", value=commands_used, inline=True)
     embed.add_field(name="Count", value=commands_count, inline=True)
     return embed

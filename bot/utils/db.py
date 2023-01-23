@@ -136,6 +136,42 @@ class Database:
         async with self.pool.acquire() as con:
             return await con.fetchval(query, kasino_id)
 
+    async def get_all_posts(self) -> list:
+        async with self.pool.acquire() as con:
+            return await con.fetch('SELECT * FROM post')
+
+    async def get_command_usage_all(self, ctx: Context) -> list:
+        await self.insert_foundation(ctx)
+        query = "SELECT command_name, COUNT(*) FROM command_history GROUP BY command_name ORDER BY COUNT(*) DESC LIMIT 10"
+        async with self.pool.acquire() as con:
+            return await con.fetch(query)
+
+    async def get_last_command_usage(self, ctx: Context, amount: int) -> list:
+        await self.insert_foundation(ctx)
+        query = """SELECT * FROM command_history JOIN discord_user
+                   ON command_history.discord_user_id = discord_user.discord_user_id
+                   WHERE command_history.discord_server_id = $1
+                   ORDER BY command_history.date DESC LIMIT $2
+                """
+        async with self.pool.acquire() as con:
+            return await con.fetch(query, ctx.guild.id, amount)
+
+    async def get_command_usage_by_command(self, ctx: Context) -> list:
+        await self.insert_foundation(ctx)
+        query = "SELECT command_name, COUNT(*) FROM command_history WHERE discord_server_id = $1 GROUP BY command_name ORDER BY COUNT(*) DESC LIMIT 10"
+        async with self.pool.acquire() as con:
+            return await con.fetch(query, ctx.guild.id)
+
+    async def get_command_usage_by_server(self, ctx: Context) -> list:
+        await self.insert_foundation(ctx)
+        query = """SELECT server_name, COUNT(*) FROM command_history JOIN discord_server
+                   ON command_history.discord_server_id = discord_server.discord_server_id
+                   GROUP BY server_name
+                   ORDER BY COUNT(*) DESC LIMIT 10
+                """
+        async with self.pool.acquire() as con:
+            return await con.fetch(query)
+
     # Creates database tables if the don't exist
     async def create_database(self):
         db_script = Path("./bot/db/CreateDatabase.sql").read_text('utf-8')
