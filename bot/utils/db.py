@@ -1,5 +1,6 @@
 import logging
 from pathlib import Path
+from datetime import datetime
 
 import asyncpg
 import discord
@@ -89,6 +90,14 @@ class Database:
                 """
         async with self.pool.acquire() as con:
             await con.execute(query, question, option_1, option_2, kasino_msg.id)
+
+    async def insert_giveaway(self, creator: discord.Member, end_date: datetime, prize: str, msg: discord.Message):
+        query = """INSERT INTO giveaway
+            (discord_user_id, end_date, prize, discord_server_id, discord_channel_id, discord_message_id)
+            VALUES ($1, $2, $3, $4, $5, $6)
+        """
+        async with self.pool.acquire() as con:
+            await con.execute(query, creator, end_date, prize, msg.guild.id, msg.channel.id, msg.id)
 
     async def get_discord_user(self, user: discord.Member):
         async with self.pool.acquire() as con:

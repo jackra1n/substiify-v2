@@ -139,8 +139,7 @@ class Util(commands.Cog):
         embed.set_footer(text=f"Giveway ends on {end_string}")
         newMsg = await channel.send(embed=embed)
         await newMsg.add_reaction("🎉")
-        db.session.add(db.giveaway(hosted_by, end, prize, newMsg))
-        db.session.commit()
+        await self.bot.db.insert_giveaway(hosted_by, end, prize, newMsg)
 
     @giveaway.command(usage="reroll <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())

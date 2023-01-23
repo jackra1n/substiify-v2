@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS command_history (
 
 CREATE TABLE IF NOT EXISTS giveaway (
   id SERIAL PRIMARY KEY,
-  start_date TIMESTAMP,
+  start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   end_date TIMESTAMP NOT NULL,
   prize VARCHAR(255),
   discord_user_id BIGINT REFERENCES discord_user(discord_user_id),
