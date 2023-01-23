@@ -168,7 +168,7 @@ class Util(commands.Cog):
         else:
             seed(random_seed_value + ctx.message.id)
             winner = choice(users)
-            embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
+            embed.add_field(name=f"Congratulations on winning '{prize}'", value=winner.mention)
             await msg.channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
         await msg.edit(embed=embed)
         await ctx.message.delete()
@@ -215,7 +215,7 @@ class Util(commands.Cog):
             else:
                 seed(random_seed_value + giveaway['discord_message_id'])
                 winner = choice(users)
-                embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
+                embed.add_field(name=f"Congratulations on winning '{prize}'", value=winner.mention)
                 await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
             await message.edit(embed=embed)
             await self.bot.db.delete_giveaway(giveaway['id'])
