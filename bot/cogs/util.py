@@ -130,9 +130,11 @@ class Util(commands.Cog):
             return
         prize = answers[2]
 
-        await ctx.send(f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}")
+        setup_complete = f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}"
+        await ctx.send(embed=discord.Embed(description=setup_complete))
+
         embed = self.create_giveaway_embed(hosted_by, prize)
-        end = (datetime.now() + timedelta(seconds=time))
+        end = (datetime.datetime.now() + timedelta(seconds=time))
         end_string = end.strftime('%d.%m.%Y %H:%M')
         embed.description += f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
 
@@ -159,7 +161,7 @@ class Util(commands.Cog):
         prize = await self.get_giveaway_prize(msg)
         giveaway_host = msg.embeds[0].fields[0].value
         embed = self.create_giveaway_embed(giveaway_host, prize)
-        random_seed_value = datetime.now().timestamp()
+        random_seed_value = datetime.datetime.now().timestamp()
 
         if len(users) <= 0:
             embed.set_footer(text="No one won the Giveaway")
@@ -191,8 +193,8 @@ class Util(commands.Cog):
     async def giveaway_task(self):
         giveaways = await self.bot.db.get_all_giveaways()
         for giveaway in giveaways:
-            random_seed_value = datetime.now().timestamp()
-            if datetime.now() < giveaway.end_date:
+            random_seed_value = datetime.datetime.now().timestamp()
+            if datetime.datetime.now() < giveaway.end_date:
                 return
             channel = await self.bot.fetch_channel(giveaway.discord_channel_id)
             try:
