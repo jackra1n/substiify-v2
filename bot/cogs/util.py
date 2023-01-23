@@ -194,34 +194,31 @@ class Util(commands.Cog):
         giveaways = await self.bot.db.get_all_giveaways()
         for giveaway in giveaways:
             random_seed_value = datetime.datetime.now().timestamp()
-            if datetime.datetime.now() < giveaway.end_date:
+            if datetime.datetime.now() < giveaway['end_date']:
                 return
-            channel = await self.bot.fetch_channel(giveaway.discord_channel_id)
+            channel = await self.bot.fetch_channel(giveaway['discord_channel_id'])
             try:
-                message = await channel.fetch_message(giveaway.discord_message_id)
+                message = await channel.fetch_message(giveaway['discord_message_id'])
             except discord.NotFound:
-                db.session.delete(giveaway)
-                db.session.commit()
+                await self.bot.db.delete_giveaway(giveaway['id'])
                 return await channel.send("Could not find the giveaway message! Deleting the giveaway.", delete_after=180)
             users = [user async for user in message.reactions[0].users() if not user.bot]
-            author = await self.bot.fetch_user(giveaway.discord_user_id)
-            prize = giveaway.prize
+            author = await self.bot.fetch_user(giveaway['discord_user_id'])
+            prize = giveaway['prize']
             embed = self.create_giveaway_embed(author, prize)
 
-            users.pop(users.index(self.bot.user))
             # Check if User list is not empty
             if len(users) <= 0:
                 embed.remove_field(0)
                 embed.set_footer(text="No one won the Giveaway")
                 await channel.send('No one won the Giveaway')
             else:
-                seed(random_seed_value + giveaway.discord_message_id)
+                seed(random_seed_value + giveaway['discord_message_id'])
                 winner = choice(users)
                 embed.add_field(name=f"Congratulations on winning {prize}", value=winner.mention)
                 await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
             await message.edit(embed=embed)
-            db.session.query(db.giveaway).filter_by(discord_message_id=message.id).delete()
-            db.session.commit()
+            await self.bot.db.delete_giveaway(giveaway['id'])
 
     async def get_giveaway_prize(self, msg: discord.Message):
         return msg.embeds[0].description.split("Win **")[1].split("**!")[0]

@@ -97,7 +97,11 @@ class Database:
             VALUES ($1, $2, $3, $4, $5, $6)
         """
         async with self.pool.acquire() as con:
-            await con.execute(query, creator, end_date, prize, msg.guild.id, msg.channel.id, msg.id)
+            await con.execute(query, creator.id, end_date, prize, msg.guild.id, msg.channel.id, msg.id)
+
+    async def delete_giveaway(self, primary_key: int):
+        async with self.pool.acquire() as con:
+            await con.execute(f'DELETE FROM giveaway WHERE id = {primary_key}')
 
     async def get_discord_user(self, user: discord.Member):
         async with self.pool.acquire() as con:
