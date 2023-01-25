@@ -8,7 +8,7 @@ from discord.ext.commands import Context
 
 logger = logging.getLogger(__name__)
 
-user_insert_query = """INSERT INTO discord_user
+USER_INSERT_QUERY = """INSERT INTO discord_user
                        (discord_user_id, username, discriminator, avatar)
                        VALUES ($1, $2, $3, $4)
                        ON CONFLICT (discord_user_id) DO UPDATE
@@ -18,7 +18,7 @@ user_insert_query = """INSERT INTO discord_user
                        avatar = EXCLUDED.avatar
                     """
 
-server_insert_query = """INSERT INTO discord_server
+SERVER_INSERT_QUERY = """INSERT INTO discord_server
                          (discord_server_id, server_name)
                          VALUES ($1, $2)
                          ON CONFLICT (discord_server_id) DO UPDATE
@@ -26,7 +26,7 @@ server_insert_query = """INSERT INTO discord_server
                          server_name = EXCLUDED.server_name
                       """
 
-channel_insert_query = """INSERT INTO discord_channel
+CHANNEL_INSERT_QUERY = """INSERT INTO discord_channel
                           (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id)
                           VALUES ($1, $2, $3, $4)
                           ON CONFLICT (discord_channel_id) DO UPDATE
@@ -42,10 +42,10 @@ class Database:
         self.pool = pool
 
     async def _populate(self, ctx: Context) -> None:
-        servers = self.bot.guilds
+        servers = [(server.id, server.name) for server in self.bot.guilds]
         async with self.pool.acquire() as con:
             query = 'INSERT INTO discord_server(discord_server_id, server_name) VALUES ($1, $2)'
-            servers = [(server.id, server.name) for server in servers]
+            await con.executemany(query, servers)
         await ctx.send("Database populated", delete_after=30)
 
     async def insert_foundation(self, ctx):
@@ -53,11 +53,12 @@ class Database:
         server = ctx.guild
         channel = ctx.channel
         async with self.pool.acquire() as con:
-            await con.execute(user_insert_query, user.id, user.name, user.discriminator, user.avatar.url)
-            await con.execute(server_insert_query, server.id, server.name)
+            await con.execute(USER_INSERT_QUERY, user.id, user.name, user.discriminator, user.avatar.url)
+            await con.execute(SERVER_INSERT_QUERY, server.id, server.name)
             if pchannel := channel.parent if hasattr(channel, 'parent') else None:
-                await con.execute(channel_insert_query, pchannel.id, pchannel.name, pchannel.guild.id, None)
-            await con.execute(channel_insert_query, channel.id, channel.name, channel.guild.id, pchannel.id if pchannel else None)
+                await con.execute(CHANNEL_INSERT_QUERY, pchannel.id, pchannel.name, pchannel.guild.id, None)
+            p_chan_id = pchannel.id if pchannel else None
+            await con.execute(CHANNEL_INSERT_QUERY, channel.id, channel.name, channel.guild.id, p_chan_id)
 
     async def insert_to_cmd_history(self, ctx: Context) -> None:
         await self.insert_foundation(ctx)
@@ -72,16 +73,16 @@ class Database:
 
     async def insert_discord_user(self, user: discord.Member):
         async with self.pool.acquire() as con:
-            await con.execute(user_insert_query, user.id, user.name, user.discriminator, user.avatar.url)
+            await con.execute(USER_INSERT_QUERY, user.id, user.name, user.discriminator, user.avatar.url)
 
     async def insert_discord_server(self, server: discord.Guild):
         async with self.pool.acquire() as con:
-            await con.execute(server_insert_query, server.id, server.name)
+            await con.execute(SERVER_INSERT_QUERY, server.id, server.name)
 
     async def insert_discord_channel(self, channel: discord.abc.Messageable):
         parent_channel = channel.parent.id if hasattr(channel, 'parent') else None
         async with self.pool.acquire() as con:
-            await con.execute(channel_insert_query, channel.id, channel.name, channel.guild.id, parent_channel)
+            await con.execute(CHANNEL_INSERT_QUERY, channel.id, channel.name, channel.guild.id, parent_channel)
 
     async def insert_kasino(self, question, option_1, option_2, kasino_msg):
         query = """INSERT INTO kasino
@@ -142,7 +143,10 @@ class Database:
 
     async def get_command_usage_all(self, ctx: Context) -> list:
         await self.insert_foundation(ctx)
-        query = "SELECT command_name, COUNT(*) FROM command_history GROUP BY command_name ORDER BY COUNT(*) DESC LIMIT 10"
+        query = """SELECT command_name, COUNT(*) FROM command_history
+                 GROUP BY command_name
+                 ORDER BY COUNT(*) DESC LIMIT 10
+                """
         async with self.pool.acquire() as con:
             return await con.fetch(query)
 
@@ -158,7 +162,11 @@ class Database:
 
     async def get_command_usage_by_command(self, ctx: Context) -> list:
         await self.insert_foundation(ctx)
-        query = "SELECT command_name, COUNT(*) FROM command_history WHERE discord_server_id = $1 GROUP BY command_name ORDER BY COUNT(*) DESC LIMIT 10"
+        query = """SELECT command_name, COUNT(*) FROM command_history
+                   WHERE discord_server_id = $1
+                   GROUP BY command_name
+                   ORDER BY COUNT(*) DESC LIMIT 10
+                """
         async with self.pool.acquire() as con:
             return await con.fetch(query, ctx.guild.id)
 

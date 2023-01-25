@@ -30,8 +30,8 @@ class Owner(commands.Cog):
     async def set_default_status(self):
         if self.bot.is_ready():
             servers = len(self.bot.guilds)
-            activityName = f"{config.PREFIX}help | {servers} servers"
-            activity = Activity(type=ActivityType.listening, name=activityName)
+            activity_name = f"{config.PREFIX}help | {servers} servers"
+            activity = Activity(type=ActivityType.listening, name=activity_name)
             await self.bot.change_presence(activity=activity)
 
     @tasks.loop(minutes=30)
