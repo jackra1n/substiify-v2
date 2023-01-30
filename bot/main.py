@@ -4,17 +4,23 @@ from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 import asyncpg
-from core import config, values
+from core import values
 from core.bot import Substiify
 from core.version import Version
 from utils import util
 from utils.db import Database
-from utils.CustomLogger import CustomLogFormatter, RemoveNoise
+from utils.custom_logger import CustomLogFormatter, RemoveNoise
 
 logger = logging.getLogger(__name__)
 
+try:
+    from core import config
+except ImportError:
+    logger.warning("No config.py found. Make sure to copy config.py.example to config.py and fill in the values.")
+    exit()
 
-def prepareFiles() -> None:
+
+def prepare_files() -> None:
     # Create 'logs' folder if it doesn't exist
     Path(values.LOGS_PATH).mkdir(parents=True, exist_ok=True)
 
@@ -59,7 +65,7 @@ async def main():
         await substiify.start(config.TOKEN)
 
 if __name__ == "__main__":
-    prepareFiles()
+    prepare_files()
     util.print_system_info()
     setup_logging()
 
