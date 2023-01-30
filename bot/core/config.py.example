@@ -1,0 +1,10 @@
+TOKEN = ""
+PREFIX = ""
+
+POSTGRESQL_DSN = "postgresql://[user]:[password]@[host]:[port]/[database_name]"
+
+LAVALINK_NODE_URL = ""
+LAVALINK_PASSWORD = ""
+
+SPOTIFY_CLIENT_ID = ""
+SPOTIFY_CLIENT_SECRET = ""

@@ -1,16 +1,17 @@
 import asyncio
+import datetime
 import logging
+import math
 import platform
 import random
 import subprocess
-from asyncio import TimeoutError
-import datetime
 from datetime import timedelta
 from random import choice, seed, shuffle
 
 import discord
 import psutil
-from core import values, bot
+from core import values
+from core.bot import Substiify
 from discord import MessageType
 from discord.ext import commands, tasks
 from discord.ext.commands import BucketType
@@ -23,7 +24,7 @@ class Util(commands.Cog):
 
     COG_EMOJI = "📦"
 
-    def __init__(self, bot: bot.Substiify):
+    def __init__(self, bot: Substiify):
         self.bot = bot
         self.suggestion_channel_id = 876413286978031676
         self.bug_channel_id = 876412993498398740
@@ -91,15 +92,15 @@ class Util(commands.Cog):
         answers = []
 
         # Check Author
-        def check(m):
-            return m.author == ctx.author and m.channel == ctx.channel
+        def check(message):
+            return message.author == ctx.author and message.channel == ctx.channel
 
         for i, question in enumerate(questions):
             embed = discord.Embed(title=f"Question {i}", description=question)
             question_message = await ctx.send(embed=embed)
             try:
                 message = await self.bot.wait_for('message', timeout=45, check=check)
-            except TimeoutError:
+            except asyncio.TimeoutError:
                 await question_message.delete()
                 return await ctx.send("You didn't answer the questions in Time", delete_after=60)
             answers.append(message.content)
@@ -138,9 +139,9 @@ class Util(commands.Cog):
         embed.description += f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
 
         embed.set_footer(text=f"Giveway ends on {end_string}")
-        newMsg = await channel.send(embed=embed)
-        await newMsg.add_reaction("🎉")
-        await self.bot.db.insert_giveaway(hosted_by, end, prize, newMsg)
+        new_msg = await channel.send(embed=embed)
+        await new_msg.add_reaction("🎉")
+        await self.bot.db.insert_giveaway(hosted_by, end, prize, new_msg)
 
     @giveaway.command(usage="reroll <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -183,8 +184,8 @@ class Util(commands.Cog):
         if giveaway == 'DELETE 0':
             return await ctx.send("The message ID provided was wrong")
         msg = await ctx.fetch_message(message_id)
-        newEmbed = discord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!")
-        await msg.edit(embed=newEmbed)
+        new_embed = discord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!")
+        await msg.edit(embed=new_embed)
         await ctx.send('Giveaway has been cancelled', delete_after=15)
         await ctx.message.delete()
 
@@ -229,10 +230,10 @@ class Util(commands.Cog):
         if unit not in pos:
             return -1
         try:
-            timeVal = int(time[:-1])
+            time_val = int(time[:-1])
         except Exception:
             return -2
-        return timeVal * time_dict[unit]
+        return time_val * time_dict[unit]
 
     def create_giveaway_embed(self, author: discord.Member, prize):
         embed = discord.Embed(
@@ -350,7 +351,8 @@ class Util(commands.Cog):
             description=embed.description,
             color=discord.Colour.red() if 'denied' in action else discord.Colour.green()
         )
-        await user.send(content=f'Hello {user.name}!\nYour {self.bot.user.mention} {submission_type} submission has been {action}.\n', embed=new_embed)
+        message = f'Hello {user.name}!\nYour {self.bot.user.mention} {submission_type} submission has been {action}.'
+        await user.send(content=message, embed=new_embed)
         embed.color = discord.Colour.red() if 'denied' in action else discord.Colour.green()
         await message.edit(embed=embed)
 
@@ -361,34 +363,35 @@ class Util(commands.Cog):
 
     async def _cooldown_error(self, ctx, error):
         if isinstance(error, commands.CommandOnCooldown):
-            em = discord.Embed(
+            embed = discord.Embed(
                 title="Slow it down!",
                 description=f"Try again in {error.retry_after:.2f}s.",
                 color=discord.Colour.red(),
             )
 
-            await ctx.send(embed=em, delete_after=30)
+            await ctx.send(embed=embed, delete_after=30)
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.send('Missing the suggestion description', delete_after=30)
         await ctx.message.delete()
 
     @commands.cooldown(6, 5)
-    @commands.hybrid_command(aliases=['avatar'])
-    async def av(self, ctx, member: discord.Member | discord.User | None = None):
+    @commands.hybrid_command(aliases=['av'])
+    async def avatar(self, ctx, member: discord.Member | discord.User | None = None):
         """
         Enlarge and view your profile picture or another member
         """
-        member = ctx.author if member is None else member
+        member = member or ctx.author
+        current_avatar = member.guild_avatar or member.avatar
         embed = discord.Embed(
             title=f"{str(member.display_name)}'s avatar",
-            url=member.guild_avatar,
+            url=current_avatar.url,
             color=0x1E9FE3
         )
-        embed.set_image(url=member.guild_avatar)
+        embed.set_image(url=current_avatar.url)
         await ctx.send(embed=embed)
 
-    @av.error
-    async def av_error(self, ctx, error):
+    @avatar.error
+    async def avatar_error(self, ctx, error):
         if isinstance(error, commands.MemberNotFound):
             await ctx.send('Member not found', delete_after=30)
 
@@ -416,11 +419,11 @@ class Util(commands.Cog):
         """Clears the bot's messages even in DMs"""
         bots_messages = [messages async for messages in ctx.channel.history(limit=amount + 1) if messages.author == self.bot.user]
 
-        if len(bots_messages) <= 100 and type(ctx.channel) == discord.TextChannel:
+        if len(bots_messages) <= 100 and isinstance(ctx.channel, discord.TextChannel):
             await ctx.message.delete()
             await ctx.channel.delete_messages(bots_messages)
 
-        elif type(ctx.channel) == discord.DMChannel:
+        elif isinstance(ctx.channel, discord.DMChannel):
             for message in bots_messages:
                 await message.delete()
                 await asyncio.sleep(0.75)
@@ -444,8 +447,8 @@ class Util(commands.Cog):
         await ctx.message.delete()
         await ctx.send(embed=embed)
 
-    @commands.command(hidden=True)
-    async def specialThanks(self, ctx):
+    @commands.command(name="specialThanks",hidden=True)
+    async def special_thanks(self, ctx):
         peeople_who_helped = [
             "<@205704051856244736>", # Sprütz#2222
             "<@299478604809764876>", # TheBadGod#7826
@@ -468,18 +471,26 @@ class Util(commands.Cog):
         """
         Shows different technical information about the bot
         """
-        bot_time = time_up((datetime.datetime.now(datetime.timezone.utc) - self.bot.start_time).total_seconds())  # uptime of the bot
-        last_commit_date = subprocess.check_output(['git', 'log', '-1', '--date=format:"%Y/%m/%d"', '--format=%ad']).decode('utf-8').strip().strip('"')
+        content = ''
+        bot_uptime = time_up((datetime.datetime.now(datetime.timezone.utc) - self.bot.start_time).total_seconds())
+        git_log_cmd = ['git', 'log', '-1', '--date=format:"%Y/%m/%d"', '--format=%ad']
+        last_commit_date = subprocess.check_output(git_log_cmd).decode('utf-8').strip().strip('"')
         cpu_percent = psutil.cpu_percent()
         ram = psutil.virtual_memory()
         ram_used = format_bytes((ram.total - ram.available))
         ram_percent = psutil.virtual_memory().percent
         bot_version = self.bot.version.get()
-        content = f'**Instance uptime:** `{bot_time}`\n' \
-            f'**Version:** `{bot_version}` | **Updated:** `{last_commit_date}`\n' \
-            f'**Python:** `{platform.python_version()}` | **discord.py:** `{discord.__version__}`\n\n' \
-            f'**CPU:** `{cpu_percent}%` | **RAM:** `{ram_used} ({ram_percent}%)`\n\n' \
-            f'**Made by:** <@{self.bot.owner_id}>'
+        proc = psutil.Process()
+
+        with proc.oneshot():
+            memory = proc.memory_full_info()
+            content = f'**Instance uptime:** `{bot_uptime}`\n' \
+                f'**Version:** `{bot_version}` | **Updated:** `{last_commit_date}`\n' \
+                f'**Python:** `{platform.python_version()}` | **discord.py:** `{discord.__version__}`\n\n' \
+                f'**CPU:** `{cpu_percent}%`\n' \
+                f'**Process RAM:** `{format_bytes(memory.uss)}`\n' \
+                f'**Total RAM:** `{ram_used} ({ram_percent}%)`\n\n' \
+                f'**Made by:** <@{self.bot.owner_id}>'
 
         embed = discord.Embed(
             title=f'Info about {self.bot.user.display_name}',
@@ -493,14 +504,14 @@ class Util(commands.Cog):
         await ctx.message.delete()
 
 
-def time_up(t):
-    if t <= 60:
+def time_up(seconds: int) -> str:
+    if seconds <= 60:
         return "<1 minute"
-    elif 3600 > t > 60:
-        minutes = t // 60
+    elif 3600 > seconds > 60:
+        minutes = seconds // 60
         return f"{int(minutes)} minutes"
-    hours = t // 3600  # Seconds divided by 3600 gives amount of hours
-    minutes = (t % 3600) // 60  # The remaining seconds are looked at to see how many minutes they make up
+    hours = seconds // 3600  # Seconds divided by 3600 gives amount of hours
+    minutes = (seconds % 3600) // 60  # The remaining seconds are looked at to see how many minutes they make up
     if hours >= 24:
         days = hours // 24
         hours = hours % 24
@@ -508,15 +519,10 @@ def time_up(t):
     return f"{int(hours)} hours, {int(minutes)} minutes"
 
 
-def format_bytes(size: int) -> str:
-    # 2**10 = 1024
-    power = 2**10
-    n = 0
-    power_labels = {0: '', 1: 'KB', 2: 'MB', 3: 'GB', 4: 'TB'}
-    while size > power:
-        size /= power
-        n += 1
-    return f'{round(size, 2)}{power_labels[n]}'
+def format_bytes(size_in_bytes: int) -> str:
+    units = ('B', 'KiB', 'MiB', 'GiB', 'TiB')
+    power = int(math.log(max(abs(size_in_bytes), 1), 1024))
+    return f"{size_in_bytes / (1024 ** power):.2f} {units[power]}"
 
 
 async def setup(bot):

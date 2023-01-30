@@ -4,7 +4,7 @@ import random
 
 import discord
 import vacefron
-from core import bot
+from core.bot import Substiify
 from discord.ext import commands
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ class Fun(commands.Cog):
 
     COG_EMOJI = "🎱"
 
-    def __init__(self, bot: bot.Substiify):
+    def __init__(self, bot: Substiify):
         self.bot = bot
         self.vac_api = vacefron.Client()
 
@@ -107,7 +107,7 @@ class Fun(commands.Cog):
         """
         user = user or ctx.author
         async with ctx.typing():
-            stonks_image = await self.vac_api.stonks(user.avatar, not_stonks)
+            stonks_image = await self.vac_api.stonks(user.avatar,stonks=not_stonks)
             await ctx.send(file=discord.File(await stonks_image.read(), filename="stonks.png"))
         await ctx.message.delete()
 

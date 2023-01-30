@@ -3,7 +3,7 @@ from datetime import datetime
 
 import aiohttp
 import discord
-from core import bot
+from core.bot import Substiify
 from discord.ext import commands
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class FreeGames(commands.Cog):
 
     COG_EMOJI = "🕹️"
 
-    def __init__(self, bot: bot.Substiify):
+    def __init__(self, bot: Substiify):
         self.bot = bot
 
     @commands.cooldown(3, 30)
@@ -61,8 +61,8 @@ class FreeGames(commands.Cog):
                 async with session.get(EPIC_STORE_FREE_GAMES_API) as response:
                     json_response = await response.json()
                     all_games = json_response["data"]["Catalog"]["searchStore"]["elements"]
-        except Exception as e:
-            logger.error(f'Error while getting list of all Epic games: {e}')
+        except Exception as error:
+            logger.error(f'Error while getting list of all Epic games: {error}')
 
         current_free_games = []
         for game in all_games:
@@ -77,8 +77,8 @@ class FreeGames(commands.Cog):
                 continue
             try:
                 current_free_games.append(Game(game))
-            except Exception as e:
-                logger.error(f'Error while creating \'Game\' object: {e}')
+            except Exception as error:
+                logger.error(f'Error while creating \'Game\' object: {error}')
 
         if not current_free_games:
             embed = discord.Embed(color=0x000000)
@@ -96,8 +96,8 @@ class FreeGames(commands.Cog):
                 embed.set_image(url=f"{game.cover_image_url}")
 
                 await ctx.send(embed=embed)
-            except Exception as e:
-                logger.error(f'Fail while sending free game: {e}')
+            except Exception as error:
+                logger.error(f'Fail while sending free game: {error}')
 
 
 async def setup(bot):

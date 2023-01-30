@@ -8,10 +8,10 @@ import re
 import discord
 import wavelink
 from core import config
+from core.bot import Substiify
 from discord import Interaction
 from discord.ext import commands
-from utils import db
-from wavelink import Player, Playable
+from wavelink import Playable, Player
 from wavelink.ext import spotify
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ class Music(commands.Cog):
 
     COG_EMOJI = "🎵"
 
-    def __init__(self, bot):
+    def __init__(self, bot: Substiify):
         self.bot = bot
         bot.loop.create_task(self.connect_nodes())
 
@@ -165,7 +165,7 @@ class Music(commands.Cog):
             raise NoTracksFound()
         embed = await self._queue_songs(tracks, player, ctx.author)
 
-        server = db.get_discord_server(ctx.guild)
+        server = await self.bot.db.get_discord_server(ctx.guild)
         delete_after = 60 if server.music_cleanup else None
         await ctx.send(embed=embed, delete_after=delete_after)
 
@@ -358,25 +358,20 @@ class Music(commands.Cog):
         """
         Enables/disables the auto-cleanup of the music queue messages that appear after queueing a new song.
         """
-        server = db.get_discord_server(ctx.guild)
-
         if enable is not None:
-            server.music_cleanup = enable
-            db.session.commit()
+            await self.bot.db.update_server_music_cleanup(ctx.guild.id, enable)
 
-        embed = self.create_song_cleanup_embed(ctx, enable, server)
+        embed = self.create_song_cleanup_embed(ctx, enable)
         await ctx.send(embed=embed)
         if not ctx.interaction:
             await ctx.message.delete()
 
-    def create_song_cleanup_embed(self, ctx, enable, server):
+    def create_song_cleanup_embed(self, ctx, enable):
         embed = discord.Embed(color=discord.Color.red())
-        if enable or server.music_cleanup:
+        status_string = '`disabled` <:redCross:876177262813278288>'
+        if enable:
             embed = discord.Embed(color=discord.Color.green())
-        if server.music_cleanup:
             status_string = '`enabled` <:greenTick:876177251832590348>'
-        else:
-            status_string = '`disabled` <:redCross:876177262813278288>'
         embed.title = 'Cleanup status'
         embed.description = f'Song messages auto-cleanup is {status_string}.'
         embed.set_footer(text=f'Use `{ctx.prefix}cleanup <enable/disable>` to toggle.')
@@ -440,7 +435,7 @@ class PaginatorView(discord.ui.View):
     @discord.ui.button(emoji='⏮', style=discord.ButtonStyle.primary)
     async def previous(self, interaction: Interaction, button: discord.ui.Button):
         self.current_page = max(self.current_page - 1, 0)
-        button.disabled = (self.current_page == 0)
+        button.disabled = self.current_page == 0
         await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
         button.disabled = False
 
@@ -452,7 +447,7 @@ class PaginatorView(discord.ui.View):
     @discord.ui.button(emoji='⏭', style=discord.ButtonStyle.primary)
     async def next(self, interaction: Interaction, button: discord.ui.Button):
         self.current_page = min(self.current_page + 1, len(self.pages) - 1)
-        button.disabled = (self.current_page == len(self.pages) - 1)
+        button.disabled = self.current_page == len(self.pages) - 1
         await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
         button.disabled = False
 
