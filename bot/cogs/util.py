@@ -206,7 +206,6 @@ class Util(commands.Cog):
             prize = giveaway.prize
             embed = self.create_giveaway_embed(author, prize)
 
-            users.pop(users.index(self.bot.user))
             # Check if User list is not empty
             if len(users) <= 0:
                 embed.remove_field(0)
@@ -383,10 +382,10 @@ class Util(commands.Cog):
         member = ctx.author if member is None else member
         embed = discord.Embed(
             title=f"{str(member.display_name)}'s avatar",
-            url=member.avatar,
+            url=member.guild_avatar,
             color=0x1E9FE3
         )
-        embed.set_image(url=member.avatar)
+        embed.set_image(url=member.guild_avatar)
         await ctx.send(embed=embed)
 
     @av.error
