@@ -140,6 +140,7 @@ cython_debug/
 
 # substiify custom
 bot/data/main.sqlite
+postgres-data/
 bot/data/version.toml
 bot/data/backups/
 bot/core/config.py
