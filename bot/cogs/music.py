@@ -389,7 +389,8 @@ class Music(commands.Cog):
             embed.title += ' | (Looping)'
         embed.description = f'[{player.current.title}]({player.current.uri})'
         if not player.current.is_stream:
-            position = str(datetime.timedelta(milliseconds=player.last_position)).split(".")[0]
+            song_timestamp = player.position if player.position > 0 else player.last_position
+            position = str(datetime.timedelta(milliseconds=song_timestamp)).split(".")[0]
             song_length = str(datetime.timedelta(milliseconds=player.current.duration)).split(".")[0]
             embed.add_field(name='Duration', value=f"{position}/{song_length}")
         else:
