@@ -741,7 +741,7 @@ class Karma(commands.Cog):
         bOdds = float(aAmount + bAmount) / bAmount if bAmount != 0 else 1.0
 
         # CREATE MESSAGE
-        description = f"The kasino has been opened! Place your bets using `{ctx.prefix}kasino bet {kasino.id} <amount> <1 or 2>`"
+        description = f"The kasino has been opened!\nPlace your bets using `{ctx.prefix}kasino bet {kasino.id} <amount> <1 or 2>`"
         if kasino.locked:
             description = 'The kasino is locked! No more bets are taken in. Time to wait and see...'
         to_embed = discord.Embed(
