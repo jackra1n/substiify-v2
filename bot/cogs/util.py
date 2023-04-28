@@ -381,10 +381,10 @@ class Util(commands.Cog):
         member = ctx.author if member is None else member
         embed = discord.Embed(
             title=f"{str(member.display_name)}'s avatar",
-            url=member.avatar,
+            url=member.guild_avatar,
             color=0x1E9FE3
         )
-        embed.set_image(url=member.avatar)
+        embed.set_image(url=member.guild_avatar)
         await ctx.send(embed=embed)
 
     @av.error

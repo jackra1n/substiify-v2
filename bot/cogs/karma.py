@@ -458,6 +458,20 @@ class Karma(commands.Cog):
         await ctx.send(embed=embed, delete_after=300)
         await ctx.message.delete()
 
+    @kasino.command(name='resend', usage="resend <kasino_id>")
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    async def resend_kasino(self, ctx, kasino_id):
+        kasino = db.session.query(db.kasino).filter_by(id=kasino_id).first()
+        if kasino is None:
+            await ctx.send('Kasino not found.')
+            return
+        kasino_msg = await (await self.bot.fetch_channel(kasino.discord_channel_id)).fetch_message(kasino.discord_message_id)
+        await kasino_msg.delete()
+        new_kasino_msg = await ctx.send(embed=discord.Embed(description='Loading...'))
+        kasino.discord_message_id = new_kasino_msg.id
+        db.session.commit()
+        await self.update_kasino(ctx, kasino_id)
+
     async def __get_message_from_payload(self, payload: discord.RawReactionActionEvent) -> discord.Message | None:
         potential_message = [message for message in self.bot.cached_messages if message.id == payload.message_id]
         cached_message = potential_message[0] if potential_message else None
@@ -716,7 +730,7 @@ class Karma(commands.Cog):
         bOdds = float(aAmount + bAmount) / bAmount if bAmount != 0 else 1.0
 
         # CREATE MESSAGE
-        description = f"The kasino has been opened! Place your bets using `{ctx.prefix}kasino bet {kasino.id} <amount> <1 or 2>`"
+        description = f"The kasino has been opened!\nPlace your bets using `{ctx.prefix}kasino bet {kasino.id} <amount> <1 or 2>`"
         if kasino.locked:
             description = 'The kasino is locked! No more bets are taken in. Time to wait and see...'
         to_embed = discord.Embed(

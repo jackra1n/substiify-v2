@@ -7,11 +7,11 @@ import re
 
 import discord
 import wavelink
-from core import config, bot
+from core import config
 from discord import Interaction
 from discord.ext import commands
 from utils import db
-from wavelink import Player, Track
+from wavelink import Player, Playable
 from wavelink.ext import spotify
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ class Music(commands.Cog):
 
     COG_EMOJI = "🎵"
 
-    def __init__(self, bot: bot.Substiify):
+    def __init__(self, bot):
         self.bot = bot
         bot.loop.create_task(self.connect_nodes())
 
@@ -35,7 +35,8 @@ class Music(commands.Cog):
             spotify_client = None
         else:
             spotify_client = spotify.SpotifyClient(client_id=config.SPOTIFY_CLIENT_ID, client_secret=config.SPOTIFY_CLIENT_SECRET)
-        await wavelink.NodePool.create_node(bot=self.bot, host=config.LAVALINK_HOST, port=config.LAVALINK_PORT, password=config.LAVALINK_PASSWORD, spotify_client=spotify_client)
+        node: wavelink.Node = wavelink.Node(uri=config.LAVALINK_NODE_URL, password=config.LAVALINK_PASSWORD)
+        await wavelink.NodePool.connect(client=self.bot, nodes=[node], spotify=spotify_client)
 
     async def cog_command_error(self, ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):
@@ -45,14 +46,9 @@ class Music(commands.Cog):
             await ctx.send(error)
 
     @commands.Cog.listener()
-    async def on_voice_state_update(self, member, before, after):
-        if self.is_bot_force_disconnected(member, after):
-            player = wavelink.NodePool.get_node().get_player(before.channel.guild)
-            if player is not None:
-                await player.disconnect()
-
+    async def on_voice_state_update(self, member, before: discord.VoiceState, after):
         if self.is_bot_last_vc_member(before.channel):
-            player = wavelink.NodePool.get_node().get_player(before.channel.guild)
+            player: Player = before.channel.guild.voice_client
             if player is not None:
                 await player.disconnect()
 
@@ -60,35 +56,28 @@ class Music(commands.Cog):
         return channel and self.bot.user in channel.members and len(self.get_vc_users(channel)) == 0
 
     def get_vc_users(self, channel: discord.VoiceChannel):
-        return [member for member in channel.members if not member.bot and member.id != self.bot.user.id]
-
-    def is_bot_force_disconnected(self, member: discord.Member, after: discord.VoiceState):
-        return member == self.bot.user and after.channel is None
+        return [member for member in channel.members if not member.bot]
 
     @commands.Cog.listener()
     async def on_wavelink_node_ready(self, node: wavelink.Node):
         """Event fired when a node has finished connecting."""
-        logger.info(f'Node: <{node.identifier}> is ready!')
+        logger.info(f'Node: <{node.id}> is ready!')
 
     @commands.Cog.listener()
-    async def on_wavelink_websocket_closed(self, player: wavelink.Player, reason: str, code: int):
-        """Event fired when a node's websocket connection is closed."""
-        logger.warn(f'Websocket closed! Guild: {player.guild} | Reason: {reason} | Code: {code}')
-
-    @commands.Cog.listener()
-    async def on_wavelink_track_end(self, player: Player, track: Track, reason):
+    async def on_wavelink_track_end(self, payload: wavelink.TrackEventPayload):
         """Event fired when a track ends."""
-        if hasattr(player, 'loop') and player.loop:
-            return await player.play(track)
-        if not player.queue.is_empty:
+        player = payload.player
+        if player.queue.loop:
+            track = await player.play(payload.track)
+        elif not player.queue.is_empty:
             partial = await player.queue.get_wait()
             track = await player.play(partial)
             track.requester = partial.requester
         else:
             await player.stop()
 
-        def check(p: wavelink.Player):
-            return p.guild == player.guild
+        def check(payload: wavelink.TrackEventPayload):
+            return payload.player.guild == player.guild
         try:
             await self.bot.wait_for("wavelink_track_start", check=check, timeout=300)
         except asyncio.TimeoutError:
@@ -112,23 +101,20 @@ class Music(commands.Cog):
             return True
 
         player = ctx.voice_client
-
         if ctx.command.name in ['show', 'now']:
             if player is None:
                 raise NoPlayerFound()
             return True
 
-        should_connect = ctx.command.name in ['play']
-
         if not ctx.author.voice or not ctx.author.voice.channel:
             raise NoVoiceChannel()
 
+        should_connect = ctx.command.name in ['play']
         if not player:
             if not should_connect:
                 raise NoPlayerFound()
 
             permissions = ctx.author.voice.channel.permissions_for(ctx.me)
-
             if not permissions.connect or not permissions.speak:
                 raise NoPermissions()
 
@@ -147,9 +133,7 @@ class Music(commands.Cog):
         `<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
         """
         player: Player = ctx.voice_client
-
-        embed = None
-        tracks = None
+        tracks = []
 
         search = search.strip('<>')
         if not ctx.interaction:
@@ -159,55 +143,33 @@ class Music(commands.Cog):
         if (decoded := spotify.decode_url(search)) is not None:
             if decoded["type"] is spotify.SpotifySearchType.unusable:
                 return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
-            embed = await self._queue_spotify(decoded, player, ctx.author)
+            elif decoded["type"] in (spotify.SpotifySearchType.playlist, spotify.SpotifySearchType.album):
+                async for track in spotify.SpotifyTrack.iterator(query=decoded["id"], type=decoded["type"]):
+                    tracks.append(track)
+            else:
+                tracks = await spotify.SpotifyTrack.search(search)
+            if not isinstance(tracks, list):
+                tracks = [tracks]
 
         elif URL.match(search):
             if 'list=' in search:
-                tracks = await player.node.get_playlist(wavelink.YouTubePlaylist, search)
+                tracks = await player.current_node.get_playlist(wavelink.YouTubePlaylist, search)
             else:
-                tracks = await player.node.get_tracks(wavelink.Track, search)
+                tracks = await player.current_node.get_tracks(Playable, search)
 
         else:
-            try:
-                track = await wavelink.YouTubeTrack.search(query=search, return_first=True)
-                tracks = [track]
-            except IndexError as e:
-                raise NoTracksFound() from e
+            track = await wavelink.YouTubeTrack.search(search, return_first=True)
+            tracks = [track]
 
-        if embed is None and tracks is None:
+        if not tracks:
             raise NoTracksFound()
-        if embed is None:
-            embed = await self._queue_songs(tracks, player, ctx.author)
+        embed = await self._queue_songs(tracks, player, ctx.author)
 
         server = db.get_discord_server(ctx.guild)
         delete_after = 60 if server.music_cleanup else None
         await ctx.send(embed=embed, delete_after=delete_after)
 
-    async def _queue_spotify(self, decoded, player, requester):
-        msg = ''
-        embed = discord.Embed(color=EMBED_COLOR)
-        if decoded["type"] in (spotify.SpotifySearchType.playlist, spotify.SpotifySearchType.album):
-            tracks_count = 0
-            async for track in spotify.SpotifyTrack.iterator(query=decoded["id"], partial_tracks=True, type=decoded["type"]):
-                track.requester = requester
-                player.queue.put(track)
-                tracks_count += 1
-            embed.title = 'Playlist Queued'
-            msg = f'{tracks_count} tracks'
-        else:
-            track = await spotify.SpotifyTrack.search(query=decoded["id"], return_first=True)
-            track.requester = requester
-            player.queue.put(track)
-            embed.title = 'Song Queued'
-            msg = f'[{track.title}]({track.uri})'
-
-        if not player.is_playing():
-            track = await player.play(await player.queue.get_wait())
-            track.requester = requester
-        embed.description = msg
-        return embed
-
-    async def _queue_songs(self, songs, player, requester):
+    async def _queue_songs(self, songs, player: wavelink.Player, requester):
         embed = discord.Embed(color=EMBED_COLOR)
         if isinstance(songs, wavelink.YouTubePlaylist):
             for track in songs.tracks:
@@ -216,10 +178,11 @@ class Music(commands.Cog):
             embed.title = 'Playlist Queued'
             embed.description = f'{songs.name} - {len(songs.tracks)} tracks'
         else:
+            for song in songs:
+                song.requester = requester
+                player.queue.put(song)
             song = songs[0]
-            song.requester = requester
-            player.queue.put(song)
-            embed.title = 'Song Queued'
+            embed.title = 'Song Queued' if len(songs) == 1 else f'Songs Queued ({len(songs)})'
             embed.description = f'[{song.title}]({song.uri})'
         if not player.is_playing():
             track = await player.play(await player.queue.get_wait())
@@ -230,14 +193,12 @@ class Music(commands.Cog):
     async def _loop(self, ctx):
         """ Loops the current song. """
         player: Player = ctx.voice_client
-        if hasattr(player, 'loop'):
-            player.loop = not player.loop
-        else:
-            player.loop = True
-        embed_color = discord.Color.green() if player.loop else discord.Color.red()
+        looping = not player.queue.loop
+        player.queue.loop = looping
+        embed_color = discord.Color.green() if looping else discord.Color.red()
         embed = discord.Embed(color=embed_color)
-        embed.title = '🔁 Looping' if player.loop else '⏭️ Not looping'
-        embed.description = 'Now looping the current song.' if player.loop else 'Stopped looping.'
+        embed.title = '🔁 Looping' if looping else '⏭️ Not looping'
+        embed.description = 'Now looping the current song.' if looping else 'Stopped looping.'
         await ctx.send(embed=embed)
 
     @commands.hybrid_command(aliases=['disconnect', 'stop'])
@@ -247,7 +208,7 @@ class Music(commands.Cog):
         """
         player: Player = ctx.voice_client
 
-        if not player.is_connected():
+        if player is None:
             raise NoPlayerFound()
 
         if ctx.author.voice.channel != player.channel:
@@ -272,7 +233,7 @@ class Music(commands.Cog):
         if not player.is_playing():
             return await ctx.send('Not playing anything currently.', delete_after=15)
 
-        old_song = f'Skipped: [{player.track.title}]({player.track.uri})'
+        old_song = f'Skipped: [{player.current.title}]({player.current.uri})'
         await player.stop()
         if player.queue.is_empty:
             old_song += '\n*⃣ | Queue is empty.'
@@ -291,7 +252,7 @@ class Music(commands.Cog):
         if not ctx.interaction:
             await ctx.message.delete()
 
-        if not player.is_connected():
+        if player is None:
             raise NoPlayerFound()
 
         if not player.is_playing():
@@ -319,8 +280,8 @@ class Music(commands.Cog):
     @commands.hybrid_group()
     async def queue(self, ctx):
         if ctx.invoked_subcommand is None:
-             embed = discord.Embed(color=EMBED_COLOR)
-             embed.description = "You probably want to call `<<queue show`.\nUsing a slash command for that might be even handier."
+            embed = discord.Embed(color=EMBED_COLOR)
+            embed.description = "You probably want to call `<<queue show`.\nUsing a slash command for that might be even handier."
 
     @queue.command(name='show')
     async def _show(self, ctx):
@@ -331,7 +292,7 @@ class Music(commands.Cog):
         if not ctx.interaction:
             await ctx.message.delete()
         if player.queue.count < 1:
-            embed = self._create_current_song_embed(player) if player.track else None
+            embed = self._create_current_song_embed(player) if player.current else None
             await ctx.send('Nothing queued.', embed=embed, delete_after=120)
             return
 
@@ -384,7 +345,7 @@ class Music(commands.Cog):
             return await ctx.send(embed=embed, delete_after=15)
 
         # get server names by id
-        server_names = [f'{player.guild.name} ({player.queue.count})' for player in players]
+        server_names = [f'{player.guild.name} ({player.queue.count})' for _, player in players.items()]
 
         embed = discord.Embed(color=EMBED_COLOR)
         embed.title = 'Active players'
@@ -397,34 +358,47 @@ class Music(commands.Cog):
         """
         Enables/disables the auto-cleanup of the music queue messages that appear after queueing a new song.
         """
-        await self.bot.db.update_server_music_cleanup(ctx, enable)
+        server = db.get_discord_server(ctx.guild)
 
-        embed = None
-        if enable:
-            embed = discord.Embed(color=discord.Color.green())
-            status_string = '`enabled` <:greenTick:876177251832590348>'
-        else:
-            embed = discord.Embed(color=discord.Color.red())
-            status_string = '`disabled` <:redCross:876177262813278288>'
+        if enable is not None:
+            server.music_cleanup = enable
+            db.session.commit()
 
-        embed.title = 'Cleanup status'
-        embed.description = f'Song messages auto-cleanup is {status_string}.'
-        embed.set_footer(text=f'Use `{ctx.prefix}cleanup <enable/disable>` to toggle.')
+        embed = self.create_song_cleanup_embed(ctx, enable, server)
         await ctx.send(embed=embed)
         if not ctx.interaction:
             await ctx.message.delete()
 
-    def _create_current_song_embed(self, player):
+    def create_song_cleanup_embed(self, ctx, enable, server):
+        embed = discord.Embed(color=discord.Color.red())
+        if enable or server.music_cleanup:
+            embed = discord.Embed(color=discord.Color.green())
+        if server.music_cleanup:
+            status_string = '`enabled` <:greenTick:876177251832590348>'
+        else:
+            status_string = '`disabled` <:redCross:876177262813278288>'
+        embed.title = 'Cleanup status'
+        embed.description = f'Song messages auto-cleanup is {status_string}.'
+        embed.set_footer(text=f'Use `{ctx.prefix}cleanup <enable/disable>` to toggle.')
+        return embed
+
+    def _create_current_song_embed(self, player: wavelink.Player):
         embed = discord.Embed(color=EMBED_COLOR)
         embed.title = 'Now Playing'
-        embed.description = f'[{player.track.title}]({player.track.uri})'
-        if not player.track.is_stream():
-            timestamp = str(datetime.timedelta(seconds=player.track.duration)).split(".")[0]
-            position = str(datetime.timedelta(seconds=player.position)).split(".")[0]
-            embed.add_field(name='Duration', value=f"{position}/{timestamp}")
+        if player.queue.loop:
+            embed.title += ' | (Looping)'
+        embed.description = f'[{player.current.title}]({player.current.uri})'
+        if not player.current.is_stream:
+            song_timestamp = player.position if player.position > 0 else player.last_position
+            position = str(datetime.timedelta(milliseconds=song_timestamp)).split(".")[0]
+            song_length = str(datetime.timedelta(milliseconds=player.current.duration)).split(".")[0]
+            embed.add_field(name='Duration', value=f"{position}/{song_length}")
         else:
             embed.add_field(name='Duration', value='LIVE 🔴')
-        embed.add_field(name='Queued By', value=f"{player.track.requester.mention}")
+        requester = 'Unknown'
+        if hasattr(player.current, 'requester'):
+            requester = player.current.requester.mention
+        embed.add_field(name='Queued By', value=requester)
         return embed
 
     def _create_queue_embed_list(self, ctx):
@@ -441,7 +415,7 @@ class Music(commands.Cog):
             embed = discord.Embed(color=EMBED_COLOR, timestamp=datetime.datetime.now(datetime.timezone.utc))
 
             embed.title = f"Queue ({player.queue.count})"
-            embed.add_field(name='Now Playing', value=f'[{player.track.title}]({player.track.uri})')
+            embed.add_field(name='Now Playing', value=f'[{player.current.title}]({player.current.uri})')
             embed.set_footer(text=f"Queued by {ctx.author}", icon_url=ctx.author.avatar)
 
             upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(songs_array[i:i + 10], start=i)])
@@ -518,7 +492,7 @@ class NoNodeAccessible(MusicError):
 
 
 async def setup(bot):
-    if all([config.LAVALINK_HOST, config.LAVALINK_PORT, config.LAVALINK_PASSWORD]):
+    if all([config.LAVALINK_NODE_URL, config.LAVALINK_PASSWORD]):
         await bot.add_cog(Music(bot))
     else:
         logger.warning("Lavalink is not configured. Skipping Music cog.")
