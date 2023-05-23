@@ -1,8 +1,8 @@
-pref = "\033["
-reset = f"{pref}0m"
+PREF = "\033["
+RESET = f"{PREF}0m"
 
 
-class colors:
+class Colors:
     black = "30m"
     red = "31m"
     green = "32m"
@@ -13,9 +13,9 @@ class colors:
     white = "37m"
 
 
-def print_colored(text, color=colors.white, is_bold=False):
+def print_colored(text, color=Colors.white, is_bold=False):
     print(get_colored(text, color, is_bold))
 
 
-def get_colored(text, color=colors.white, is_bold=False):
-    return f'{pref}{int(is_bold)};{color}{text}{reset}'
+def get_colored(text, color=Colors.white, is_bold=False):
+    return f'{PREF}{int(is_bold)};{color}{text}{RESET}'

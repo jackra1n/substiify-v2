@@ -4,12 +4,12 @@ from os import path, walk
 from typing import Literal, Optional
 
 import discord
-from core import config, values, bot
+from core import config, values
+from core.bot import Substiify
 from core.version import VersionType
 from discord import Activity, ActivityType
 from discord.ext import commands, tasks
 from discord.ext.commands import Context, Greedy
-from utils import db
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class Owner(commands.Cog):
 
     COG_EMOJI = "👑"
 
-    def __init__(self, bot: bot.Substiify):
+    def __init__(self, bot: Substiify):
         self.bot = bot
         self.status_task.start()
         self.message_server = None
@@ -55,12 +55,12 @@ class Owner(commands.Cog):
         Fetches the lates git commit and reloads the bot.
         """
         await ctx.message.add_reaction('<:greenTick:876177251832590348>')
-        subprocess.run(["/bin/git", "pull", "--no-edit"])
+        subprocess.run(["/bin/git", "pull", "--no-edit"], check=False)
         try:
             for cog in self.get_modules():
                 self.bot.reload_extension(f'modules.{cog}')
-        except Exception as e:
-            exc = f'{type(e).__name__}: {e}'
+        except Exception as error:
+            exc = f'{type(error).__name__}: {error}'
             await ctx.send(f'Failed to reload extensions\n{exc}')
         await ctx.send('Reloaded all cogs', delete_after=120)
         await ctx.message.delete()
@@ -111,8 +111,8 @@ class Owner(commands.Cog):
         Sets the bot's status to a fake number of servers the bot is in.
         """
         self.status_task.stop()
-        activityName = f"{self.prefix}help | {count} servers"
-        activity = Activity(type=ActivityType.listening, name=activityName)
+        activity_name = f"{ctx.prefix}help | {count} servers"
+        activity = Activity(type=ActivityType.listening, name=activity_name)
         await self.bot.change_presence(activity=activity)
 
     @commands.is_owner()
@@ -191,7 +191,7 @@ class Owner(commands.Cog):
             return await ctx.send("Please set a server first", delete_after=30)
 
         channels = await self.message_server.fetch_channels()
-        text_channels = [channel for channel in channels if type(channel) == discord.channel.TextChannel]
+        text_channels = [channel for channel in channels if isinstance(channel, discord.channel.TextChannel)]
         if len(channels) == 0:
             return await ctx.send("No text channels found in this server", delete_after=30)
         embed = discord.Embed(title="Channels", color=0xf66045)
@@ -201,8 +201,8 @@ class Owner(commands.Cog):
         embed.add_field(name="Channels", value=channel_string)
         await ctx.send(embed=embed, delete_after=120)
 
-        def check(m):
-            return m.author == ctx.author and m.channel == ctx.channel
+        def check(message):
+            return message.author == ctx.author and message.channel == ctx.channel
 
         try:
             message = await self.bot.wait_for('message', timeout=60, check=check)
@@ -432,36 +432,17 @@ class Owner(commands.Cog):
         pass
 
     @commands.is_owner()
-    @db_command.command(name="create")
-    async def db_create(self, ctx):
+    @db_command.command(name="generateTestData")
+    async def db_generate_test_data(self, ctx):
         """
-        Creates the database
+        Generates test data for the database
         """
-        db.Base.metadata.create_all(db.engine)
-        await ctx.send("Database created", delete_after=30)
-
-    @commands.is_owner()
-    @db_command.command(name="execute")
-    async def db_execute(self, ctx, *, query):
-        """
-        Executes a statement on the database
-        """
-        try:
-            result = db.execute_sql(query)
-            await ctx.send(result, delete_after=30)
-        except Exception as e:
-            await ctx.send(e, delete_after=30)
-
-    @commands.is_owner()
-    @db_command.command(name="convert")
-    async def db_convert(self, ctx, version):
-        """
-        Converts the database to the specified version
-        """
-        try:
-            await ctx.send("Not implemented", delete_after=30)
-        except Exception as e:
-            await ctx.send(e, delete_after=30)
+        # fetch all users from the server
+        await self.bot.db.insert_foundation_from_ctx(ctx)
+        async for user in ctx.guild.fetch_members(limit=None):
+            print(f"inserting user: {user}...")
+            await self.bot.db.insert_discord_user(user)
+            await self.bot.db.upsert_user_karma(user.id, ctx.guild.id, 3000)
 
     @commands.is_owner()
     @db_command.command(name="populate")

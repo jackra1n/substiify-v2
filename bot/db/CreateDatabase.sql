@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS karma (
   id SERIAL PRIMARY KEY,
   discord_user_id BIGINT REFERENCES discord_user(discord_user_id),
   discord_server_id BIGINT REFERENCES discord_server(discord_server_id),
-  amount BIGINT
+  amount BIGINT,
+  UNIQUE (discord_user_id, discord_server_id)
 );
 
 CREATE TABLE IF NOT EXISTS post (
@@ -63,7 +64,8 @@ CREATE TABLE IF NOT EXISTS karma_emote (
   id SERIAL PRIMARY KEY,
   discord_emote_id BIGINT,
   discord_server_id BIGINT REFERENCES discord_server(discord_server_id),
-  increase_karma BOOLEAN
+  increase_karma BOOLEAN,
+  UNIQUE (discord_emote_id, discord_server_id)
 );
 
 CREATE TABLE IF NOT EXISTS kasino (
@@ -80,8 +82,9 @@ CREATE TABLE IF NOT EXISTS kasino (
 
 CREATE TABLE IF NOT EXISTS kasino_bet (
   id SERIAL PRIMARY KEY,
-  kasino_id BIGINT REFERENCES kasino(id),
+  kasino_id BIGINT REFERENCES kasino(id) ON DELETE CASCADE,
   discord_user_id BIGINT REFERENCES discord_user(discord_user_id),
   amount BIGINT,
-  option BIGINT
+  option BIGINT,
+  UNIQUE (kasino_id, discord_user_id)
 );

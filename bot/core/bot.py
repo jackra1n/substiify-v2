@@ -2,7 +2,6 @@ import datetime
 import logging
 
 import discord
-import time
 from core import config
 from core.version import Version
 from discord.ext import commands
@@ -48,20 +47,24 @@ class Substiify(commands.Bot):
         for extension in INITIAL_EXTENSIONS:
             try:
                 await self.load_extension(extension)
-            except Exception as e:
-                exc = f'{type(e).__name__}: {e}'
+            except Exception as error:
+                exc = f'{type(error).__name__}: {error}'
                 logger.warning(f'Failed to load extension {extension}\n{exc}')
 
-    async def on_ready(self) -> None:
+    async def on_ready(self: commands.Bot) -> None:
         servers = len(self.guilds)
-        activityName = f"{config.PREFIX}help | {servers} servers"
-        activity = discord.Activity(type=discord.ActivityType.listening, name=activityName)
+        activity_name = f"{config.PREFIX}help | {servers} servers"
+        activity = discord.Activity(type=discord.ActivityType.listening, name=activity_name)
         await self.change_presence(activity=activity)
         logger.info(f'Logged on as {self.user} (ID: {self.user.id})')
 
     async def on_command_completion(self, ctx) -> None:
         logger.info(f'[{ctx.command.qualified_name}] executed for -> [{ctx.author}]')
         await self.db.insert_to_cmd_history(ctx)
+        try:
+            await ctx.message.add_reaction('✅')
+        except discord.errors.NotFound:
+            pass
 
     async def on_command_error(self, ctx, error) -> None:
         if isinstance(error, commands.CommandNotFound):
@@ -69,16 +72,19 @@ class Substiify(commands.Bot):
         if not ctx.command:
             logger.warning(f'Error without command occurred: [{ctx.author}] -> {error}')
             return
+        if isinstance(error, commands.CommandOnCooldown):
+            await ctx.message.add_reaction('⏳')
+            return
         logger.error(f'[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]')
         if isinstance(error, commands.CheckFailure):
             await ctx.send('You do not have permission to use this command.')
-        if hasattr(error, 'is_handled') and error.is_handled:
+        if hasattr(error, 'is_handled'):
             return
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.send('A required argument is missing.')
         try:
-            await ctx.message.add_reaction('🆘')
-        except discord.HTTPException:
+            await ctx.message.add_reaction('❌')
+        except discord.errors.NotFound:
             pass
 
     async def close(self) -> None:
