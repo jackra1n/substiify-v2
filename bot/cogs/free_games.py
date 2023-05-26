@@ -14,13 +14,13 @@ EPIC_GAMES_LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/31
 
 class Game():
     def __init__(self, game_info_json: str) -> None:
-        self.title = game_info_json["title"]
-        self.start_date = datetime.strptime(game_info_json["effectiveDate"].split('T')[0], "%Y-%m-%d")
-        self.end_date = self._create_end_date(game_info_json)
-        self.original_price = game_info_json["price"]["totalPrice"]["fmtPrice"]["originalPrice"]
-        self.discount_price = self._create_discount_price(game_info_json["price"])
-        self.cover_image_url = self._create_thumbnail(game_info_json["keyImages"])
-        self.epic_store_link = self._create_store_link(game_info_json)
+        self.title: str = game_info_json["title"]
+        self.start_date: datetime = self._create_start_date(game_info_json)
+        self.end_date: datetime = self._create_end_date(game_info_json)
+        self.original_price: str = game_info_json["price"]["totalPrice"]["fmtPrice"]["originalPrice"]
+        self.discount_price: str = self._create_discount_price(game_info_json["price"])
+        self.cover_image_url: str = self._create_thumbnail(game_info_json["keyImages"])
+        self.epic_store_link: str = self._create_store_link(game_info_json)
 
     def _create_store_link(self, game_info_json: str) -> str:
         product_string = game_info_json["productSlug"]
@@ -28,8 +28,14 @@ class Game():
             product_string = game_info_json["urlSlug"]
         return f'https://www.epicgames.com/store/en-US/p/{product_string}'
 
+    def _create_start_date(self, game_info_json: str) -> datetime:
+        return self._parse_date(game_info_json, "startDate")
+
     def _create_end_date(self, game_info_json: str) -> datetime:
-        date_str = game_info_json["promotions"]["promotionalOffers"][0]["promotionalOffers"][0]["endDate"]
+        return self._parse_date(game_info_json, "endDate")
+
+    def _parse_date(self, game_info_json: str, date_field: str) -> datetime:
+        date_str = game_info_json["promotions"]["promotionalOffers"][0]["promotionalOffers"][0][date_field]
         return datetime.strptime(date_str.split('T')[0], "%Y-%m-%d")
 
     def _create_discount_price(self, game_price_str: str) -> str:
@@ -64,7 +70,7 @@ class FreeGames(commands.Cog):
         except Exception as ex:
             logger.error(f'Error while getting list of all Epic games: {ex}')
 
-        current_free_games = []
+        current_free_games: list[Game] = []
         for game in all_games:
             # Check if game has promotions
             if game["promotions"] is None:
@@ -87,11 +93,10 @@ class FreeGames(commands.Cog):
 
         for game in current_free_games:
             try:
-                start_date_str = game.start_date.strftime('%d %B %Y')
-                end_date_str = game.end_date.strftime('%d %B %Y')
                 embed = discord.Embed(title=game.title, url=game.epic_store_link, color=0x000000)
                 embed.set_thumbnail(url=f"{EPIC_GAMES_LOGO_URL}")
-                embed.add_field(name="Available", value=f'{start_date_str} to {end_date_str}', inline=False)
+                available_string = f'started <t:{int(game.start_date.timestamp())}:R>, ends <t:{int(game.end_date.timestamp())}:R>'
+                embed.add_field(name="Available", value=available_string, inline=False)
                 price_field = f"~~`{game.original_price}`~~ ⟶ `{game.discount_price}`" if game.original_price != "0" else f"`{game.discount_price}`"
                 embed.add_field(name="Price", value=price_field, inline=False)
                 embed.set_image(url=f"{game.cover_image_url}")
