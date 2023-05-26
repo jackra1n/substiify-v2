@@ -60,8 +60,8 @@ class FreeGames(commands.Cog):
                 async with session.get(EPIC_STORE_FREE_GAMES_API) as response:
                     json_response = await response.json()
                     all_games = json_response["data"]["Catalog"]["searchStore"]["elements"]
-        except Exception as e:
-            logger.error(f'Error while getting list of all Epic games: {e}')
+        except Exception as ex:
+            logger.error(f'Error while getting list of all Epic games: {ex}')
 
         current_free_games = []
         for game in all_games:
@@ -72,12 +72,12 @@ class FreeGames(commands.Cog):
             if game["price"]["totalPrice"]["fmtPrice"]["discountPrice"] != "0":
                 continue
             # Check if the game is currently free
-            if datetime.strptime(game["effectiveDate"].split('T')[0], "%Y-%m-%d") > datetime.now():
+            if game["status"] != "ACTIVE":
                 continue
             try:
                 current_free_games.append(Game(game))
-            except Exception as e:
-                logger.error(f'Error while creating \'Game\' object: {e}')
+            except Exception as ex:
+                logger.error(f'Error while creating \'Game\' object: {ex}')
 
         if not current_free_games:
             embed = discord.Embed(color=0x000000)
@@ -91,12 +91,13 @@ class FreeGames(commands.Cog):
                 embed = discord.Embed(title=game.title, url=game.epic_store_link, color=0x000000)
                 embed.set_thumbnail(url=f"{EPIC_GAMES_LOGO_URL}")
                 embed.add_field(name="Available", value=f'{start_date_str} to {end_date_str}', inline=False)
-                embed.add_field(name="Price", value=f"~~`{game.original_price}`~~ ⟶ `{game.discount_price}`", inline=False)
+                price_field = f"~~`{game.original_price}`~~ ⟶ `{game.discount_price}`" if game.original_price != "0" else f"`{game.discount_price}`"
+                embed.add_field(name="Price", value=price_field, inline=False)
                 embed.set_image(url=f"{game.cover_image_url}")
 
                 await ctx.send(embed=embed)
-            except Exception as e:
-                logger.error(f'Fail while sending free game: {e}')
+            except Exception as ex:
+                logger.error(f'Fail while sending free game: {ex}')
 
 
 async def setup(bot):
