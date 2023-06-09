@@ -58,12 +58,13 @@ class Util(commands.Cog):
         embed.add_field(name='Team 2', value="\n".join([f'{member.mention} ' for member in team_2]))
         await ctx.send(embed=embed)
 
-    @commands.group(aliases=["give"], invoke_without_command=True)
+    @commands.group(aliases=["give"], usage="give c", invoke_without_command=True)
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def giveaway(self, ctx):
         """
         Allows you to create giveaways on the server.
-        If you want to create a giveaway, check the `giveaway create` command.
+        To quickly create a giveaway, use the short command `<<give c [hosted_by]`. Hosted_by is optional.
+        For more info, check the `giveaway create` help page.
         """
         await ctx.send_help(ctx.command)
 
@@ -77,6 +78,8 @@ class Util(commands.Cog):
 
         Example:
         `<<giveaway create` or `<<giveaway create @user`
+        Short:
+        `<<give c` or `<<give c @user`
         """
         if hosted_by is None:
             hosted_by = ctx.author
@@ -111,7 +114,9 @@ class Util(commands.Cog):
 
         # Check if Channel Id is valid
         try:
-            channel_id = int(answers[0][2:-1])
+            channel_id = answers[0]
+            if channel_id.startswith("<#") and channel_id.endswith(">"):
+                channel_id = int(channel_id[2:-1])
         except Exception:
             await ctx.send(f"The Channel provided was wrong. The channel should be {ctx.channel.mention}")
             return
@@ -140,6 +145,10 @@ class Util(commands.Cog):
         await newMsg.add_reaction("🎉")
         db.session.add(db.giveaway(hosted_by, end, prize, newMsg))
         db.session.commit()
+
+    @create.error
+    async def create_error(self, ctx, error):
+        await ctx.send(error, delete_after=60)
 
     @giveaway.command(usage="reroll <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -241,7 +250,7 @@ class Util(commands.Cog):
             description=f"Win **{prize}**!",
             color=0x00FFFF
         )
-        host = author.mention if isinstance(author, discord.Member) else author
+        host = author.mention if isinstance(author, (discord.Member, discord.User)) else author
         embed.add_field(name="Hosted By:", value=host)
         return embed
 
@@ -270,7 +279,7 @@ class Util(commands.Cog):
                 return
             await message.clear_reactions()
 
-    @commands.group(aliases=['report'], invoke_without_command=True)
+    @commands.group(usage="submit <bug/suggestion> <message>", aliases=['report'], invoke_without_command=True)
     async def submit(self, ctx):
         """
         Allows you to report a bug or suggest a feature or an improvement to the developer team.
@@ -297,7 +306,7 @@ class Util(commands.Cog):
             await self.send_submission(ctx, bug_channel, sentence, ctx.command.name)
         await ctx.message.delete()
 
-    @submit.command(aliases=['improvement', 'better'], usage='suggestion <message>')
+    @submit.command(usage='suggestion <message>', aliases=['improvement', 'better'])
     @commands.cooldown(2, 900, BucketType.user)
     async def suggestion(self, ctx, *words: str):
         """
