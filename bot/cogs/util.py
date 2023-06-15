@@ -3,8 +3,8 @@ import logging
 import platform
 import random
 import subprocess
+import datetime
 from asyncio import TimeoutError
-from datetime import datetime, timedelta
 from random import choice, seed, shuffle
 
 import discord
@@ -136,7 +136,7 @@ class Util(commands.Cog):
 
         await ctx.send(f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}")
         embed = self.create_giveaway_embed(hosted_by, prize)
-        end = (datetime.now() + timedelta(seconds=time))
+        end = (datetime.datetime.now() + datetime.timedelta(seconds=time))
         end_string = end.strftime('%d.%m.%Y %H:%M')
         embed.description += f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
 
@@ -168,7 +168,7 @@ class Util(commands.Cog):
         prize = await self.get_giveaway_prize(msg)
         giveaway_host = msg.embeds[0].fields[0].value
         embed = self.create_giveaway_embed(giveaway_host, prize)
-        random_seed_value = datetime.now().timestamp()
+        random_seed_value = datetime.datetime.now().timestamp()
 
         if len(users) <= 0:
             embed.set_footer(text="No one won the Giveaway")
@@ -199,10 +199,16 @@ class Util(commands.Cog):
         """
         Shows information about he giveaway task.
         """
+        if self.giveaway_task.time is None:
+            times_string = "None"
+        else:
+            times_string = [f"{time}\n" for time in self.giveaway_task.time]
         embed = discord.Embed(title="Giveaway Task", description="")
         embed.add_field(name="Running", value=f"`{self.giveaway_task.is_running()}`", inline=False)
+        embed.add_field(name="Current UTC time", value=f"`{datetime.datetime.now(datetime.timezone.utc)}`", inline=False)
         embed.add_field(name="Next iteration", value=f"`{self.giveaway_task.next_iteration}`", inline=False)
-        embed.add_field(name="Current time", value=f"`{datetime.now()}`", inline=False)
+        embed.add_field(name="Last iteration", value=f"`{self.giveaway_task._last_iteration}`", inline=False)
+        embed.add_field(name="Times", value=times_string, inline=False)
         await ctx.send(embed=embed)
         
 
@@ -225,9 +231,9 @@ class Util(commands.Cog):
     @tasks.loop(minutes=1)
     async def giveaway_task(self):
         giveaways = db.session.query(db.giveaway).all()
-        random_seed_value = datetime.now().timestamp()
+        random_seed_value = datetime.datetime.now().timestamp()
         for giveaway in giveaways:
-            if datetime.now() < giveaway.end_date:
+            if datetime.datetime.now() < giveaway.end_date:
                 return
             channel = await self.bot.fetch_channel(giveaway.discord_channel_id)
             try:
@@ -504,7 +510,7 @@ class Util(commands.Cog):
         """
         Shows different technical information about the bot
         """
-        bot_time = time_up((datetime.now() - values.SCRIPT_START).total_seconds())  # uptime of the bot
+        bot_time = time_up((datetime.datetime.now() - values.SCRIPT_START).total_seconds())  # uptime of the bot
         last_commit_date = subprocess.check_output(['git', 'log', '-1', '--date=format:"%Y/%m/%d"', '--format=%ad']).decode('utf-8').strip().strip('"')
         cpu_percent = psutil.cpu_percent()
         ram = psutil.virtual_memory()
@@ -521,7 +527,7 @@ class Util(commands.Cog):
             title=f'Info about {self.bot.user.display_name}',
             description=content,
             color=values.PRIMARY_COLOR,
-            timestamp=datetime.now(timezone("Europe/Zurich"))
+            timestamp=datetime.datetime.now(timezone("Europe/Zurich"))
         )
         embed.set_thumbnail(url=self.bot.user.avatar)
         embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar)
