@@ -180,6 +180,32 @@ class Util(commands.Cog):
         await msg.edit(embed=embed)
         await ctx.message.delete()
 
+    @giveaway.command(usage="list")
+    async def list(self, ctx):
+        """
+        Lists all active giveaways.
+        """
+        giveaways = db.session.query(db.giveaway).filter(db.giveaway.discord_server_id == ctx.guild.id).all()
+        if len(giveaways) == 0:
+            return await ctx.send("There are no active giveaways")
+        embed = discord.Embed(title="Active Giveaways", description="")
+        for giveaway in giveaways:
+            embed.description += f"[{giveaway.prize}](https://discord.com/channels/{giveaway.discord_server_id}/{giveaway.discord_channel_id}/{giveaway.discord_message_id}) - Ends <t:{int(giveaway.end_date.timestamp())}:R>\n"
+        await ctx.send(embed=embed)
+
+    @giveaway.command(name="info", usage="info")
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    async def giveaway_info(self, ctx):
+        """
+        Shows information about he giveaway task.
+        """
+        embed = discord.Embed(title="Giveaway Task", description="")
+        embed.add_field(name="Running", value=f"`{self.giveaway_task.is_running()}`", inline=False)
+        embed.add_field(name="Next iteration", value=f"`{self.giveaway_task.next_iteration}`", inline=False)
+        embed.add_field(name="Current time", value=f"`{datetime.now()}`", inline=False)
+        await ctx.send(embed=embed)
+        
+
     @giveaway.command(aliases=["cancel"], usage="stop <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def stop(self, ctx, message_id: int):
