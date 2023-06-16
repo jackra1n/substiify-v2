@@ -158,8 +158,8 @@ class Music(commands.Cog):
                 tracks = await player.current_node.get_tracks(Playable, search)
 
         else:
-            track = await wavelink.YouTubeTrack.search(search, return_first=True)
-            tracks = [track]
+            track = await wavelink.YouTubeTrack.search(search)
+            tracks = track[:1]
 
         if not tracks:
             raise NoTracksFound()
@@ -345,7 +345,7 @@ class Music(commands.Cog):
             return await ctx.send(embed=embed, delete_after=15)
 
         # get server names by id
-        server_names = [f'{player.guild.name} ({player.queue.count})' for _, player in players.items()]
+        server_names = [f'{player.guild.name}, queued: `{player.queue.count}`, {"`playing`" if player.is_playing() else "`not playing`"}' for _, player in players.items()]
 
         embed = discord.Embed(color=EMBED_COLOR)
         embed.title = 'Active players'
