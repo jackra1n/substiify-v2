@@ -163,7 +163,6 @@ class Util(commands.Cog):
             await ctx.send("The message couldn't be found in this channel")
             return
         users = [user async for user in msg.reactions[0].users() if not user.bot]
-        users.pop(users.index(self.bot.user))
 
         prize = await self.get_giveaway_prize(msg)
         giveaway_host = msg.embeds[0].fields[0].value
