@@ -11,7 +11,7 @@ from core import config
 from discord import Interaction
 from discord.ext import commands
 from utils import db
-from wavelink import Player, Playable
+from wavelink import Playable, Player
 from wavelink.ext import spotify
 
 logger = logging.getLogger(__name__)
@@ -26,17 +26,6 @@ class Music(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        bot.loop.create_task(self.connect_nodes())
-
-    async def connect_nodes(self):
-        await self.bot.wait_until_ready()
-        if not config.SPOTIFY_CLIENT_ID or not config.SPOTIFY_CLIENT_SECRET:
-            logger.warning("Spotify client id or secret not found. Spotify support disabled.")
-            spotify_client = None
-        else:
-            spotify_client = spotify.SpotifyClient(client_id=config.SPOTIFY_CLIENT_ID, client_secret=config.SPOTIFY_CLIENT_SECRET)
-        node: wavelink.Node = wavelink.Node(uri=config.LAVALINK_NODE_URL, password=config.LAVALINK_PASSWORD)
-        await wavelink.NodePool.connect(client=self.bot, nodes=[node], spotify=spotify_client)
 
     async def cog_command_error(self, ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):

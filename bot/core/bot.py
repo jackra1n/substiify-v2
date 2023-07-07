@@ -1,10 +1,12 @@
 import logging
 
 import discord
+import wavelink
 from core import config
 from core.version import Version
 from discord.ext import commands
 from utils import db
+from wavelink.ext import spotify
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,15 @@ class Substiify(commands.Bot):
         self.version = Version()
 
     async def setup_hook(self):
+        if not config.SPOTIFY_CLIENT_ID or not config.SPOTIFY_CLIENT_SECRET:
+            logger.warning("Spotify client id or secret not found. Spotify support disabled.")
+            spotify_client = None
+        else:
+            spotify_client = spotify.SpotifyClient(client_id=config.SPOTIFY_CLIENT_ID, client_secret=config.SPOTIFY_CLIENT_SECRET)
+        node: wavelink.Node = wavelink.Node(uri=config.LAVALINK_NODE_URL, password=config.LAVALINK_PASSWORD)
+        connected_nodes = await wavelink.NodePool.connect(client=self, nodes=[node], spotify=spotify_client)
+        logger.info(f"Connected to {connected_nodes} nodes.")
+
         for extension in INITIAL_EXTENSIONS:
             try:
                 await self.load_extension(extension)
