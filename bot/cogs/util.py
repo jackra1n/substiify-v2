@@ -414,21 +414,22 @@ class Util(commands.Cog):
         await ctx.message.delete()
 
     @commands.cooldown(6, 5)
-    @commands.hybrid_command(aliases=['avatar'])
-    async def av(self, ctx, member: discord.Member | discord.User | None = None):
+    @commands.hybrid_command(aliases=['av'])
+    async def avatar(self, ctx, member: discord.Member | discord.User | None = None):
         """
         Enlarge and view your profile picture or another member
         """
-        member = ctx.author if member is None else member
+        member = member or ctx.author
+        current_avatar = member.guild_avatar or member.avatar
         embed = discord.Embed(
             title=f"{str(member.display_name)}'s avatar",
-            url=member.guild_avatar,
+            url=current_avatar.url,
             color=0x1E9FE3
         )
-        embed.set_image(url=member.guild_avatar)
+        embed.set_image(url=current_avatar.url)
         await ctx.send(embed=embed)
 
-    @av.error
+    @avatar.error
     async def av_error(self, ctx, error):
         if isinstance(error, commands.MemberNotFound):
             await ctx.send('Member not found', delete_after=30)
