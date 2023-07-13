@@ -11,7 +11,7 @@ from core import config
 from core.bot import Substiify
 from discord import Interaction
 from discord.ext import commands
-from wavelink import Playable, Player
+from wavelink import Player
 from wavelink.ext import spotify
 
 logger = logging.getLogger(__name__)
@@ -26,17 +26,6 @@ class Music(commands.Cog):
 
     def __init__(self, bot: Substiify):
         self.bot = bot
-        bot.loop.create_task(self.connect_nodes())
-
-    async def connect_nodes(self):
-        await self.bot.wait_until_ready()
-        if not config.SPOTIFY_CLIENT_ID or not config.SPOTIFY_CLIENT_SECRET:
-            logger.warning("Spotify client id or secret not found. Spotify support disabled.")
-            spotify_client = None
-        else:
-            spotify_client = spotify.SpotifyClient(client_id=config.SPOTIFY_CLIENT_ID, client_secret=config.SPOTIFY_CLIENT_SECRET)
-        node: wavelink.Node = wavelink.Node(uri=config.LAVALINK_NODE_URL, password=config.LAVALINK_PASSWORD)
-        await wavelink.NodePool.connect(client=self.bot, nodes=[node], spotify=spotify_client)
 
     async def cog_command_error(self, ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):
@@ -57,11 +46,6 @@ class Music(commands.Cog):
 
     def get_vc_users(self, channel: discord.VoiceChannel):
         return [member for member in channel.members if not member.bot]
-
-    @commands.Cog.listener()
-    async def on_wavelink_node_ready(self, node: wavelink.Node):
-        """Event fired when a node has finished connecting."""
-        logger.info(f'Node: <{node.id}> is ready!')
 
     @commands.Cog.listener()
     async def on_wavelink_track_end(self, payload: wavelink.TrackEventPayload):
@@ -139,34 +123,27 @@ class Music(commands.Cog):
         if not ctx.interaction:
             await ctx.message.delete()
 
-        # Check spotify
-        if (decoded := spotify.decode_url(search)) is not None:
-            if decoded["type"] is spotify.SpotifySearchType.unusable:
+        # Check if is spotify
+        if "open.spotify" in search:
+            decoded = spotify.decode_url(search)
+            if not decoded or decoded['type'] is not spotify.SpotifySearchType.track:
                 return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
-            elif decoded["type"] in (spotify.SpotifySearchType.playlist, spotify.SpotifySearchType.album):
-                async for track in spotify.SpotifyTrack.iterator(query=decoded["id"], type=decoded["type"]):
-                    tracks.append(track)
-            else:
-                tracks = await spotify.SpotifyTrack.search(search)
-            if not isinstance(tracks, list):
-                tracks = [tracks]
+            tracks = await spotify.SpotifyTrack.search(search)
 
+        # Check if is URL
         elif URL.match(search):
-            if 'list=' in search:
-                tracks = await player.current_node.get_playlist(wavelink.YouTubePlaylist, search)
-            else:
-                tracks = await player.current_node.get_tracks(Playable, search)
-
-        else:
-            track = await wavelink.YouTubeTrack.search(search, return_first=True)
-            tracks = [track]
+            track = await wavelink.YouTubeTrack.search(search)
+            tracks = track
+            if not isinstance(track, wavelink.YouTubePlaylist):
+                tracks = track[:1]
 
         if not tracks:
             raise NoTracksFound()
+    
         embed = await self._queue_songs(tracks, player, ctx.author)
-
         server = await self.bot.db.get_discord_server(ctx.guild)
         delete_after = 60 if server.music_cleanup else None
+        delete_after = None
         await ctx.send(embed=embed, delete_after=delete_after)
 
     async def _queue_songs(self, songs, player: wavelink.Player, requester):
@@ -345,7 +322,7 @@ class Music(commands.Cog):
             return await ctx.send(embed=embed, delete_after=15)
 
         # get server names by id
-        server_names = [f'{player.guild.name} ({player.queue.count})' for _, player in players.items()]
+        server_names = [f'{player.guild.name}, queued: `{player.queue.count}`, {"`playing`" if player.is_playing() else "`not playing`"}' for _, player in players.items()]
 
         embed = discord.Embed(color=EMBED_COLOR)
         embed.title = 'Active players'

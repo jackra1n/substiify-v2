@@ -8,8 +8,8 @@ from core import values
 from core.bot import Substiify
 from core.version import Version
 from utils import util
-from utils.db import Database
 from utils.custom_logger import CustomLogFormatter, RemoveNoise
+from utils.db import Database
 
 logger = logging.getLogger(__name__)
 
