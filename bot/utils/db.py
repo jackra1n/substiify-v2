@@ -51,23 +51,23 @@ class Database:
         return wrapper
 
     @_transaction
-    async def execute(self, con: Connection, query: str, *args, **kwargs) -> None:
+    async def execute(self, con: Connection, query: str, *args, **kwargs):
         await con.execute(query, *args, **kwargs)
 
     @_transaction
-    async def executemany(self, con: Connection, query: str, *args, **kwargs) -> None:
+    async def executemany(self, con: Connection, query: str, *args, **kwargs):
         await con.executemany(query, *args, **kwargs)
 
     @_transaction
-    async def fetch(self, con: Connection, query: str, *args, **kwargs) -> Record:
+    async def fetch(self, con: Connection, query: str, *args, **kwargs):
         return await con.fetch(query, *args, **kwargs)
     
     @_transaction
-    async def fetchrow(self, con: Connection, query: str, *args, **kwargs) -> Record:
+    async def fetchrow(self, con: Connection, query: str, *args, **kwargs) -> Record | None:
         return await con.fetchrow(query, *args, **kwargs)
     
     @_transaction
-    async def fetchval(self, con: Connection, query: str, *args, **kwargs) -> Record:
+    async def fetchval(self, con: Connection, query: str, *args, **kwargs):
         return await con.fetchval(query, *args, **kwargs)
     
     @_transaction
