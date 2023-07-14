@@ -104,18 +104,19 @@ class Util(commands.Cog):
         setup_complete = f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}"
         await ctx.send(embed=discord.Embed(description=setup_complete))
 
-        embed = self.create_giveaway_embed(hosted_by, prize)
         end = (datetime.datetime.now() + timedelta(seconds=time))
         end_string = end.strftime('%d.%m.%Y %H:%M')
-        embed.description += f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
 
+        embed = self.create_giveaway_embed(hosted_by, prize)
+        embed.description += f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
         embed.set_footer(text=f"Giveway ends on {end_string}")
-        new_msg = await channel.send(embed=embed)
-        await new_msg.add_reaction("🎉")
-        stmt = '''INSER INTO giveaway (discord_user_id, end_date, prize, discord_server_id, discord_channel_id, discord_message_id)
+
+        stmt = '''INSERT INTO giveaway (discord_user_id, end_date, prize, discord_server_id, discord_channel_id, discord_message_id)
                   VALUES ($1, $2, $3, $4, $5, $6)
                '''
         await self.bot.db.execute(stmt, hosted_by.id, end, prize, ctx.guild.id, channel.id, new_msg.id)
+        new_msg = await channel.send(embed=embed)
+        await new_msg.add_reaction("🎉")
 
     @giveaway.command(usage="reroll <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())

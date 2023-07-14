@@ -43,7 +43,7 @@ class Database:
         self.bot = bot
         self.pool = pool
 
-    def _query_decorator(call):
+    def _transaction(call):
         def decorator(func):
             async def wrapper(self, query, *args, **kwargs):
                 async with self.pool.acquire() as connection:
@@ -52,23 +52,23 @@ class Database:
             return wrapper
         return decorator
 
-    @_query_decorator("execute")
+    @_transaction("execute")
     async def execute(self, query, *args, **kwargs):
         pass
 
-    @_query_decorator("executemany")
+    @_transaction("executemany")
     async def executemany(self, query, *args, **kwargs):
         pass
 
-    @_query_decorator("fetch")
+    @_transaction("fetch")
     async def fetch(self, query, *args, **kwargs):
         pass
 
-    @_query_decorator("fetchrow")
+    @_transaction("fetchrow")
     async def fetchrow(self, query, *args, **kwargs):
         pass
 
-    @_query_decorator("fetchval")
+    @_transaction("fetchval")
     async def fetchval(self, query, *args, **kwargs):
         pass
     
