@@ -125,10 +125,9 @@ class Music(commands.Cog):
 
         # Check if is spotify
         if "open.spotify" in search:
-            decoded = spotify.decode_url(search)
-            if not decoded or decoded['type'] is not spotify.SpotifySearchType.track:
-                return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
             tracks = await spotify.SpotifyTrack.search(search)
+            if not tracks:
+                return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
 
         # Check if is URL
         elif URL.match(search):
@@ -158,12 +157,11 @@ class Music(commands.Cog):
             for song in songs:
                 song.requester = requester
                 player.queue.put(song)
-            song = songs[0]
             embed.title = 'Song Queued' if len(songs) == 1 else f'Songs Queued ({len(songs)})'
-            embed.description = f'[{song.title}]({song.uri})'
         if not player.is_playing():
             track = await player.play(await player.queue.get_wait())
             track.requester = requester
+            embed.description = f'[{track.title}]({track.uri})'
         return embed
 
     @commands.hybrid_command(name="loop")

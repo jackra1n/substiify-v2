@@ -33,4 +33,5 @@ services:
     restart: unless-stopped
     volumes:
       - ./logs:/bot/logs
-      - "/etc/localtime:/etc/localtime:ro"
+      - ./bot/core/version.toml:/bot/core/version.toml
+      - /etc/localtime:/etc/localtime:ro
