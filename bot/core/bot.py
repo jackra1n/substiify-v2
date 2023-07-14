@@ -71,7 +71,7 @@ class Substiify(commands.Bot):
 
     async def on_command_completion(self, ctx) -> None:
         logger.info(f'[{ctx.command.qualified_name}] executed for -> [{ctx.author}]')
-        await self.db.insert_to_cmd_history(ctx)
+        await self.db._insert_to_cmd_history(ctx)
         try:
             await ctx.message.add_reaction('✅')
         except discord.errors.NotFound:

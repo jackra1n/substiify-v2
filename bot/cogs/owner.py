@@ -363,7 +363,8 @@ class Owner(commands.Cog):
         """
         Shows a lits of most used command on the current server
         """
-        commands_used = await self.bot.db.get_command_usage_by_command(ctx)
+        stmt_usage = 'SELECT command, COUNT(*) AS cnt FROM command_history WHERE guild_id = $1 GROUP BY command ORDER BY cnt DESC LIMIT 10'
+        commands_used = await self.bot.db.fetch(stmt_usage, ctx.guild.id)
         embed = create_command_usage_embed(commands_used)
         embed.title = f"Top 10 used commands on: **{ctx.guild.name}**"
         await ctx.send(embed=embed, delete_after=180)
@@ -374,7 +375,8 @@ class Owner(commands.Cog):
         """
         Shows a list of most used commands on all servers
         """
-        commands_used = await self.bot.db.get_command_usage_all(ctx)
+        stmt_usage = 'SELECT command, COUNT(*) AS cnt FROM command_history GROUP BY command ORDER BY cnt DESC LIMIT 10'
+        commands_used = await self.bot.db.fetch(stmt_usage)
         embed = create_command_usage_embed(commands_used)
         embed.title = "Top 10 total used commands"
         await ctx.send(embed=embed, delete_after=180)
@@ -384,10 +386,13 @@ class Owner(commands.Cog):
     @commands.is_owner()
     async def usage_last(self, ctx, amount: int = 10):
         """
-        Shows a list of most used commands on the last server
+        Shows a list of last used commands on the current server
         """
         amount = min(amount, 20)
-        commands_used = await self.bot.db.get_last_command_usage(ctx, amount)
+        stmt_last = '''SELECT * FROM command_history JOIN discord_user
+                       ON command_history.discord_user_id = discord_user.discord_user_id
+                       WHERE guild_id = $1 ORDER BY date DESC LIMIT $2'''
+        commands_used = await self.bot.db.fetch(stmt_last, ctx.guild.id, amount)
         longest_user = self.get_longest_property_length(commands_used, 'username')
         longest_cmd = self.get_longest_property_length(commands_used, 'command_name')
         commands_used_string = ""
@@ -411,7 +416,10 @@ class Owner(commands.Cog):
         """
         Shows a list of servers with most used commands
         """
-        commands_used_query = await self.bot.db.get_command_usage_by_server(ctx)
+        stmt = '''SELECT COUNT(*) AS count, server_name FROM command_history JOIN discord_server
+                  ON command_history.discord_server_id = discord_server.discord_server_id
+                  GROUP BY server_name ORDER BY count DESC LIMIT 10'''
+        commands_used_query = await self.bot.db.fetch(stmt)
         commands_used = ""
         commands_count = ""
         for row in commands_used_query:
@@ -438,11 +446,15 @@ class Owner(commands.Cog):
         Generates test data for the database
         """
         # fetch all users from the server
-        await self.bot.db.insert_foundation_from_ctx(ctx)
+        await self.bot.db._insert_foundation_from_ctx(ctx)
         async for user in ctx.guild.fetch_members(limit=None):
             print(f"inserting user: {user}...")
-            await self.bot.db.insert_discord_user(user)
-            await self.bot.db.upsert_user_karma(user.id, ctx.guild.id, 3000)
+            stmt_insert_user = '''INSERT INTO discord_user (discord_user_id, username, avatar_url) VALUES ($1, $2, $3)
+                                  ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar_url = $3'''
+            await self.bot.db.execute(stmt_insert_user, user.id, user.name, user.avatar_url)
+            stmt_insert_user_karma = '''INSERT INTO user_karma (discord_user_id, discord_server_id, karma) VALUES ($1, $2, $3)
+                                        ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET karma = $3'''
+            await self.bot.db.execute(stmt_insert_user_karma, user.id, ctx.guild.id, 3000)
 
     @commands.is_owner()
     @db_command.command(name="populate")
@@ -454,29 +466,34 @@ class Owner(commands.Cog):
         servers = self.bot.guilds
 
         for server in servers:
-            stmt = "INSERT INTO discord_server (discord_server_id, server_name) VALUES ($1, $2) ON CONFLICT (discord_server_id) DO UPDATE SET server_name = $2"
+            stmt = '''INSERT INTO discord_server (discord_server_id, server_name) VALUES ($1, $2)
+                      ON CONFLICT (discord_server_id) DO UPDATE SET server_name = $2'''
             await self.bot.db.execute(stmt, server.id, server.name)
 
             for channel in server.channels:
                 if hasattr(channel, 'parent_id'):
                     print(f"inserting parent channel: {channel.parent}...")
-                    stmt = "INSERT INTO discord_channel (discord_channel_id, discord_server_id, channel_name) VALUES ($1, $2, $3) ON CONFLICT (discord_channel_id) DO UPDATE SET channel_name = $3"
+                    stmt = '''INSERT INTO discord_channel (discord_channel_id, discord_server_id, channel_name) VALUES ($1, $2, $3)
+                              ON CONFLICT (discord_channel_id) DO UPDATE SET channel_name = $3'''
                     await self.bot.db.execute(stmt, channel.parent.id, server.id, channel.parent.name)
 
                 print(f"inserting channel: {channel}...")
-                stmt = "INSERT INTO discord_channel (discord_channel_id, discord_server_id, channel_name) VALUES ($1, $2, $3) ON CONFLICT (discord_channel_id) DO UPDATE SET channel_name = $3"
+                stmt = '''INSERT INTO discord_channel (discord_channel_id, discord_server_id, channel_name) VALUES ($1, $2, $3)
+                          ON CONFLICT (discord_channel_id) DO UPDATE SET channel_name = $3'''
                 await self.bot.db.execute(stmt, channel.id, server.id, channel.name)
 
         for post in await self.bot.db.fetch("SELECT * FROM post"):
             discord_user = await self.bot.fetch_user(post['discord_user_id'])
             print(f"fetched user: {discord_user}...")
-            stmt = "INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3) ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3"
-            await self.bot.db.execute(stmt, discord_user.id, discord_user.name, discord_user.avatar_url)
+            stmt = '''INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
+                      ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3'''
+            await self.bot.db.execute(stmt, discord_user.id, discord_user.name, discord_user.avatar.url)
     
         for command in await self.bot.db.fetch("SELECT discord_user_id FROM command_history GROUP BY discord_user_id"):
             discord_user = await self.bot.fetch_user(command['discord_user_id'])
-            stmt = "INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3) ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3"
-            await self.bot.db.insert_discord_user(stmt, discord_user.id, discord_user.name, discord_user.avatar_url)
+            stmt = '''INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
+                      ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3'''
+            await self.bot.db.execute(stmt, discord_user.id, discord_user.name, discord_user.avatar.url)
 
         await ctx.send("Database populated", delete_after=30)
 

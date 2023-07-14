@@ -57,7 +57,6 @@ async def main():
         dsn=config.POSTGRESQL_DSN, max_inactive_connection_lifetime=0
     ) as pool:
         if pool is None:
-            # thanks asyncpg...
             raise RuntimeError("Could not connect to database.")
 
         substiify.db = Database(substiify, pool)

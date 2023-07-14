@@ -141,7 +141,8 @@ class Music(commands.Cog):
             raise NoTracksFound()
     
         embed = await self._queue_songs(tracks, player, ctx.author)
-        music_cleanup = await self.bot.db.fetchval("SELECT music_cleanup FROM discord_server WHERE discord_server_id = $1", ctx.guild.id)
+        stmt_cleanup = "SELECT music_cleanup FROM discord_server WHERE discord_server_id = $1"
+        music_cleanup = await self.bot.db.fetchval(stmt_cleanup, ctx.guild.id)
         delete_after = 60 if music_cleanup else None
         await ctx.send(embed=embed, delete_after=delete_after)
 

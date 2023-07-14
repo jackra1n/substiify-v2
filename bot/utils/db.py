@@ -1,11 +1,9 @@
 import logging
-from datetime import datetime
 from pathlib import Path
 
 import asyncpg
 import discord
 from asyncpg import Record
-from asyncpg.connection import Connection
 from discord.ext.commands import Context
 
 logger = logging.getLogger(__name__)
@@ -53,19 +51,19 @@ class Database:
         return decorator
 
     @_transaction("execute")
-    async def execute(self, query, *args, **kwargs):
+    async def execute(self, query, *args, **kwargs) -> str:
         pass
 
     @_transaction("executemany")
-    async def executemany(self, query, *args, **kwargs):
+    async def executemany(self, query, *args, **kwargs) -> None:
         pass
 
     @_transaction("fetch")
-    async def fetch(self, query, *args, **kwargs):
+    async def fetch(self, query, *args, **kwargs) -> list:
         pass
 
     @_transaction("fetchrow")
-    async def fetchrow(self, query, *args, **kwargs):
+    async def fetchrow(self, query, *args, **kwargs) -> Record | None:
         pass
 
     @_transaction("fetchval")
@@ -78,13 +76,13 @@ class Database:
         await self.executemany(query, servers)
         await ctx.send("Database populated", delete_after=30)
 
-    async def insert_foundation_from_ctx(self, ctx: Context):
+    async def _insert_foundation_from_ctx(self, ctx: Context):
         user = ctx.author
         server = ctx.guild
         channel = ctx.channel
-        await self.insert_foundation(user, server, channel)
+        await self._insert_foundation(user, server, channel)
 
-    async def insert_foundation(self, user: discord.Member, server: discord.Guild, channel: discord.abc.Messageable):
+    async def _insert_foundation(self, user: discord.Member, server: discord.Guild, channel: discord.abc.Messageable):
         avatar_url = user.avatar.url if user.avatar else None
         await self.execute(USER_INSERT_QUERY, user.id, user.name, user.discriminator, avatar_url)
         await self.execute(SERVER_INSERT_QUERY, server.id, server.name)
@@ -93,8 +91,8 @@ class Database:
         p_chan_id = pchannel.id if pchannel else None
         await self.execute(CHANNEL_INSERT_QUERY, channel.id, channel.name, channel.guild.id, p_chan_id)
 
-    async def insert_to_cmd_history(self, ctx: Context) -> None:
-        await self.insert_foundation_from_ctx(ctx)
+    async def _insert_to_cmd_history(self, ctx: Context) -> None:
+        await self._insert_foundation_from_ctx(ctx)
         cmd_name = ctx.command.root_parent.qualified_name if ctx.command.root_parent else ctx.command.qualified_name
         server_id = ctx.guild.id if ctx.guild else None
         query = """INSERT INTO command_history

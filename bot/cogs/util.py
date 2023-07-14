@@ -5,7 +5,7 @@ import math
 import platform
 import random
 import subprocess
-from datetime import timedelta
+import datetime
 from random import choice, seed, shuffle
 
 import discord
@@ -104,18 +104,17 @@ class Util(commands.Cog):
         setup_complete = f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}"
         await ctx.send(embed=discord.Embed(description=setup_complete))
 
-        end = (datetime.datetime.now() + timedelta(seconds=time))
+        end = (datetime.datetime.now() + datetime.timedelta(seconds=time))
         end_string = end.strftime('%d.%m.%Y %H:%M')
 
         embed = self.create_giveaway_embed(hosted_by, prize)
         embed.description += f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
         embed.set_footer(text=f"Giveway ends on {end_string}")
 
-        stmt = '''INSERT INTO giveaway (discord_user_id, end_date, prize, discord_server_id, discord_channel_id, discord_message_id)
-                  VALUES ($1, $2, $3, $4, $5, $6)
-               '''
-        await self.bot.db.execute(stmt, hosted_by.id, end, prize, ctx.guild.id, channel.id, new_msg.id)
         new_msg = await channel.send(embed=embed)
+        stmt = '''INSERT INTO giveaway (discord_user_id, end_date, prize, discord_server_id, discord_channel_id, discord_message_id)
+                  VALUES ($1, $2, $3, $4, $5, $6)'''
+        await self.bot.db.execute(stmt, hosted_by.id, end, prize, ctx.guild.id, channel.id, new_msg.id)
         await new_msg.add_reaction("🎉")
 
     @giveaway.command(usage="reroll <message_id>")
@@ -147,6 +146,38 @@ class Util(commands.Cog):
             await msg.channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
         await msg.edit(embed=embed)
         await ctx.message.delete()
+
+    @giveaway.command(usage="list")
+    async def list(self, ctx):
+        """
+        Lists all active giveaways.
+        """
+        giveaways = await self.bot.db.fetch("SELECT * FROM giveaway WHERE discord_server_id = $1", ctx.guild.id)
+        if len(giveaways) == 0:
+            return await ctx.send("There are no active giveaways")
+        embed = discord.Embed(title="Active Giveaways", description="")
+        for giveaway in giveaways:
+            embed.description += f"[{giveaway['prize']}](https://discord.com/channels/{giveaway['discord_server_id']}/{giveaway['discord_channel_id']}/{giveaway['discord_message_id']}) - Ends <t:{int(giveaway['end_date'].timestamp())}:R>\n"
+        await ctx.send(embed=embed)
+
+    @giveaway.command(name="info", usage="info")
+    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    async def giveaway_info(self, ctx):
+        """
+        Shows information about he giveaway task.
+        """
+        if self.giveaway_task.time is None:
+            times_string = "None"
+        else:
+            times_string = [f"{time}\n" for time in self.giveaway_task.time]
+        embed = discord.Embed(title="Giveaway Task", description="")
+        embed.add_field(name="Running", value=f"`{self.giveaway_task.is_running()}`", inline=False)
+        embed.add_field(name="Current UTC time", value=f"`{datetime.datetime.now(datetime.timezone.utc)}`", inline=False)
+        embed.add_field(name="Next iteration", value=f"`{self.giveaway_task.next_iteration}`", inline=False)
+        embed.add_field(name="Last iteration", value=f"`{self.giveaway_task._last_iteration}`", inline=False)
+        embed.add_field(name="Times", value=times_string, inline=False)
+        await ctx.send(embed=embed)
+        
 
     @giveaway.command(aliases=["cancel"], usage="stop <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -448,7 +479,7 @@ class Util(commands.Cog):
         Shows different technical information about the bot
         """
         content = ''
-        bot_uptime = time_up((datetime.datetime.now(datetime.timezone.utc) - self.bot.start_time).total_seconds())
+        bot_uptime = time_up((discord.utils.utcnow() - self.bot.start_time).total_seconds())
         git_log_cmd = ['git', 'log', '-1', '--date=format:"%Y/%m/%d"', '--format=%ad']
         last_commit_date = subprocess.check_output(git_log_cmd).decode('utf-8').strip().strip('"')
         cpu_percent = psutil.cpu_percent()
