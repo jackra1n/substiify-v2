@@ -16,7 +16,6 @@ from wavelink.ext import spotify
 
 logger = logging.getLogger(__name__)
 
-URL = re.compile(r'https?://(?:www\.)?.+')
 EMBED_COLOR = 0x292B3E
 
 
@@ -123,18 +122,12 @@ class Music(commands.Cog):
         if not ctx.interaction:
             await ctx.message.delete()
 
-        # Check if is spotify
         if "open.spotify" in search:
             tracks = await spotify.SpotifyTrack.search(search)
             if not tracks:
                 return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
 
-        # Check if is URL
-        elif URL.match(search):
-            track = await wavelink.YouTubeTrack.search(search)
-            tracks = track
-            if not isinstance(track, wavelink.YouTubePlaylist):
-                tracks = track[:1]
+        tracks = await wavelink.Playable.search(search)
 
         if not tracks:
             raise NoTracksFound()
@@ -147,7 +140,7 @@ class Music(commands.Cog):
 
     async def _queue_songs(self, songs, player: wavelink.Player, requester):
         embed = discord.Embed(color=EMBED_COLOR)
-        if isinstance(songs, wavelink.YouTubePlaylist):
+        if isinstance(songs, wavelink.Playlist):
             for track in songs.tracks:
                 track.requester = requester
                 player.queue.put(track)
