@@ -22,10 +22,13 @@ class Karma(commands.Cog):
         bot.loop.create_task(self.load_vote_channels())
 
     @commands.Cog.listener()
-    async def on_message(self, message):
+    async def on_message(self, message: discord.Message):
         if message.channel.id in self.vote_channels and not message.author.bot:
-            await message.add_reaction(self.get_upvote_emote())
-            await message.add_reaction(self.get_downvote_emote())
+            try:
+                await message.add_reaction(self.get_upvote_emote())
+                await message.add_reaction(self.get_downvote_emote())
+            except discord.NotFound:
+                pass
 
     @commands.group(invoke_without_command=True)
     async def votes(self, ctx):
@@ -66,9 +69,13 @@ class Karma(commands.Cog):
         channel = channel or ctx.channel
         if channel.id not in self.vote_channels:
             self.vote_channels.append(channel.id)
-        votes_enabled = await self.bot.db.get_vote_channel(channel)
+        stmt = 'SELECT * FROM discord_channel WHERE discord_channel_id = $1 AND upvote = True'
+        votes_enabled = await self.bot.db.fetch(stmt, channel.id)
+        logger.info(f'Votes enabled: {votes_enabled}')
         if not votes_enabled:
-            await self.bot.db.update_channel_votes(channel, True)
+            stmt = '''INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote) VALUES ($1, $2, $3, $4, $5)
+                      ON CONFLICT (discord_channel_id) DO UPDATE SET upvote = $5'''
+            await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, channel.category_id, True)
         else:
             embed = discord.Embed(
                 description=f'Votes are **already active** in {ctx.channel.mention}!',
@@ -90,7 +97,9 @@ class Karma(commands.Cog):
         Disables votes in the current channel. Requires Manage Channels permission.
         """
         channel = channel or ctx.channel
-        await self.bot.db.update_channel_votes(channel, False)
+        stmt = '''INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote) VALUES ($1, $2, $3, $4, $5)
+                  ON CONFLICT (discord_channel_id) DO UPDATE SET upvote = $5'''
+        await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, channel.category_id, False)
         if channel.id in self.vote_channels:
             self.vote_channels.remove(channel.id)
         await ctx.message.delete()
@@ -98,7 +107,7 @@ class Karma(commands.Cog):
 
     async def load_vote_channels(self) -> list:
         query = await self.bot.db.fetch('SELECT * FROM discord_channel WHERE upvote = true')
-        self.vote_channels = [x.discord_channel_id for x in query] if query is not None else []
+        self.vote_channels = [x['discord_channel_id'] for x in query] if query is not None else []
 
     def get_upvote_emote(self):
         return self.bot.get_emoji(values.UPVOTE_EMOTE_ID)
@@ -278,11 +287,8 @@ class Karma(commands.Cog):
             embed = discord.Embed(title='That post does not exist.')
             return await ctx.send(embed=embed, delete_after=30)
 
-        server_upvote_emotes = await self.bot.db.get_upvote_karma_emote_ids_by_server(ctx.guild.id)
-        server_downvote_emotes = await self.bot.db.get_downvote_karma_emote_ids_by_server(ctx.guild.id)
-
-        server_upvote_emotes.append(values.UPVOTE_EMOTE_ID)
-        server_downvote_emotes.append(values.DOWNVOTE_EMOTE_ID)
+        server_upvote_emotes = await self.get_karma_upvote_emotes(ctx.guild)
+        server_downvote_emotes = await self.get_karma_downvote_emotes(ctx.guild)
 
         channel = await self.bot.fetch_channel(post.discord_channel_id)
         message = await channel.fetch_message(post.discord_message_id)
@@ -474,10 +480,10 @@ class Karma(commands.Cog):
         user = await self.check_payload(payload)
         if user is None:
             return
-        if payload.emoji.id in await self.get_query_karma_add(payload.guild_id):
+        if payload.emoji.id in await self.get_karma_upvote_emotes(payload.guild_id):
             await self.bot.db.update_user_karma(user.id, payload.guild_id, 1)
             await self.bot.db.update_post_upvotes_and_downvotes(payload.message_id, 1, 0)
-        elif payload.emoji.id in await self.get_query_karma_remove(payload.guild_id):
+        elif payload.emoji.id in await self.get_karma_downvote_emotes(payload.guild_id):
             await self.bot.db.update_user_karma(user.id, payload.guild_id, -1)
             await self.bot.db.update_post_upvotes_and_downvotes(payload.message_id, 0, 1)
 
@@ -487,26 +493,27 @@ class Karma(commands.Cog):
         if user is None:
             return
         stmt = '''INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
-                    ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = karma.amount + $3;
-                    INSERT INTO post (discord_user_id, discord_server_id, discord_message_id, discord_channel_id, created_at, upvotes, downvotes)
-                    VALUES ($1, $2, $4, $5, $6, $7, $8)
-                    ON CONFLICT (discord_message_id) DO UPDATE SET upvotes = post.upvotes + $7;
-                    '''
-        if payload.emoji.id in await self.get_query_karma_add(payload.guild_id):
-            await self.bot.db.execute(stmt, user.id, payload.guild_id, -1, payload.message_id, payload.channel_id, payload.m, -1, 0)
-        elif payload.emoji.id in await self.get_query_karma_remove(payload.guild_id):
-            await self.bot.db.update_user_karma(user.id, payload.guild_id, 1)
-            await self.bot.db.update_post_upvotes_and_downvotes(payload.message_id, 1, 0)
+                  ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = karma.amount + $3;
+                  INSERT INTO post (discord_user_id, discord_server_id, discord_message_id, discord_channel_id, created_at, upvotes, downvotes)
+                  VALUES ($1, $2, $4, $5, $6, $7, $8)
+                  ON CONFLICT (discord_message_id) DO UPDATE SET upvotes = post.upvotes + $7 AND downvotes = post.downvotes + $8;
+                '''
+        if payload.emoji.id in await self.get_karma_upvote_emotes(payload.guild_id):
+            await self.bot.db.execute(stmt, user.id, payload.guild_id, 1, payload.message_id, payload.channel_id, payload.m, 1, 0)
+        elif payload.emoji.id in await self.get_karma_downvote_emotes(payload.guild_id):
+            await self.bot.db.execute(stmt, user.id, payload.guild_id, -1, payload.message_id, payload.channel_id, payload.m, 0, 1)
 
-    async def get_query_karma_add(self, guild_id):
-        karma_emotes = await self.bot.db.get_upvote_karma_emote_ids_by_server(guild_id)
-        karma_emotes.append(int(values.UPVOTE_EMOTE_ID))
-        return karma_emotes
+    async def get_karma_upvote_emotes(self, guild_id):
+        stmt_upvotes = "SELECT discord_emote_id FROM karma_emote WHERE discord_server_id = $1 AND increase_karma = True"
+        server_upvote_emotes = await self.bot.db.fetch(stmt_upvotes, guild_id)
+        server_upvote_emotes.append(int(values.UPVOTE_EMOTE_ID))
+        return server_upvote_emotes
 
-    async def get_query_karma_remove(self, guild_id):
-        karma_emotes = await self.bot.db.get_downvote_karma_emote_ids_by_server(guild_id)
-        karma_emotes.append(int(values.DOWNVOTE_EMOTE_ID))
-        return karma_emotes
+    async def get_karma_downvote_emotes(self, guild_id):
+        stmt_downvotes = "SELECT discord_emote_id FROM karma_emote WHERE discord_server_id = $1 AND increase_karma = False"
+        server_downvote_emotes = await self.bot.db.fetch(stmt_downvotes, guild_id)
+        server_downvote_emotes.append(int(values.DOWNVOTE_EMOTE_ID))
+        return server_downvote_emotes
 
     async def check_payload(self, payload):
         if payload.event_type == 'REACTION_ADD' and payload.member.bot:

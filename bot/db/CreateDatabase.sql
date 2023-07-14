@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS discord_channel (
 CREATE TABLE IF NOT EXISTS discord_user (
   discord_user_id BIGINT PRIMARY KEY,
   username VARCHAR(255),
-  discriminator VARCHAR(10),
   avatar VARCHAR(255),
   is_bot BOOLEAN DEFAULT FALSE
 );

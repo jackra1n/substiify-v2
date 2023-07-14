@@ -12,7 +12,7 @@ import discord
 import psutil
 from core import values
 from core.bot import Substiify
-from discord import MessageType
+from discord import MessageType, app_commands
 from discord.ext import commands, tasks
 from discord.ext.commands import BucketType
 from pytz import timezone
@@ -33,7 +33,7 @@ class Util(commands.Cog):
         self.giveaway_task.start()
 
     @commands.command(name='teams', aliases=['team'])
-    async def teams(self, ctx):
+    async def teams(self, ctx: commands.Context):
         """
         Create two teams from the current members of the voice channel for you toplay custom games.
         """
@@ -59,9 +59,9 @@ class Util(commands.Cog):
         embed.add_field(name='Team 2', value="\n".join([f'{member.mention} ' for member in team_2]))
         await ctx.send(embed=embed)
 
-    @commands.group(aliases=["give"], invoke_without_command=True)
+    @commands.hybrid_group(aliases=["give"], invoke_without_command=True)
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def giveaway(self, ctx):
+    async def giveaway(self, ctx: commands.Context):
         """
         Allows you to create giveaways on the server.
         If you want to create a giveaway, check the `giveaway create` command.
@@ -70,7 +70,13 @@ class Util(commands.Cog):
 
     @giveaway.command(aliases=["c"], usage="create [hosted_by]")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def create(self, ctx, hosted_by: discord.Member = None):
+    @app_commands.describe(
+        channel='In which channel should the Giveaway be hosted?',
+        duration='For how long should the Giveaway be hosted? Type number followed by (m|h|d). Example: `10m`',
+        prize='What is the prize of the Giveaway?',
+        hosted_by='Who is hosting the Giveaway? If not specified, the author of the command will be the host.'
+    )
+    async def create(self, ctx: commands.Context, channel: discord.TextChannel, duration: str, prize: str, hosted_by: discord.Member = None):
         """
         Allows you to create a giveaway. Requires manage_channels permission.
         After calling this command, you will be asked to enter the prize, the time, and the channel.
@@ -79,48 +85,14 @@ class Util(commands.Cog):
         Example:
         `<<giveaway create` or `<<giveaway create @user`
         """
-        if hosted_by is None:
-            hosted_by = ctx.author
-        if hosted_by.bot:
-            await ctx.send("Sorry. Bots cannot host giveaways. You will be set as the host", delete_after=15)
+        if hosted_by is None or hosted_by.bot:
             hosted_by = ctx.author
 
-        # Ask Questions
-        questions = ["Setting up your giveaway. Choose what channel you want your giveaway in?",
-                     "For How long should the Giveaway be hosted ? type number followed (m|h|d). Example: `10m`",
-                     "What is the Prize?"]
-        answers = []
-
-        # Check Author
-        def check(message):
-            return message.author == ctx.author and message.channel == ctx.channel
-
-        for i, question in enumerate(questions):
-            embed = discord.Embed(title=f"Question {i}", description=question)
-            question_message = await ctx.send(embed=embed)
-            try:
-                message = await self.bot.wait_for('message', timeout=45, check=check)
-            except asyncio.TimeoutError:
-                await question_message.delete()
-                return await ctx.send("You didn't answer the questions in Time", delete_after=60)
-            answers.append(message.content)
-            await question_message.delete()
-            try:
-                await message.delete()
-            except discord.errors.NotFound:
-                pass
-
-        # Check if Channel Id is valid
-        try:
-            channel_id = int(answers[0][2:-1])
-        except Exception:
-            await ctx.send(f"The Channel provided was wrong. The channel should be {ctx.channel.mention}")
-            return
-
-        channel = await self.bot.fetch_channel(channel_id)
+        channel = await self.bot.fetch_channel(channel.id)
         if not channel.permissions_for(ctx.me).send_messages:
-            return await ctx.send("I don't have permission to send messages in that channel", delete_after=60)
-        time = self.convert(answers[1])
+            return await ctx.reply("I don't have permission to send messages in that channel", delete_after=60)
+
+        time = self.convert(duration)
         # Check if Time is valid
         if time == -1:
             await ctx.send("The Time format was wrong")
@@ -128,7 +100,6 @@ class Util(commands.Cog):
         elif time == -2:
             await ctx.send("The Time was not conventional number")
             return
-        prize = answers[2]
 
         setup_complete = f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}"
         await ctx.send(embed=discord.Embed(description=setup_complete))
@@ -141,11 +112,14 @@ class Util(commands.Cog):
         embed.set_footer(text=f"Giveway ends on {end_string}")
         new_msg = await channel.send(embed=embed)
         await new_msg.add_reaction("🎉")
-        await self.bot.db.insert_giveaway(hosted_by, end, prize, new_msg)
+        stmt = '''INSER INTO giveaway (discord_user_id, end_date, prize, discord_server_id, discord_channel_id, discord_message_id)
+                  VALUES ($1, $2, $3, $4, $5, $6)
+               '''
+        await self.bot.db.execute(stmt, hosted_by.id, end, prize, ctx.guild.id, channel.id, new_msg.id)
 
     @giveaway.command(usage="reroll <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def reroll(self, ctx, message_id: int):
+    async def reroll(self, ctx: commands.Context, message_id: int):
         """
         Allows you to reroll a giveaway if something went wrong.
         Needs to be executed in the channel the giveaway was posted in.
@@ -175,12 +149,13 @@ class Util(commands.Cog):
 
     @giveaway.command(aliases=["cancel"], usage="stop <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def stop(self, ctx, message_id: int):
+    async def stop(self, ctx: commands.Context, message_id: int):
         """
         Allows you to stop a giveaway. Takes the ID of the giveaway message as an argument.
         """
         # delete giveaway from db
-        giveaway = await self.bot.db.delete_giveaway_by_msg_id(message_id)
+        giveaway = await self.bot.db.execute('DELETE FROM giveaway WHERE discord_message_id = $1', message_id)
+        print(giveaway)
         if giveaway == 'DELETE 0':
             return await ctx.send("The message ID provided was wrong")
         msg = await ctx.fetch_message(message_id)
@@ -191,7 +166,7 @@ class Util(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def giveaway_task(self):
-        giveaways = await self.bot.db.get_all_giveaways()
+        giveaways = await self.bot.db.fetch('SELECT * FROM giveaway')
         for giveaway in giveaways:
             random_seed_value = datetime.datetime.now().timestamp()
             if datetime.datetime.now() < giveaway['end_date']:
@@ -200,7 +175,7 @@ class Util(commands.Cog):
             try:
                 message = await channel.fetch_message(giveaway['discord_message_id'])
             except discord.NotFound:
-                await self.bot.db.delete_giveaway(giveaway['id'])
+                await self.bot.db.execute('DELETE FROM giveaway WHERE id = $1', giveaway['id'])
                 return await channel.send("Could not find the giveaway message! Deleting the giveaway.", delete_after=180)
             users = [user async for user in message.reactions[0].users() if not user.bot]
             author = await self.bot.fetch_user(giveaway['discord_user_id'])
@@ -218,7 +193,7 @@ class Util(commands.Cog):
                 embed.add_field(name=f"Congratulations on winning '{prize}'", value=winner.mention)
                 await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
             await message.edit(embed=embed)
-            await self.bot.db.delete_giveaway(giveaway['id'])
+            await self.bot.db.execute('DELETE FROM giveaway WHERE id = $1', giveaway['id'])
 
     async def get_giveaway_prize(self, msg: discord.Message):
         return msg.embeds[0].description.split("Win **")[1].split("**!")[0]
@@ -271,7 +246,7 @@ class Util(commands.Cog):
             await message.clear_reactions()
 
     @commands.group(aliases=['report'], invoke_without_command=True)
-    async def submit(self, ctx):
+    async def submit(self, ctx: commands.Context):
         """
         Allows you to report a bug or suggest a feature or an improvement to the developer team.
         After submitting your bug, you will be able to see if it has been accepted or denied.
@@ -281,7 +256,7 @@ class Util(commands.Cog):
 
     @submit.command(usage='bug <message>')
     @commands.cooldown(2, 900, BucketType.user)
-    async def bug(self, ctx, *words: str):
+    async def bug(self, ctx: commands.Context, *words: str):
         """
         If you find a bug in the bot, use this command to submit it to the developers.
         The best way you can help is by saying what you were doing when the bug happened and what you expected to happen.
@@ -299,7 +274,7 @@ class Util(commands.Cog):
 
     @submit.command(aliases=['improvement', 'better'], usage='suggestion <message>')
     @commands.cooldown(2, 900, BucketType.user)
-    async def suggestion(self, ctx, *words: str):
+    async def suggestion(self, ctx: commands.Context, *words: str):
         """
         If you think something doesn't work well or something could be improved use this command to submit it to the developers.
         You can just describe what you want it to do.
@@ -358,10 +333,10 @@ class Util(commands.Cog):
 
     @bug.error
     @suggestion.error
-    async def command_error(self, ctx, error):
+    async def command_error(self, ctx: commands.Context, error):
         await self._cooldown_error(ctx, error)
 
-    async def _cooldown_error(self, ctx, error):
+    async def _cooldown_error(self, ctx: commands.Context, error):
         if isinstance(error, commands.CommandOnCooldown):
             embed = discord.Embed(
                 title="Slow it down!",
@@ -376,7 +351,7 @@ class Util(commands.Cog):
 
     @commands.cooldown(6, 5)
     @commands.hybrid_command(aliases=['av'])
-    async def avatar(self, ctx, member: discord.Member | discord.User | None = None):
+    async def avatar(self, ctx: commands.Context, member: discord.Member | discord.User | None = None):
         """
         Enlarge and view your profile picture or another member
         """
@@ -391,13 +366,13 @@ class Util(commands.Cog):
         await ctx.send(embed=embed)
 
     @avatar.error
-    async def avatar_error(self, ctx, error):
+    async def avatar_error(self, ctx: commands.Context, error):
         if isinstance(error, commands.MemberNotFound):
             await ctx.send('Member not found', delete_after=30)
 
     @commands.group(aliases=['c'], invoke_without_command=True)
     @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
-    async def clear(self, ctx, amount: int = None):
+    async def clear(self, ctx: commands.Context, amount: int = None):
         """
         Clears messages within the current channel.
         """
@@ -415,7 +390,7 @@ class Util(commands.Cog):
 
     @clear.command(aliases=['bot', 'b'])
     @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
-    async def clear_bot(self, ctx, amount: int):
+    async def clear_bot(self, ctx: commands.Context, amount: int):
         """Clears the bot's messages even in DMs"""
         bots_messages = [messages async for messages in ctx.channel.history(limit=amount + 1) if messages.author == self.bot.user]
 
@@ -429,12 +404,12 @@ class Util(commands.Cog):
                 await asyncio.sleep(0.75)
 
     @clear.error
-    async def clear_error(self, ctx, error):
+    async def clear_error(self, ctx: commands.Context, error):
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.send('Please put an amount to clear.')
 
     @commands.command(aliases=['dink'])
-    async def ping(self, ctx):
+    async def ping(self, ctx: commands.Context):
         """
         Shows the ping of the bot
         """
@@ -448,7 +423,7 @@ class Util(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.command(name="specialThanks",hidden=True)
-    async def special_thanks(self, ctx):
+    async def special_thanks(self, ctx: commands.Context):
         peeople_who_helped = [
             "<@205704051856244736>", # Sprütz#2222
             "<@299478604809764876>", # TheBadGod#7826
@@ -467,7 +442,7 @@ class Util(commands.Cog):
         await ctx.send(embed=embed, delete_after=120)
 
     @commands.command()
-    async def info(self, ctx):
+    async def info(self, ctx: commands.Context):
         """
         Shows different technical information about the bot
         """

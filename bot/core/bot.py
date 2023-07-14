@@ -53,8 +53,7 @@ class Substiify(commands.Bot):
         else:
             spotify_client = spotify.SpotifyClient(client_id=config.SPOTIFY_CLIENT_ID, client_secret=config.SPOTIFY_CLIENT_SECRET)
         node: wavelink.Node = wavelink.Node(uri=config.LAVALINK_NODE_URL, password=config.LAVALINK_PASSWORD)
-        connected_nodes = await wavelink.NodePool.connect(client=self, nodes=[node], spotify=spotify_client)
-        logger.info(f"Connected to {connected_nodes} nodes.")
+        await wavelink.NodePool.connect(client=self, nodes=[node], spotify=spotify_client)
 
         for extension in INITIAL_EXTENSIONS:
             try:

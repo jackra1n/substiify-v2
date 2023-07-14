@@ -109,7 +109,7 @@ class Music(commands.Cog):
             raise DifferentVoiceChannel()
 
     @commands.hybrid_command(aliases=['p'], usage='play <url/query>')
-    async def play(self, ctx, *, search: str):
+    async def play(self, ctx: commands.Context, *, search: str):
         """ Plays or queues a song/playlist. Can be a YouTube URL, Soundcloud URL or a search query.
 
         Examples:
@@ -141,9 +141,8 @@ class Music(commands.Cog):
             raise NoTracksFound()
     
         embed = await self._queue_songs(tracks, player, ctx.author)
-        server = await self.bot.db.get_discord_server(ctx.guild)
-        delete_after = 60 if server.music_cleanup else None
-        delete_after = None
+        music_cleanup = await self.bot.db.fetchval("SELECT music_cleanup FROM discord_server WHERE discord_server_id = $1", ctx.guild.id)
+        delete_after = 60 if music_cleanup else None
         await ctx.send(embed=embed, delete_after=delete_after)
 
     async def _queue_songs(self, songs, player: wavelink.Player, requester):
