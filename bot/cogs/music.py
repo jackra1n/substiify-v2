@@ -127,7 +127,11 @@ class Music(commands.Cog):
             if not tracks:
                 return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
 
-        tracks = await wavelink.Playable.search(search)
+        elif "soundcloud.com" in search:
+            tracks = await player.current_node.get_tracks(query=search, cls=wavelink.SoundCloudTrack)
+
+        else: 
+            tracks = await wavelink.Playable.search(search)
 
         if not tracks:
             raise NoTracksFound()
