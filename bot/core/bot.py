@@ -74,14 +74,15 @@ class Substiify(commands.Bot):
 
         await self.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
 
-        cmd_name = ctx.command.root_parent.qualified_name if ctx.command.root_parent else ctx.command.qualified_name
         server_id = ctx.guild.id if ctx.guild else None
-        parameters = ', '.join(ctx.kwargs.values()) if ctx.kwargs else None
+        parameters = ctx.kwargs.values() if ctx.kwargs else ctx.args[2:]
+        parameters_string = ', '.join([str(parameter) for parameter in parameters])
+        print(parameters_string)
 
         query = """INSERT INTO command_history
                    (command_name, parameters, discord_user_id, discord_server_id, discord_channel_id, discord_message_id)
                    VALUES ($1, $2, $3, $4, $5, $6)"""
-        await self.db.execute(query, cmd_name, parameters, ctx.author.id, server_id, ctx.channel.id, ctx.message.id)
+        await self.db.execute(query, ctx.command.qualified_name, parameters_string, ctx.author.id, server_id, ctx.channel.id, ctx.message.id)
         try:
             await ctx.message.add_reaction('✅')
         except discord.errors.NotFound:

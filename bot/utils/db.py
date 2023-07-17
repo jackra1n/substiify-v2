@@ -9,12 +9,11 @@ from discord.ext.commands import Context
 logger = logging.getLogger(__name__)
 
 USER_INSERT_QUERY = """INSERT INTO discord_user
-                       (discord_user_id, username, discriminator, avatar)
-                       VALUES ($1, $2, $3, $4)
+                       (discord_user_id, username, avatar)
+                       VALUES ($1, $2, $3)
                        ON CONFLICT (discord_user_id) DO UPDATE
                        SET
                        username = EXCLUDED.username,
-                       discriminator = EXCLUDED.discriminator,
                        avatar = EXCLUDED.avatar
                     """
 
@@ -76,30 +75,14 @@ class Database:
         await self.executemany(query, servers)
         await ctx.send("Database populated", delete_after=30)
 
-    async def _insert_foundation_from_ctx(self, ctx: Context):
-        user = ctx.author
-        server = ctx.guild
-        channel = ctx.channel
-        await self._insert_foundation(user, server, channel)
-
     async def _insert_foundation(self, user: discord.Member, server: discord.Guild, channel: discord.abc.Messageable):
-        avatar_url = user.avatar.url if user.avatar else None
-        await self.execute(USER_INSERT_QUERY, user.id, user.name, user.discriminator, avatar_url)
+        avatar_url = user.display_avatar.url if user.display_avatar else None
+        await self.execute(USER_INSERT_QUERY, user.id, user.name, avatar_url)
         await self.execute(SERVER_INSERT_QUERY, server.id, server.name)
         if pchannel := channel.parent if hasattr(channel, 'parent') else None:
             await self.execute(CHANNEL_INSERT_QUERY, pchannel.id, pchannel.name, pchannel.guild.id, None)
         p_chan_id = pchannel.id if pchannel else None
         await self.execute(CHANNEL_INSERT_QUERY, channel.id, channel.name, channel.guild.id, p_chan_id)
-
-    async def _insert_to_cmd_history(self, ctx: Context) -> None:
-        await self._insert_foundation_from_ctx(ctx)
-        cmd_name = ctx.command.root_parent.qualified_name if ctx.command.root_parent else ctx.command.qualified_name
-        server_id = ctx.guild.id if ctx.guild else None
-        query = """INSERT INTO command_history
-                   (command_name, discord_user_id, discord_server_id, discord_channel_id, discord_message_id)
-                   VALUES ($1, $2, $3, $4, $5)
-                """
-        await self.execute(query, cmd_name, ctx.author.id, server_id, ctx.channel.id, ctx.message.id)
 
     # Creates database tables if they don't exist
     async def create_database(self):

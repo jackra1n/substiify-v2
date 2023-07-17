@@ -6,6 +6,7 @@ from pathlib import Path
 import discord
 from asyncpg import Record
 from core import values
+from discord import app_commands
 from core.bot import Substiify
 from discord.ext import commands
 
@@ -37,7 +38,7 @@ class Karma(commands.Cog):
             except discord.NotFound:
                 pass
 
-    @commands.group(invoke_without_command=True)
+    @commands.hybrid_group(invoke_without_command=True)
     async def votes(self, ctx: commands.Context):
         """
         Shows if votes are enabled in the current channel
@@ -49,13 +50,13 @@ class Karma(commands.Cog):
         else:
             embed = discord.Embed(color=0xf66045)
             embed.description = f'Votes are **NOT enabled** in {ctx.channel.mention}!'
-        await ctx.send(embed=embed, delete_after=10)
+        await ctx.reply(embed=embed, delete_after=30)
 
     @votes.command(name='list')
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def list_votes(self, ctx: commands.Context):
         """
-        Lists all the votes that are enabled in the server
+        Lists all the votes channels that are enabled in the server
         """
         stmt = 'SELECT * FROM discord_channel WHERE discord_server_id = $1 AND upvote = True'
         upvote_channels = await self.bot.db.fetch(stmt, ctx.guild.id)
@@ -66,6 +67,9 @@ class Karma(commands.Cog):
 
     @votes.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    @app_commands.describe(
+        channel="The channel to enable votes in"
+    )
     async def start(self, ctx: commands.Context, channel: discord.TextChannel = None):
         """
         Enables votes in the current or specified channel. Requires Manage Channels permission.
@@ -100,6 +104,9 @@ class Karma(commands.Cog):
 
     @votes.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    @app_commands.describe(
+        channel="The channel to disable votes in"
+    )
     async def stop(self, ctx: commands.Context, channel: discord.TextChannel = None):
         """
         Disables votes in the current channel. Requires Manage Channels permission.
@@ -123,7 +130,10 @@ class Karma(commands.Cog):
     def get_downvote_emote(self):
         return self.bot.get_emoji(values.DOWNVOTE_EMOTE_ID)
 
-    @commands.group(aliases=["k"], usage="karma [user]", invoke_without_command=True,)
+    @commands.hybrid_group(aliases=["k"], usage="karma [user]", invoke_without_command=True,)
+    @app_commands.describe(
+        user='Which user do you want to see the karma of? If not specified, it will show your own karma.'
+    )
     async def karma(self, ctx: commands.Context, user: discord.User = None):
         """
         Shows the karma of a user. If you dont specify a user, it will show your own.
@@ -132,7 +142,7 @@ class Karma(commands.Cog):
         if user is None:
             user = ctx.author
         if user.bot:
-            return
+            return await ctx.reply(embed=discord.Embed(description="Bots don't have karma!", color=0xf66045))
         user_karma = await self._get_user_karma(user.id, ctx.guild.id)
         user_karma = 0 if user_karma is None else user_karma
         embed = discord.Embed(title=f'Karma - {ctx.guild.name}', description=f'{user.mention} has {user_karma} karma.')
@@ -146,8 +156,12 @@ class Karma(commands.Cog):
             await ctx.send(embed=embed)
 
     @commands.cooldown(3, 10)
-    @karma.command(name="donate", aliases=["wiretransfer", "wt"], usage="donate <amount> <user>")
-    async def karma_donate(self, ctx: commands.Context, amount: int, user: discord.User):
+    @karma.command(name="donate", aliases=["wiretransfer", "wt"], usage="donate <user> <amount>")
+    @app_commands.describe(
+        user='Which user do you want to donate karma to?',
+        amount='How much karma do you want to donate?'
+    )
+    async def karma_donate(self, ctx: commands.Context, user: discord.User, amount: int):
         """
         Donates karma to another user.
         """
@@ -173,13 +187,9 @@ class Karma(commands.Cog):
             embed.description = 'You don\'t have enough karma!'
             return await ctx.send(embed=embed)
         
-        stmt_receiver = '''INSERT INTO discord_user (discord_user_id, discord_server_id, karma) VALUES ($1, $2, $3)
-                           ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET karma = discord_user.karma + $3'''
-        await self.bot.db.execute(stmt_receiver, user.id, ctx.guild.id, amount)
-        
-        stmt_donator = '''INSERT INTO discord_user (discord_user_id, discord_server_id, karma) VALUES ($1, $2, $3)
-                          ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET karma = discord_user.karma - $3'''
-        await self.bot.db.execute(stmt_donator, ctx.author.id, ctx.guild.id, amount)
+        stmt_karma = '''INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
+                           ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = karma.amount + $3'''
+        await self.bot.db.executemany(stmt_karma, [(user.id, ctx.guild.id, amount), (ctx.author.id, ctx.guild.id, -amount)])
 
         embed = discord.Embed(color=0x23b40c)
         embed.description = f'{ctx.author.mention} has donated {amount} karma to {user.mention}!'
@@ -192,7 +202,7 @@ class Karma(commands.Cog):
         if isinstance(error, commands.MissingRequiredArgument):
             embed.description = 'You didn\'t specify a user to donate to!'
         elif isinstance(error, commands.BadArgument):
-            embed.description=f'Wrong command usage! Command usage is `{ctx.prefix}karma donate <amount> <user>`'
+            embed.description=f'Wrong command usage! Command usage is `{ctx.prefix}karma donate <user> <amount>`'
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
@@ -221,6 +231,10 @@ class Karma(commands.Cog):
 
     @karma_emotes.command(name='add', usage="add <emote> <action>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    @app_commands.describe(
+        emote='Which emote do you want to add?',
+        action='What action should this emote do? (0 for add, 1 for remove karma)'
+    )
     async def karma_emote_add(self, ctx: commands.Context, emote: discord.Emoji, emote_action: int):
         """
         Add an emote to the karma emotes for this server. Takes an emoji and an action (0 for add, 1 for remove karma)
@@ -254,6 +268,9 @@ class Karma(commands.Cog):
 
     @karma_emotes.command(name='remove', aliases=['delete'], usage="remove <emote>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    @app_commands.describe(
+        emote='Which emote do you want to remove?'
+    )
     async def karma_emote_remove(self, ctx: commands.Context, emote: discord.Emoji):
         """
         Remove an emote from the karma emotes for this server.
@@ -297,7 +314,7 @@ class Karma(commands.Cog):
             await ctx.send(embed=embed)
             await ctx.message.delete()
 
-    @commands.command(aliases=['plb'], usage="postlb")
+    @commands.hybrid_command(aliases=['plb'], usage="postlb")
     async def postlb(self, ctx: commands.Context):
         """
         Posts the leaderboard of the most upvoted posts.
@@ -383,12 +400,17 @@ class Karma(commands.Cog):
     def create_message_url(self, server_id, channel_id, message_id):
         return f'https://discordapp.com/channels/{server_id}/{channel_id}/{message_id}'
 
-    @commands.group(name='kasino', aliases=['kas'], invoke_without_command=True)
-    async def kasino(self, ctx):
+    @commands.hybrid_group(name='kasino', aliases=['kas'], invoke_without_command=True)
+    async def kasino(self, ctx: commands.Context):
         await ctx.send_help(ctx.command)
 
     @kasino.command(name='open', aliases=['o'], usage="open \"<question>\" \"<option1>\" \"<option2>\"")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    @app_commands.describe(
+        question="The qestion users will bet on.",
+        op_a="The first option users can bet on.",
+        op_b="The second option users can bet on."
+    )
     async def kasino_open(self, ctx: commands.Context, question: str, op_a: str, op_b: str):
         await ctx.message.delete()
         async with ctx.typing():
@@ -398,6 +420,10 @@ class Karma(commands.Cog):
 
     @kasino.command(name='close', usage="close <kasino_id> <winning_option>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    @app_commands.describe(
+        kasino_id="The ID of the kasino you want to close. The ID should be visible in the kasino message.",
+        winner="The winning option. 1 or 2. 3 to abort."
+    )
     async def kasino_close(self, ctx: commands.Context, kasino_id: int, winner: int):
         kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
 
@@ -430,6 +456,9 @@ class Karma(commands.Cog):
 
     @kasino.command(name='lock', usage="lock <kasino_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    @app_commands.describe(
+        kasino_id="The ID of the kasino you want to lock. The ID should be visible in the kasino message."
+    )
     async def kasino_lock(self, ctx: commands.Context, kasino_id: int):
         kasino = await self.bot.db.fetchrow('SELECT locked FROM kasino WHERE id = $1', kasino_id)
         if kasino is None:
@@ -442,6 +471,11 @@ class Karma(commands.Cog):
         await ctx.message.delete()
 
     @kasino.command(name='bet', usage="bet <kasino_id> <amount> <option>")
+    @app_commands.describe(
+        kasino_id="The ID of the kasino you want to bet on. The ID should be visible in the kasino message.",
+        amount="The amount of karma you want to bet. `all` to bet all your karma.",
+        option="The option you want to bet on. 1 or 2."
+    )
     async def kasino_bet(self, ctx: commands.Context, kasino_id: int, amount: str, option: int):
         output_embed = discord.Embed(color=discord.Colour.from_rgb(209, 25, 25))
 
@@ -516,6 +550,9 @@ class Karma(commands.Cog):
 
     @kasino.command(name='resend', usage="resend <kasino_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    @app_commands.describe(
+        kasino_id="The ID of the kasino you want to resend."
+    )
     async def resend_kasino(self, ctx: commands.Context, kasino_id: int):
         kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
         if kasino is None:

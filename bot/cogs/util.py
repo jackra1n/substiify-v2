@@ -25,8 +25,6 @@ class Util(commands.Cog):
 
     def __init__(self, bot: Substiify):
         self.bot = bot
-        self.suggestion_channel_id = 876413286978031676
-        self.bug_channel_id = 876412993498398740
         self.accept_emoji = discord.PartialEmoji.from_str('greenTick:876177251832590348')
         self.deny_emoji = discord.PartialEmoji.from_str('redCross:876177262813278288')
         self.giveaway_task.start()
@@ -118,6 +116,9 @@ class Util(commands.Cog):
 
     @giveaway.command(usage="reroll <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    @app_commands.describe(
+        message_id='The ID of the discord giveaway message you want to reroll.'
+    )
     async def reroll(self, ctx: commands.Context, message_id: int):
         """
         Allows you to reroll a giveaway if something went wrong.
@@ -159,8 +160,8 @@ class Util(commands.Cog):
             embed.description += f"[{giveaway['prize']}](https://discord.com/channels/{giveaway['discord_server_id']}/{giveaway['discord_channel_id']}/{giveaway['discord_message_id']}) - Ends <t:{int(giveaway['end_date'].timestamp())}:R>\n"
         await ctx.send(embed=embed)
 
-    @giveaway.command(name="info", usage="info")
-    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    @commands.command(name="giveawayInfo", hidden=True)
+    @commands.is_owner()
     async def giveaway_info(self, ctx):
         """
         Shows information about he giveaway task.
@@ -180,6 +181,9 @@ class Util(commands.Cog):
 
     @giveaway.command(aliases=["cancel"], usage="stop <message_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+    @app_commands.describe(
+        message_id='The ID of the discord giveaway message you want to stop.'
+    )
     async def stop(self, ctx: commands.Context, message_id: int):
         """
         Allows you to stop a giveaway. Takes the ID of the giveaway message as an argument.
@@ -251,6 +255,14 @@ class Util(commands.Cog):
         embed.add_field(name="Hosted By:", value=host)
         return embed
 
+    @commands.hybrid_command(aliases=['report'], invoke_without_command=True)
+    async def feedback(self, ctx: commands.Context):
+        """
+        Allows you to report a bug or suggest a feature or an improvement to the developer team.
+        After submitting your bug, you will be able to see if it has been accepted or denied.
+        """
+        await ctx.interaction.response.send_modal(Feedback())
+
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if payload.guild_id is None or payload.channel_id is None or payload.member is None or payload.message_id is None:
@@ -269,83 +281,12 @@ class Util(commands.Cog):
                 return
             message_type = channel_map[payload.channel_id]
             if payload.emoji == self.accept_emoji:
-                await self.send_accepted_user_reply(payload, message_type)
+                await self.send_user_reply(payload, message_type, f'**accepted** {self.accept_emoji}')
             elif payload.emoji == self.deny_emoji:
-                await self.send_denied_user_reply(payload, message_type)
+                await self.send_user_reply(payload, message_type, f'**denied** {self.deny_emoji}')
             else:
                 return
-            await message.clear_reactions()
-
-    @commands.group(aliases=['report'], invoke_without_command=True)
-    async def submit(self, ctx: commands.Context):
-        """
-        Allows you to report a bug or suggest a feature or an improvement to the developer team.
-        After submitting your bug, you will be able to see if it has been accepted or denied.
-        Check out the `bug` and `suggestion` subcommands for more information.
-        """
-        await ctx.send("Please use the `bug` or `suggestion` subcommands to submit a bug or suggestion.", delete_after=10)
-
-    @submit.command(usage='bug <message>')
-    @commands.cooldown(2, 900, BucketType.user)
-    async def bug(self, ctx: commands.Context, *words: str):
-        """
-        If you find a bug in the bot, use this command to submit it to the developers.
-        The best way you can help is by saying what you were doing when the bug happened and what you expected to happen.
-
-        Example:
-        `<<submit bug When I used the command `<<help` I expected to see a list of commands. But instead I got a list of bugs.`
-        """
-        sentence = " ".join(words[:])
-        if len(sentence) <= 20:
-            await self.submission_error(ctx, sentence)
-        else:
-            bug_channel = self.bot.get_channel(self.bug_channel_id)
-            await self.send_submission(ctx, bug_channel, sentence, ctx.command.name)
-        await ctx.message.delete()
-
-    @submit.command(aliases=['improvement', 'better'], usage='suggestion <message>')
-    @commands.cooldown(2, 900, BucketType.user)
-    async def suggestion(self, ctx: commands.Context, *words: str):
-        """
-        If you think something doesn't work well or something could be improved use this command to submit it to the developers.
-        You can just describe what you want it to do.
-
-        Example:
-        `<<submit suggestion I would like to be able to change the bot's prefix.`
-        """
-        sentence = " ".join(words[:])
-        if len(sentence) <= 10:
-            await self.submission_error(ctx, sentence)
-        else:
-            suggestion_channel = self.bot.get_channel(self.suggestion_channel_id)
-            await self.send_submission(ctx, suggestion_channel, sentence, ctx.command.name)
-        await ctx.message.delete()
-
-    async def submission_error(self, ctx, sentence):
-        embed = discord.Embed(
-            title='Submission error',
-            description=f'Your message is too short: {len(sentence)} characters',
-            color=discord.Colour.red()
-        )
-        await ctx.send(embed=embed, delete_after=15)
-
-    async def send_submission(self, ctx, channel, sentence, submission_type):
-        embed = discord.Embed(
-            title=f'New {submission_type} submission',
-            description=f'```{sentence}```\nSubmitted by: {ctx.author.mention}',
-            color=0x1E9FE3
-        )
-        embed.set_footer(text=ctx.author.id, icon_url=ctx.author.display_avatar.url)
-        message = await channel.send(embed=embed)
-        await ctx.send(f'Thank you for submitting the {submission_type}!', delete_after=30)
-        await message.add_reaction(f'{self.accept_emoji}')
-        await message.add_reaction(f'{self.deny_emoji}')
-
-    async def send_accepted_user_reply(self, payload, submission_type):
-        await self.send_user_reply(payload, submission_type, f'**accepted** {self.accept_emoji}')
-
-    async def send_denied_user_reply(self, payload, submission_type):
-        await self.send_user_reply(payload, submission_type, f'**denied** {self.deny_emoji}')
+            await message.clear_reactions()        
 
     async def send_user_reply(self, payload, submission_type, action):
         channel = await self.bot.fetch_channel(payload.channel_id)
@@ -361,11 +302,6 @@ class Util(commands.Cog):
         await user.send(content=message, embed=new_embed)
         embed.color = discord.Colour.red() if 'denied' in action else discord.Colour.green()
         await message.edit(embed=embed)
-
-    @bug.error
-    @suggestion.error
-    async def command_error(self, ctx: commands.Context, error):
-        await self._cooldown_error(ctx, error)
 
     async def _cooldown_error(self, ctx: commands.Context, error):
         if isinstance(error, commands.CommandOnCooldown):
@@ -508,6 +444,49 @@ class Util(commands.Cog):
         embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar.url)
         await ctx.send(embed=embed)
         await ctx.message.delete()
+
+class Feedback(discord.ui.Modal, title='Suggestions & Feedback'):
+    accept_emoji = discord.PartialEmoji.from_str('greenTick:876177251832590348')
+    deny_emoji = discord.PartialEmoji.from_str('redCross:876177262813278288')
+    suggestion_channel_id = 876413286978031676
+    bug_channel_id = 876412993498398740
+
+    bug_fix = discord.SelectOption(label='Bug fix', description='Report a bug that needs to be fixed', emoji='🐛')
+    improvement = discord.SelectOption(label='Improvement', description='Suggest an improvement to the bot', emoji='👍')
+
+    feedback_type = discord.ui.Select(
+        placeholder='Select a type of submission...',
+        options=[bug_fix, improvement]
+    )
+
+    feedback = discord.ui.TextInput(
+        label='What do you think of this new feature?',
+        style=discord.TextStyle.long,
+        placeholder='Write your bug fix or improvement suggestion here...',
+        required=True,
+        min_length=10,
+        max_length=300
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.send_message(f'Thanks for your feedback, {self.name.value}!', ephemeral=True)
+        feedback_type_string = 'bug' if self.feedback_type == self.bug_fix else 'suggestion'
+        channel_id = self.bug_channel_id if self.feedback_type == self.bug_fix else self.suggestion_channel_id
+        channel: discord.TextChannel = self.bot.get_channel(channel_id)
+        embed = discord.Embed(
+            title=f'New {feedback_type_string} submission',
+            description=f'```{self.feedback.value}```\nSubmitted by: {interaction.user.mention}',
+            color=0x1E9FE3
+        )
+        embed.set_footer(text=interaction.user.id, icon_url=interaction.user.display_avatar.url)
+        message = await channel.send(embed=embed)
+        await interaction.response(f'Thank you for submitting the {feedback_type_string}!', delete_after=30)
+        await message.add_reaction(f'{self.accept_emoji}')
+        await message.add_reaction(f'{self.deny_emoji}')
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        await interaction.response.send_message('Oops! Something went wrong.', ephemeral=True)
+        logger.error(type(error), error, error.__traceback__)
 
 
 def time_up(seconds: int) -> str:
