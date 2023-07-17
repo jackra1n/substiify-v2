@@ -25,6 +25,8 @@ class Util(commands.Cog):
 
     def __init__(self, bot: Substiify):
         self.bot = bot
+        suggestion_channel_id = 876413286978031676
+        bug_channel_id = 876412993498398740
         self.accept_emoji = discord.PartialEmoji.from_str('greenTick:876177251832590348')
         self.deny_emoji = discord.PartialEmoji.from_str('redCross:876177262813278288')
         self.giveaway_task.start()
@@ -261,7 +263,10 @@ class Util(commands.Cog):
         Allows you to report a bug or suggest a feature or an improvement to the developer team.
         After submitting your bug, you will be able to see if it has been accepted or denied.
         """
-        await ctx.interaction.response.send_modal(Feedback())
+        view = discord.ui.View()
+        view.add_item(FeedbackSelect())
+        await ctx.send('Choose a type of submission', view=view)
+
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
@@ -445,19 +450,29 @@ class Util(commands.Cog):
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
+class FeedbackSelect(discord.ui.Select):
+    
+    def __init__(self):
+        super().__init__(
+            placeholder='Select a type of submission...',
+            options=[
+                discord.SelectOption(label='Bug fix', description='Report a bug that needs to be fixed', emoji='🐛', value='bug'),
+                discord.SelectOption(label='Improvement', description='Suggest an improvement to the bot', emoji='👍', value='suggestion')
+            ]
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(Feedback(self.values[0]))
+
 class Feedback(discord.ui.Modal, title='Suggestions & Feedback'):
+
+    def __init__(self, feedback_type: str):
+        self.feedback_type = feedback_type
+
     accept_emoji = discord.PartialEmoji.from_str('greenTick:876177251832590348')
     deny_emoji = discord.PartialEmoji.from_str('redCross:876177262813278288')
     suggestion_channel_id = 876413286978031676
     bug_channel_id = 876412993498398740
-
-    bug_fix = discord.SelectOption(label='Bug fix', description='Report a bug that needs to be fixed', emoji='🐛')
-    improvement = discord.SelectOption(label='Improvement', description='Suggest an improvement to the bot', emoji='👍')
-
-    feedback_type = discord.ui.Select(
-        placeholder='Select a type of submission...',
-        options=[bug_fix, improvement]
-    )
 
     feedback = discord.ui.TextInput(
         label='What do you think of this new feature?',
@@ -469,20 +484,18 @@ class Feedback(discord.ui.Modal, title='Suggestions & Feedback'):
     )
 
     async def on_submit(self, interaction: discord.Interaction):
-        await interaction.response.send_message(f'Thanks for your feedback, {self.name.value}!', ephemeral=True)
-        feedback_type_string = 'bug' if self.feedback_type == self.bug_fix else 'suggestion'
-        channel_id = self.bug_channel_id if self.feedback_type == self.bug_fix else self.suggestion_channel_id
+        channel_id = self.bug_channel_id if self.feedback_type == 'bug' else self.suggestion_channel_id
         channel: discord.TextChannel = self.bot.get_channel(channel_id)
         embed = discord.Embed(
-            title=f'New {feedback_type_string} submission',
+            title=f'New {self.feedback_type} submission',
             description=f'```{self.feedback.value}```\nSubmitted by: {interaction.user.mention}',
             color=0x1E9FE3
         )
         embed.set_footer(text=interaction.user.id, icon_url=interaction.user.display_avatar.url)
         message = await channel.send(embed=embed)
-        await interaction.response(f'Thank you for submitting the {feedback_type_string}!', delete_after=30)
         await message.add_reaction(f'{self.accept_emoji}')
         await message.add_reaction(f'{self.deny_emoji}')
+        await interaction.response(f'Thank you for submitting the {self.feedback_type}!', delete_after=30)
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
         await interaction.response.send_message('Oops! Something went wrong.', ephemeral=True)

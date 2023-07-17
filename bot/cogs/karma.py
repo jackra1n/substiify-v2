@@ -233,7 +233,7 @@ class Karma(commands.Cog):
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     @app_commands.describe(
         emote='Which emote do you want to add?',
-        action='What action should this emote do? (0 for add, 1 for remove karma)'
+        emote_action='What action should this emote do? (0 for add, 1 for remove karma)'
     )
     async def karma_emote_add(self, ctx: commands.Context, emote: discord.Emoji, emote_action: int):
         """
