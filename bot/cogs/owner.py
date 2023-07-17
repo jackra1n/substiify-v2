@@ -441,19 +441,19 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @db_command.command(name="generateTestData")
-    async def db_generate_test_data(self, ctx):
+    async def db_generate_test_data(self, ctx: commands.Context):
         """
         Generates test data for the database
         """
         # fetch all users from the server
-        await self.bot.db._insert_foundation_from_ctx(ctx)
+        await self.bot.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
         async for user in ctx.guild.fetch_members(limit=None):
             print(f"inserting user: {user}...")
-            stmt_insert_user = '''INSERT INTO discord_user (discord_user_id, username, avatar_url) VALUES ($1, $2, $3)
-                                  ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar_url = $3'''
-            await self.bot.db.execute(stmt_insert_user, user.id, user.name, user.avatar_url)
-            stmt_insert_user_karma = '''INSERT INTO user_karma (discord_user_id, discord_server_id, karma) VALUES ($1, $2, $3)
-                                        ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET karma = $3'''
+            stmt_insert_user = '''INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
+                                  ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3'''
+            await self.bot.db.execute(stmt_insert_user, user.id, user.name, user.display_avatar.url)
+            stmt_insert_user_karma = '''INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
+                                        ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = $3'''
             await self.bot.db.execute(stmt_insert_user_karma, user.id, ctx.guild.id, 3000)
 
     @commands.is_owner()
@@ -483,17 +483,19 @@ class Owner(commands.Cog):
                 await self.bot.db.execute(stmt, channel.id, server.id, channel.name)
 
         for post in await self.bot.db.fetch("SELECT * FROM post"):
-            discord_user = await self.bot.fetch_user(post['discord_user_id'])
+            user_id = post['discord_user_id']
+            discord_user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
             print(f"fetched user: {discord_user}...")
             stmt = '''INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
                       ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3'''
-            await self.bot.db.execute(stmt, discord_user.id, discord_user.name, discord_user.avatar.url)
+            await self.bot.db.execute(stmt, discord_user.id, discord_user.name, discord_user.display_avatar.url)
     
         for command in await self.bot.db.fetch("SELECT discord_user_id FROM command_history GROUP BY discord_user_id"):
-            discord_user = await self.bot.fetch_user(command['discord_user_id'])
+            user_id = command['discord_user_id']
+            discord_user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
             stmt = '''INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
                       ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3'''
-            await self.bot.db.execute(stmt, discord_user.id, discord_user.name, discord_user.avatar.url)
+            await self.bot.db.execute(stmt, discord_user.id, discord_user.name, discord_user.display_avatar.url)
 
         await ctx.send("Database populated", delete_after=30)
 

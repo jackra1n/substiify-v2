@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS discord_user (
 CREATE TABLE IF NOT EXISTS command_history (
   id SERIAL PRIMARY KEY,
   command_name VARCHAR(255),
+  parameters TEXT,
   discord_user_id BIGINT REFERENCES discord_user(discord_user_id),
   discord_server_id BIGINT REFERENCES discord_server(discord_server_id),
   discord_channel_id BIGINT REFERENCES discord_channel(discord_channel_id),

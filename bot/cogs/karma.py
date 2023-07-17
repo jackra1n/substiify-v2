@@ -38,7 +38,7 @@ class Karma(commands.Cog):
                 pass
 
     @commands.group(invoke_without_command=True)
-    async def votes(self, ctx):
+    async def votes(self, ctx: commands.Context):
         """
         Shows if votes are enabled in the current channel
         """
@@ -53,7 +53,7 @@ class Karma(commands.Cog):
 
     @votes.command(name='list')
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def list_votes(self, ctx):
+    async def list_votes(self, ctx: commands.Context):
         """
         Lists all the votes that are enabled in the server
         """
@@ -66,7 +66,7 @@ class Karma(commands.Cog):
 
     @votes.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def start(self, ctx, channel: discord.TextChannel = None):
+    async def start(self, ctx: commands.Context, channel: discord.TextChannel = None):
         """
         Enables votes in the current or specified channel. Requires Manage Channels permission.
         After enabling votes, the bot will add the upvote and downvote reactions to every message in the channel.
@@ -100,7 +100,7 @@ class Karma(commands.Cog):
 
     @votes.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def stop(self, ctx, channel: discord.TextChannel = None):
+    async def stop(self, ctx: commands.Context, channel: discord.TextChannel = None):
         """
         Disables votes in the current channel. Requires Manage Channels permission.
         """
@@ -124,7 +124,7 @@ class Karma(commands.Cog):
         return self.bot.get_emoji(values.DOWNVOTE_EMOTE_ID)
 
     @commands.group(aliases=["k"], usage="karma [user]", invoke_without_command=True,)
-    async def karma(self, ctx, user: discord.User = None):
+    async def karma(self, ctx: commands.Context, user: discord.User = None):
         """
         Shows the karma of a user. If you dont specify a user, it will show your own.
         If you want to know what emote reactions are used for karma, use the subcommand `karma emotes`
@@ -140,14 +140,14 @@ class Karma(commands.Cog):
         await ctx.message.delete()
 
     @karma.error
-    async def karma_error(self, ctx, error):
+    async def karma_error(self, ctx: commands.Context, error):
         if isinstance(error, commands.BadArgument):
             embed = discord.Embed(color=0xf66045, description=error)
             await ctx.send(embed=embed)
 
     @commands.cooldown(3, 10)
     @karma.command(name="donate", aliases=["wiretransfer", "wt"], usage="donate <amount> <user>")
-    async def karma_donate(self, ctx, amount: int, user: discord.User):
+    async def karma_donate(self, ctx: commands.Context, amount: int, user: discord.User):
         """
         Donates karma to another user.
         """
@@ -187,7 +187,7 @@ class Karma(commands.Cog):
         await ctx.message.delete()
 
     @karma_donate.error
-    async def karma_donate_error(self, ctx, error):
+    async def karma_donate_error(self, ctx: commands.Context, error):
         embed = discord.Embed(color=0xf66045)
         if isinstance(error, commands.MissingRequiredArgument):
             embed.description = 'You didn\'t specify a user to donate to!'
@@ -197,7 +197,7 @@ class Karma(commands.Cog):
         await ctx.message.delete()
 
     @karma.group(name='emotes', aliases=['emote'], usage="emotes", invoke_without_command=True)
-    async def karma_emotes(self, ctx):
+    async def karma_emotes(self, ctx: commands.Context):
         """
         Shows the karma emotes of the server. Emotes in the `add` category increase karma,
         while emotes in the `remove` category decrease karma.
@@ -221,7 +221,7 @@ class Karma(commands.Cog):
 
     @karma_emotes.command(name='add', usage="add <emote> <action>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def karma_emote_add(self, ctx, emote: discord.Emoji, emote_action: int):
+    async def karma_emote_add(self, ctx: commands.Context, emote: discord.Emoji, emote_action: int):
         """
         Add an emote to the karma emotes for this server. Takes an emoji and an action (0 for add, 1 for remove karma)
         The votes from this bots Votes module automatically add karma to the user. No need to add those emotes to the emote list.
@@ -254,7 +254,7 @@ class Karma(commands.Cog):
 
     @karma_emotes.command(name='remove', aliases=['delete'], usage="remove <emote>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def karma_emote_remove(self, ctx, emote: discord.Emoji):
+    async def karma_emote_remove(self, ctx: commands.Context, emote: discord.Emoji):
         """
         Remove an emote from the karma emotes for this server.
         """
@@ -271,29 +271,34 @@ class Karma(commands.Cog):
         await ctx.message.delete()
 
     @karma.command(name='leaderboard', aliases=['lb', 'leaderbord'], usage="leaderboard")
-    async def karma_leaderboard(self, ctx, global_leaderboard: str = None):
+    async def karma_leaderboard(self, ctx: commands.Context, global_leaderboard: str = None):
         """
         Shows users with the most karma on the server.
         """
         async with ctx.typing():
             embed = discord.Embed(title='Karma Leaderboard')
+
             if global_leaderboard is None:
-                stmt_karma_leaderboard = "SELECT * FROM karma WHERE discord_server_id = $1 ORDER BY amount DESC LIMIT 15"
+                stmt_karma_leaderboard = "SELECT discord_user_id, amount FROM karma WHERE discord_server_id = $1 ORDER BY amount DESC LIMIT 15"
                 results = await self.bot.db.fetch(stmt_karma_leaderboard, ctx.guild.id)
+
             elif global_leaderboard == 'global':
-                stmt_karma_leaderboard = "SELECT * FROM karma ORDER BY amount DESC LIMIT 15"
+                stmt_karma_leaderboard = "SELECT discord_user_id, amount FROM karma ORDER BY amount DESC LIMIT 15"
                 results = await self.bot.db.fetch(stmt_karma_leaderboard)
+
             if not results:
                 embed.description = 'No users have karma.'
+
             embed.description = ''
             for index, entry in enumerate(results, start=1):
-                user = await self.bot.fetch_user(entry['discord_user_id'])
+                user = self.bot.get_user(entry['discord_user_id']) or await self.bot.fetch_user(entry['discord_user_id'])
                 embed.description += f"`{str(index).rjust(2)}.` | `{entry['amount']}` - {user.mention}\n"
+
             await ctx.send(embed=embed)
             await ctx.message.delete()
 
     @commands.command(aliases=['plb'], usage="postlb")
-    async def postlb(self, ctx):
+    async def postlb(self, ctx: commands.Context):
         """
         Posts the leaderboard of the most upvoted posts.
         """
@@ -318,11 +323,12 @@ class Karma(commands.Cog):
 
     @commands.command(name='checkpost', aliases=['cp'], usage="checkpost <post id>")
     @commands.is_owner()
-    async def check_post(self, ctx, post_id):
+    async def check_post(self, ctx: commands.Context, post_id: int):
         """
         Checks if a post exists.
         """
-        post: Record = await self.bot.db.get_post_by_message_id(post_id)
+        stmt_post = "SELECT * FROM post WHERE id = $1"
+        post = await self.bot.db.fetchrow(stmt_post, post_id)
         if post is None:
             embed = discord.Embed(title='That post does not exist.')
             return await ctx.send(embed=embed, delete_after=30)
@@ -383,7 +389,7 @@ class Karma(commands.Cog):
 
     @kasino.command(name='open', aliases=['o'], usage="open \"<question>\" \"<option1>\" \"<option2>\"")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def kasino_open(self, ctx, question, op_a, op_b):
+    async def kasino_open(self, ctx: commands.Context, question: str, op_a: str, op_b: str):
         await ctx.message.delete()
         async with ctx.typing():
             kasino_id = await self.add_kasino(ctx, question, op_a, op_b)
@@ -392,8 +398,7 @@ class Karma(commands.Cog):
 
     @kasino.command(name='close', usage="close <kasino_id> <winning_option>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def kasino_close(self, ctx, kasino_id: int, winner: int):
-        author_img = ctx.author.avatar
+    async def kasino_close(self, ctx: commands.Context, kasino_id: int, winner: int):
         kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
 
         if kasino is None:
@@ -409,12 +414,13 @@ class Karma(commands.Cog):
         else:
             return await ctx.author.send('Winner has to be 1, 2 or 3 (abort)')
 
-        await self.send_conclusion(ctx, kasino_id, winner, ctx.author, author_img)
+        author_avatar = ctx.author.display_avatar.url
+        await self.send_conclusion(ctx, kasino_id, winner, ctx.author, author_avatar)
         await self.remove_kasino(kasino_id)
         await ctx.message.delete()
 
     @kasino_close.error
-    async def kasino_close_error(self, ctx, error):
+    async def kasino_close_error(self, ctx: commands.Context, error):
         if isinstance(error, commands.errors.MissingRequiredArgument):
             msg = f'You didn\'t provide a required argument! Correct usage is `{ctx.prefix}kasino close <kasino_id> <winning_option>`'
             await ctx.send(msg, delete_after=20)
@@ -424,7 +430,7 @@ class Karma(commands.Cog):
 
     @kasino.command(name='lock', usage="lock <kasino_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def kasino_lock(self, ctx, kasino_id: int):
+    async def kasino_lock(self, ctx: commands.Context, kasino_id: int):
         kasino = await self.bot.db.fetchrow('SELECT locked FROM kasino WHERE id = $1', kasino_id)
         if kasino is None:
             return await ctx.author.send(f'Kasino with ID `{kasino_id}` does not exist.')
@@ -436,7 +442,7 @@ class Karma(commands.Cog):
         await ctx.message.delete()
 
     @kasino.command(name='bet', usage="bet <kasino_id> <amount> <option>")
-    async def kasino_bet(self, ctx, kasino_id: int, amount: str, option: int):
+    async def kasino_bet(self, ctx: commands.Context, kasino_id: int, amount: str, option: int):
         output_embed = discord.Embed(color=discord.Colour.from_rgb(209, 25, 25))
 
         if option not in [1, 2]:
@@ -499,7 +505,7 @@ class Karma(commands.Cog):
         await ctx.message.delete()
 
     @kasino.command(name='list', aliases=['l'], usage="list")
-    async def kasino_list(self, ctx):
+    async def kasino_list(self, ctx: commands.Context):
         embed = discord.Embed(title='Open kasinos')
         stmt_kasinos = 'SELECT * FROM kasino WHERE locked = False AND discord_server_id = $1 ORDER BY id ASC;'
         all_kasinos = await self.bot.db.fetch(stmt_kasinos, ctx.guild.id)
@@ -510,7 +516,7 @@ class Karma(commands.Cog):
 
     @kasino.command(name='resend', usage="resend <kasino_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def resend_kasino(self, ctx, kasino_id: int):
+    async def resend_kasino(self, ctx: commands.Context, kasino_id: int):
         kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
         if kasino is None:
             await ctx.send('Kasino not found.')
@@ -529,7 +535,7 @@ class Karma(commands.Cog):
         await self.update_kasino_msg(ctx, kasino_id)
 
     @commands.Cog.listener()
-    async def on_raw_reaction_add(self, payload):
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         user = await self.check_payload(payload)
         if user is None:
             return
@@ -542,7 +548,7 @@ class Karma(commands.Cog):
             await self._update_post_votes(payload, user, -1, 0)
 
     @commands.Cog.listener()
-    async def on_raw_reaction_remove(self, payload):
+    async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
         user = await self.check_payload(payload)
         if user is None:
             return
@@ -561,11 +567,10 @@ class Karma(commands.Cog):
             stmt,
             user.id,
             user.display_name,
-            user.avatar.url,
+            user.display_avatar.url,
         )
 
-    async def _update_karma(self, payload, user: discord.Member, amount: int):
-        print(f'amoutn: {amount}')
+    async def _update_karma(self, payload: discord.RawReactionActionEvent, user: discord.Member, amount: int):
         await self.bot.db.execute(
             UPDATE_KARMA_QUERY,
             user.id,
@@ -573,7 +578,7 @@ class Karma(commands.Cog):
             amount
         )
 
-    async def _update_post_votes(self, payload, user: discord.Member, upvote: int, downvote: int):
+    async def _update_post_votes(self, payload: discord.RawReactionActionEvent, user: discord.Member, upvote: int, downvote: int):
         message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
         await self.bot.db.execute(
             UPDATE_POST_VOTES_QUERY,
@@ -586,7 +591,7 @@ class Karma(commands.Cog):
             downvote
         )
 
-    async def _get_user_karma(self, user_id, guild_id) -> int:
+    async def _get_user_karma(self, user_id: int, guild_id: int) -> int:
         stmt = "SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2"
         return await self.bot.db.fetchval(stmt, user_id, guild_id)
     
@@ -594,21 +599,21 @@ class Karma(commands.Cog):
         stmt = "SELECT * FROM karma_emote WHERE discord_server_id = $1 AND discord_emote_id = $2"
         return await self.bot.db.fetchrow(stmt, server_id, emote.id)
     
-    async def _get_karma_upvote_emotes(self, guild_id) -> list[int]:
+    async def _get_karma_upvote_emotes(self, guild_id: int) -> list[int]:
         stmt_upvotes = "SELECT discord_emote_id FROM karma_emote WHERE discord_server_id = $1 AND increase_karma = True"
         emote_records = await self.bot.db.fetch(stmt_upvotes, guild_id)
         server_upvote_emotes = [emote['discord_emote_id'] for emote in emote_records]
         server_upvote_emotes.append(int(values.UPVOTE_EMOTE_ID))
         return server_upvote_emotes
 
-    async def _get_karma_downvote_emotes(self, guild_id) -> list[int]:
+    async def _get_karma_downvote_emotes(self, guild_id: int) -> list[int]:
         stmt_downvotes = "SELECT discord_emote_id FROM karma_emote WHERE discord_server_id = $1 AND increase_karma = False"
         emote_records = await self.bot.db.fetch(stmt_downvotes, guild_id)
         server_downvote_emotes = [emote['discord_emote_id'] for emote in emote_records]
         server_downvote_emotes.append(int(values.DOWNVOTE_EMOTE_ID))
         return server_downvote_emotes
 
-    async def check_payload(self, payload):
+    async def check_payload(self, payload: discord.RawReactionActionEvent) -> discord.Member | None:
         if payload.event_type == 'REACTION_ADD' and payload.member.bot:
             return None
         try:
@@ -617,7 +622,7 @@ class Karma(commands.Cog):
             return None
         if message.author.bot:
             return None
-        reaction_user = payload.member or await self.bot.fetch_user(payload.user_id)
+        reaction_user = payload.member or self.bot.get_user(payload.user_id) or await self.bot.fetch_user(payload.user_id)
         if reaction_user == message.author:
             return None
         return message.author
@@ -627,7 +632,7 @@ class Karma(commands.Cog):
         cached_message = potential_message[0] if potential_message else None
         return cached_message or await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
 
-    async def send_conclusion(self, ctx, kasino_id, winner, author, author_img):
+    async def send_conclusion(self, ctx: commands.Context, kasino_id: int, winner: int, author, author_avatar: str):
         kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
         total_karma = await self.bot.db.fetchval('SELECT SUM(amount) FROM kasino_bet WHERE kasino_id = $1', kasino_id)
         to_embed = discord.Embed(color=discord.Colour.from_rgb(52, 79, 235))
@@ -645,22 +650,22 @@ class Karma(commands.Cog):
 
         to_embed.set_footer(
             text=f'as decided by {author}',
-            icon_url=author_img
+            icon_url=author_avatar
         )
         to_embed.set_thumbnail(url='https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif')
         await ctx.send(embed=to_embed)
         return
 
-    async def add_kasino(self, ctx, question, option_1, option_2) -> int:
+    async def add_kasino(self, ctx: commands.Context, question: str, option_1: str, option_2: str) -> int:
         to_embed = discord.Embed(description="Opening kasino, hold on tight...")
         kasino_msg = await ctx.send(embed=to_embed)
 
-        await self.bot.db._insert_foundation_from_ctx(ctx)
+        await self.bot.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
         stmt_kasino = '''INSERT INTO kasino (discord_server_id, discord_channel_id, discord_message_id, question, option_1, option_2)
                          VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'''
         return await self.bot.db.fetchval(stmt_kasino, ctx.guild.id, ctx.channel.id, kasino_msg.id, question, option_1, option_2)
 
-    async def remove_kasino(self, kasino_id) -> None:
+    async def remove_kasino(self, kasino_id: int) -> None:
         kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
         if kasino is None:
             return
@@ -672,7 +677,7 @@ class Karma(commands.Cog):
             pass
         await self.bot.db.execute('DELETE FROM kasino WHERE id = $1', kasino_id)
 
-    def create_kasino_backup(self, kasino_id):
+    def create_kasino_backup(self, kasino_id: int):
         today_string = datetime.now().strftime("%Y_%m_%d")
         now_time_string = datetime.now().strftime("%H%M")
         backup_folder = f"{values.DATA_PATH}/backups/{today_string}"
@@ -694,7 +699,8 @@ class Karma(commands.Cog):
                 description=f'Question was: {bet["question"]}\n'
                             f'Remaining karma: {user_karma}'
             )
-            await (await self.bot.fetch_user(bet['discord_user_id'])).send(embed=output)
+            user = self.bot.get_user(bet['discord_user_id']) or await self.bot.fetch_user(bet['discord_user_id'])
+            await user.send(embed=output)
 
     async def win_kasino(self, kasino_id: int, winning_option: int):
         stmt_kasino_and_bets = '''SELECT * FROM kasino JOIN kasino_bet ON kasino.id = kasino_bet.kasino_id
@@ -738,9 +744,10 @@ class Karma(commands.Cog):
                 description = f'Question was: {question}\n'
                               f'New karma balance: {user_karma}'
             )
-            await (await self.bot.fetch_user(user_id)).send(embed=output)
+            user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+            await user.send(embed=output)
 
-    async def update_kasino_msg(self, ctx, kasino_id: int) -> None:
+    async def update_kasino_msg(self, ctx: commands.Context, kasino_id: int) -> None:
         kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
         k_channel_id = kasino['discord_channel_id']
         k_message_id = kasino['discord_message_id']

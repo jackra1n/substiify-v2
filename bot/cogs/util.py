@@ -5,7 +5,6 @@ import math
 import platform
 import random
 import subprocess
-import datetime
 from random import choice, seed, shuffle
 
 import discord
@@ -187,7 +186,6 @@ class Util(commands.Cog):
         """
         # delete giveaway from db
         giveaway = await self.bot.db.execute('DELETE FROM giveaway WHERE discord_message_id = $1', message_id)
-        print(giveaway)
         if giveaway == 'DELETE 0':
             return await ctx.send("The message ID provided was wrong")
         msg = await ctx.fetch_message(message_id)
@@ -210,7 +208,8 @@ class Util(commands.Cog):
                 await self.bot.db.execute('DELETE FROM giveaway WHERE id = $1', giveaway['id'])
                 return await channel.send("Could not find the giveaway message! Deleting the giveaway.", delete_after=180)
             users = [user async for user in message.reactions[0].users() if not user.bot]
-            author = await self.bot.fetch_user(giveaway['discord_user_id'])
+            author_id = giveaway['discord_user_id']
+            author = self.bot.get_user(author_id) or await self.bot.fetch_user(author_id)
             prize = giveaway['prize']
             embed = self.create_giveaway_embed(author, prize)
 
@@ -336,7 +335,7 @@ class Util(commands.Cog):
             description=f'```{sentence}```\nSubmitted by: {ctx.author.mention}',
             color=0x1E9FE3
         )
-        embed.set_footer(text=ctx.author.id, icon_url=ctx.author.avatar)
+        embed.set_footer(text=ctx.author.id, icon_url=ctx.author.display_avatar.url)
         message = await channel.send(embed=embed)
         await ctx.send(f'Thank you for submitting the {submission_type}!', delete_after=30)
         await message.add_reaction(f'{self.accept_emoji}')
@@ -388,7 +387,7 @@ class Util(commands.Cog):
         Enlarge and view your profile picture or another member
         """
         member = member or ctx.author
-        current_avatar = member.guild_avatar or member.avatar
+        current_avatar = member.display_avatar
         embed = discord.Embed(
             title=f"{str(member.display_name)}'s avatar",
             url=current_avatar.url,
@@ -505,8 +504,8 @@ class Util(commands.Cog):
             color=values.PRIMARY_COLOR,
             timestamp=datetime.datetime.now(timezone("Europe/Zurich"))
         )
-        embed.set_thumbnail(url=self.bot.user.avatar)
-        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar)
+        embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar.url)
         await ctx.send(embed=embed)
         await ctx.message.delete()
 

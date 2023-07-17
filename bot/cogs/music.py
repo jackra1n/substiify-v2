@@ -109,7 +109,7 @@ class Music(commands.Cog):
 
     @commands.hybrid_command(aliases=['p'], usage='play <url/query>')
     async def play(self, ctx: commands.Context, *, search: str):
-        """ Plays or queues a song/playlist. Can be a YouTube URL, Soundcloud URL or a search query.
+        """ Plays or queues a song/playlist. Can be a YouTube, Spotify, Soundcloud link or a search query.
 
         Examples:
         `<<play All girls are the same Juice WRLD` - searches for a song and queues it
@@ -127,7 +127,7 @@ class Music(commands.Cog):
             if not tracks:
                 return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
 
-        elif "soundcloud.com" in search:
+        elif "soundcloud.com" in search and not "sets/" in search:
             tracks = await player.current_node.get_tracks(query=search, cls=wavelink.SoundCloudTrack)
 
         else: 
@@ -136,10 +136,11 @@ class Music(commands.Cog):
         if not tracks:
             raise NoTracksFound()
     
-        embed = await self._queue_songs(tracks, player, ctx.author)
         stmt_cleanup = "SELECT music_cleanup FROM discord_server WHERE discord_server_id = $1"
         music_cleanup = await self.bot.db.fetchval(stmt_cleanup, ctx.guild.id)
         delete_after = 60 if music_cleanup else None
+
+        embed = await self._queue_songs(tracks, player, ctx.author)
         await ctx.send(embed=embed, delete_after=delete_after)
 
     async def _queue_songs(self, songs, player: wavelink.Player, requester):
@@ -210,7 +211,7 @@ class Music(commands.Cog):
         if player.queue.is_empty:
             old_song += '\n*⃣ | Queue is empty.'
         embed = discord.Embed(color=EMBED_COLOR, title='⏭ | Skipped.', description=old_song)
-        embed.set_footer(text=f'Requested by {ctx.author}', icon_url=ctx.author.avatar)
+        embed.set_footer(text=f'Requested by {ctx.author}', icon_url=ctx.author.display_avatar.url)
         await ctx.send(embed=embed, delete_after=30)
         if not ctx.interaction:
             await ctx.message.delete()
@@ -383,7 +384,7 @@ class Music(commands.Cog):
 
             embed.title = f"Queue ({player.queue.count})"
             embed.add_field(name='Now Playing', value=f'[{player.current.title}]({player.current.uri})')
-            embed.set_footer(text=f"Queued by {ctx.author}", icon_url=ctx.author.avatar)
+            embed.set_footer(text=f"Queued by {ctx.author}", icon_url=ctx.author.display_avatar.url)
 
             upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(songs_array[i:i + 10], start=i)])
             embed.add_field(name="Next up", value=upcoming, inline=False)

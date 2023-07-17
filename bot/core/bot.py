@@ -69,15 +69,25 @@ class Substiify(commands.Bot):
         await self.change_presence(activity=activity)
         logger.info(f'Logged on as {self.user} (ID: {self.user.id})')
 
-    async def on_command_completion(self, ctx) -> None:
+    async def on_command_completion(self, ctx: commands.Context) -> None:
         logger.info(f'[{ctx.command.qualified_name}] executed for -> [{ctx.author}]')
-        await self.db._insert_to_cmd_history(ctx)
+
+        await self.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
+
+        cmd_name = ctx.command.root_parent.qualified_name if ctx.command.root_parent else ctx.command.qualified_name
+        server_id = ctx.guild.id if ctx.guild else None
+        parameters = ', '.join(ctx.kwargs.values()) if ctx.kwargs else None
+
+        query = """INSERT INTO command_history
+                   (command_name, parameters, discord_user_id, discord_server_id, discord_channel_id, discord_message_id)
+                   VALUES ($1, $2, $3, $4, $5, $6)"""
+        await self.db.execute(query, cmd_name, parameters, ctx.author.id, server_id, ctx.channel.id, ctx.message.id)
         try:
             await ctx.message.add_reaction('✅')
         except discord.errors.NotFound:
             pass
 
-    async def on_command_error(self, ctx, error) -> None:
+    async def on_command_error(self, ctx: commands.Context, error) -> None:
         if isinstance(error, commands.CommandNotFound):
             return
         if not ctx.command:
