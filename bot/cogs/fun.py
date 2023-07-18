@@ -150,7 +150,7 @@ class Fun(commands.Cog):
 
     @commands.cooldown(6, 5)
     @commands.command(name='8ball', aliases=['eightball'], usage='8ball <question>')
-    async def eightball(self, ctx, *, question):
+    async def eightball(self, ctx: commands.Context, *, question:str):
         """
         AKA 8ball, Ask the bot a question that you dont want the answer to.
         """

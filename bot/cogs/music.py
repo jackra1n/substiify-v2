@@ -66,7 +66,7 @@ class Music(commands.Cog):
         except asyncio.TimeoutError:
             await player.disconnect()
 
-    async def cog_before_invoke(self, ctx):
+    async def cog_before_invoke(self, ctx: commands.Context):
         """ Command before-invoke handler. """
         guild_check = ctx.guild is not None
 
@@ -75,7 +75,7 @@ class Music(commands.Cog):
 
         return guild_check
 
-    async def ensure_voice(self, ctx):
+    async def ensure_voice(self, ctx: commands.Context):
         """ This check ensures that the bot and command author are in the same voicechannel. """
         if wavelink.NodePool.nodes is None:
             raise NoNodeAccessible()
@@ -163,7 +163,7 @@ class Music(commands.Cog):
         return embed
 
     @commands.hybrid_command(name="loop")
-    async def _loop(self, ctx):
+    async def _loop(self, ctx: commands.Context):
         """ Loops the current song. """
         player: Player = ctx.voice_client
         looping = not player.queue.loop
@@ -175,7 +175,7 @@ class Music(commands.Cog):
         await ctx.send(embed=embed)
 
     @commands.hybrid_command(aliases=['disconnect', 'stop'])
-    async def leave(self, ctx):
+    async def leave(self, ctx: commands.Context):
         """
         Disconnects the player from the voice channel and clears its queue.
         """
@@ -197,7 +197,7 @@ class Music(commands.Cog):
             await ctx.message.delete()
 
     @commands.hybrid_command()
-    async def skip(self, ctx):
+    async def skip(self, ctx: commands.Context):
         """
         Skips the current track. If there no more tracks in the queue, disconnects the player.
         """
@@ -217,7 +217,7 @@ class Music(commands.Cog):
             await ctx.message.delete()
 
     @commands.hybrid_command(name="now", aliases=['np', 'current'])
-    async def now_playing(self, ctx):
+    async def now_playing(self, ctx: commands.Context):
         """
         Shows info about the currently playing track.
         """
@@ -235,7 +235,7 @@ class Music(commands.Cog):
         await ctx.send(embed=embed, delete_after=60)
 
     @commands.hybrid_command()
-    async def shuffle(self, ctx):
+    async def shuffle(self, ctx: commands.Context):
         """
         Randomly shuffles the queue.
         """
@@ -251,13 +251,13 @@ class Music(commands.Cog):
             await ctx.message.delete()
 
     @commands.hybrid_group()
-    async def queue(self, ctx):
+    async def queue(self, ctx: commands.Context):
         if ctx.invoked_subcommand is None:
             embed = discord.Embed(color=EMBED_COLOR)
             embed.description = "You probably want to call `<<queue show`.\nUsing a slash command for that might be even handier."
 
     @queue.command(name='show')
-    async def _show(self, ctx):
+    async def _show(self, ctx: commands.Context):
         """
         Shows the queue in a paginated menu.
         """
@@ -274,7 +274,7 @@ class Music(commands.Cog):
         await ctx.send(embed=queue_pages[0], delete_after=120, view=view)
 
     @queue.command(name='move')
-    async def queue_move(self, ctx, from_index: int, to_index: int):
+    async def queue_move(self, ctx: commands.Context, from_index: int, to_index: int):
         """
         Moves a track from one position in the queue to another.
         """
@@ -293,7 +293,7 @@ class Music(commands.Cog):
         await ctx.send(embed=embed, delete_after=15)
 
     @queue.command(name='clear')
-    async def queue_clear(self, ctx):
+    async def queue_clear(self, ctx: commands.Context):
         """
         Clears the queue.
         """
@@ -306,7 +306,7 @@ class Music(commands.Cog):
 
     @commands.is_owner()
     @commands.command(hidden=True)
-    async def players(self, ctx):
+    async def players(self, ctx: commands.Context):
         """
         Shows all active players. Mostly used to check before deploying a new version.
         """
@@ -327,19 +327,20 @@ class Music(commands.Cog):
 
     @commands.hybrid_command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def cleanup(self, ctx, enable: bool = None):
+    async def cleanup(self, ctx: commands.Context, enable: bool = None):
         """
         Enables/disables the auto-cleanup of the music queue messages that appear after queueing a new song.
         """
         if enable is not None:
-            await self.bot.db.update_server_music_cleanup(ctx.guild.id, enable)
+            stmt_cleanup = 'UPDATE discord_server SET music_cleanup = $1 WHERE discord_server.discord_server_id = $2'
+            await self.bot.db.execute(stmt_cleanup, enable, ctx.guild.id)
 
         embed = self.create_song_cleanup_embed(ctx, enable)
         await ctx.send(embed=embed)
         if not ctx.interaction:
             await ctx.message.delete()
 
-    def create_song_cleanup_embed(self, ctx, enable):
+    def create_song_cleanup_embed(self, ctx: commands.Context, enable: bool):
         embed = discord.Embed(color=discord.Color.red())
         status_string = '`disabled` <:redCross:876177262813278288>'
         if enable:
@@ -369,7 +370,7 @@ class Music(commands.Cog):
         embed.add_field(name='Queued By', value=requester)
         return embed
 
-    def _create_queue_embed_list(self, ctx):
+    def _create_queue_embed_list(self, ctx: commands.Context):
         player: Player = ctx.voice_client
         songs_array = []
         for song in player.queue:
