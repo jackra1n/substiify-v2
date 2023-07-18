@@ -303,16 +303,54 @@ class Karma(commands.Cog):
                 stmt_karma_leaderboard = "SELECT discord_user_id, amount FROM karma ORDER BY amount DESC LIMIT 15"
                 results = await self.bot.db.fetch(stmt_karma_leaderboard)
 
+            embed.description = ''
             if not results:
                 embed.description = 'No users have karma.'
 
-            embed.description = ''
+            users_string = ''.join([f"<@{entry['discord_user_id']}>\n" for entry in results])
+            load_users_message = await ctx.send('Loading users...')
+            await load_users_message.edit(content=users_string)
+            await load_users_message.delete()
+
             for index, entry in enumerate(results, start=1):
                 user = self.bot.get_user(entry['discord_user_id']) or await self.bot.fetch_user(entry['discord_user_id'])
                 embed.description += f"`{str(index).rjust(2)}.` | `{entry['amount']}` - {user.mention}\n"
 
             await ctx.send(embed=embed)
             await ctx.message.delete()
+
+    @karma.command(name='stats', usage="stats")
+    async def karma_stats(self, ctx: commands.Context):
+        """
+        Shows karma stats for the server.
+        Some stats incluce total karma, karma amount in top percentile and more.
+        """
+        async with ctx.typing():
+            embed = discord.Embed(title='Karma Stats')
+
+            stmt_total_karma = "SELECT SUM(amount) FROM karma WHERE discord_server_id = $1"
+            total_karma = await self.bot.db.fetchval(stmt_total_karma, ctx.guild.id) or 0
+            embed.add_field(name='Total Karma', value=f'`{total_karma}`', inline=False)
+
+            # How much karma do the top 10% of users have?
+            stmt_top_percentile = "SELECT SUM(amount) FROM karma WHERE discord_server_id = $1 LIMIT (SELECT COUNT(*) FROM karma WHERE discord_server_id = $1) / 10"
+            top_percentile = await self.bot.db.fetchval(stmt_top_percentile, ctx.guild.id) or 0
+            embed.add_field(name='Top 10% users karma', value=f'`{top_percentile}`', inline=False)
+
+            # How much karma do the top 1% of users have?
+            stmt_top_percentile = "SELECT SUM(amount) FROM karma WHERE discord_server_id = $1 LIMIT (SELECT COUNT(*) FROM karma WHERE discord_server_id = $1) / 100"
+            top_percentile = await self.bot.db.fetchval(stmt_top_percentile, ctx.guild.id) or 0
+            embed.add_field(name='Top 1% users karma', value=f'`{top_percentile}`', inline=False)
+
+            # Average upvote to downvote ratio per post
+            stmt_avg_upvote_ratio = "SELECT AVG(upvotes / downvotes), COUNT(*) FROM post WHERE discord_server_id = $1 AND upvotes + downvotes > 2"
+            avg_upvote_ratio, post_count = await self.bot.db.fetchrow(stmt_avg_upvote_ratio, ctx.guild.id) or 0
+            embed.add_field(name='Average upvote ratio per post', value=f'`{avg_upvote_ratio:.2f}` ({post_count} posts)', inline=False)
+
+            await ctx.send(embed=embed)
+            await ctx.message.delete()
+
+
 
     @commands.hybrid_command(aliases=['plb'], usage="postlb")
     async def postlb(self, ctx: commands.Context):

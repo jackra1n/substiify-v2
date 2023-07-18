@@ -77,7 +77,6 @@ class Substiify(commands.Bot):
         server_id = ctx.guild.id if ctx.guild else None
         parameters = ctx.kwargs.values() if ctx.kwargs else ctx.args[2:]
         parameters_string = ', '.join([str(parameter) for parameter in parameters])
-        print(parameters_string)
 
         query = """INSERT INTO command_history
                    (command_name, parameters, discord_user_id, discord_server_id, discord_channel_id, discord_message_id)

@@ -1,5 +1,6 @@
 import logging
 import subprocess
+import random
 from os import path, walk
 from typing import Literal, Optional
 
@@ -454,7 +455,8 @@ class Owner(commands.Cog):
             await self.bot.db.execute(stmt_insert_user, user.id, user.name, user.display_avatar.url)
             stmt_insert_user_karma = '''INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
                                         ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = $3'''
-            await self.bot.db.execute(stmt_insert_user_karma, user.id, ctx.guild.id, 3000)
+            random_karma = random.randint(500, 3000)
+            await self.bot.db.execute(stmt_insert_user_karma, user.id, ctx.guild.id, random_karma)
 
     @commands.is_owner()
     @db_command.command(name="populate")
