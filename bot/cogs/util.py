@@ -464,24 +464,26 @@ class FeedbackSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(Feedback(self.values[0]))
 
-class Feedback(discord.ui.Modal, title='Suggestions & Feedback'):
+class Feedback(discord.ui.Modal):
 
     def __init__(self, feedback_type: str):
+        super().__init__(title='Suggestions & Feedback')
         self.feedback_type = feedback_type
+        feedback = discord.ui.TextInput(
+            label='What do you think of this new feature?',
+            style=discord.TextStyle.long,
+            placeholder='Write your bug fix or improvement suggestion here...',
+            required=True,
+            min_length=10,
+            max_length=300
+        )
+        self.add_item(feedback)
 
     accept_emoji = discord.PartialEmoji.from_str('greenTick:876177251832590348')
     deny_emoji = discord.PartialEmoji.from_str('redCross:876177262813278288')
     suggestion_channel_id = 876413286978031676
     bug_channel_id = 876412993498398740
 
-    feedback = discord.ui.TextInput(
-        label='What do you think of this new feature?',
-        style=discord.TextStyle.long,
-        placeholder='Write your bug fix or improvement suggestion here...',
-        required=True,
-        min_length=10,
-        max_length=300
-    )
 
     async def on_submit(self, interaction: discord.Interaction):
         channel_id = self.bug_channel_id if self.feedback_type == 'bug' else self.suggestion_channel_id
