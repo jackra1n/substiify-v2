@@ -332,14 +332,16 @@ class Karma(commands.Cog):
             total_karma = await self.bot.db.fetchval(stmt_total_karma, ctx.guild.id) or 0
             embed.add_field(name='Total Karma', value=f'`{total_karma}`', inline=False)
 
+            user_count = await self.bot.db.fetchval("SELECT COUNT(*) FROM karma WHERE discord_server_id = $1", ctx.guild.id)
+
             # How much karma do the top 10% of users have?
-            stmt_top_percentile = "SELECT SUM(amount) FROM karma WHERE discord_server_id = $1 LIMIT (SELECT COUNT(*) FROM karma WHERE discord_server_id = $1) / 10"
-            top_percentile = await self.bot.db.fetchval(stmt_top_percentile, ctx.guild.id) or 0
+            stmt_top_percentile = "SELECT SUM(amount) FROM karma WHERE discord_server_id = $1 ORDER BY amount DESC GROUP BY discord_server_id LIMIT $2"
+            top_percentile = await self.bot.db.fetchval(stmt_top_percentile, ctx.guild.id, int(user_count / 10)) or 0
             embed.add_field(name='Top 10% users karma', value=f'`{top_percentile}`', inline=False)
 
             # How much karma do the top 1% of users have?
-            stmt_top_percentile = "SELECT SUM(amount) FROM karma WHERE discord_server_id = $1 LIMIT (SELECT COUNT(*) FROM karma WHERE discord_server_id = $1) / 100"
-            top_percentile = await self.bot.db.fetchval(stmt_top_percentile, ctx.guild.id) or 0
+            stmt_top_percentile = "SELECT SUM(amount) FROM karma WHERE discord_server_id = $1 ORDER BY amount DESC GROUP BY discord_server_id LIMIT $2"
+            top_percentile = await self.bot.db.fetchval(stmt_top_percentile, ctx.guild.id, int(user_count / 100)) or 0
             embed.add_field(name='Top 1% users karma', value=f'`{top_percentile}`', inline=False)
 
             # Average upvote to downvote ratio per post
