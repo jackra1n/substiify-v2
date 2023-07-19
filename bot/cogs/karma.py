@@ -1,3 +1,4 @@
+import os
 import logging
 import shutil
 import locale
@@ -5,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 import discord
+import plotly.graph_objects as go
 from asyncpg import Record
 from core import values
 from discord import app_commands
@@ -188,8 +190,9 @@ class Karma(commands.Cog):
             embed.description = 'You don\'t have enough karma!'
             return await ctx.send(embed=embed)
         
-        stmt_karma = '''INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
-                           ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = karma.amount + $3'''
+        stmt_karma = '''
+            INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
+            ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = karma.amount + $3'''
         await self.bot.db.executemany(stmt_karma, [(user.id, ctx.guild.id, amount), (ctx.author.id, ctx.guild.id, -amount)])
 
         embed = discord.Embed(color=0x23b40c)
@@ -307,6 +310,7 @@ class Karma(commands.Cog):
             embed.description = ''
             if not results:
                 embed.description = 'No users have karma.'
+                return await ctx.send(embed=embed)
 
             users_string = ''.join([f"<@{entry['discord_user_id']}>\n" for entry in results])
             load_users_message = await ctx.send('Loading users...')
@@ -318,7 +322,6 @@ class Karma(commands.Cog):
                 embed.description += f"`{str(index).rjust(2)}.` | `{entry['amount']}` - {user.mention}\n"
 
             await ctx.send(embed=embed)
-            await ctx.message.delete()
 
     @karma.command(name='stats', usage="stats")
     async def karma_stats(self, ctx: commands.Context):
@@ -327,52 +330,91 @@ class Karma(commands.Cog):
         Some stats incluce total karma, karma amount in top percentile and more.
         """
         locale.setlocale(locale.LC_NUMERIC, 'de_CH.utf8')
+
         async with ctx.typing():
             embed = discord.Embed(title='Karma Stats')
 
-            stmt_total_karma = "SELECT SUM(amount) FROM karma WHERE discord_server_id = $1"
-            total_karma = await self.bot.db.fetchval(stmt_total_karma, ctx.guild.id) or 0
-            karma_users = await self.bot.db.fetchval("SELECT COUNT(*) FROM karma WHERE discord_server_id = $1", ctx.guild.id)
-            embed.add_field(name='Total Server Karma', value=f'`{total_karma:n} (of {karma_users} users)`', inline=False)
+            karma_info = await self.bot.db.fetchrow("SELECT SUM(amount), COUNT(*) FROM karma WHERE discord_server_id = $1", ctx.guild.id)
+            total_karma = karma_info['sum']
+            karma_users = karma_info['count']
+
+            if total_karma is None:
+                embed.description = 'No users have karma.'
+                return await ctx.send(embed=embed)
 
             avg_karma = total_karma / karma_users if karma_users > 0 else 0
+
+            embed.add_field(name='Total Server Karma', value=f'`{total_karma:n} (of {karma_users} users)`', inline=False)
             embed.add_field(name='Average Karma per user', value=f'`{avg_karma:.2f}`', inline=False)
 
-            stmt_top_percentile = '''SELECT SUM(amount) AS total_karma
-                                     FROM (
-                                        SELECT amount
-                                        FROM karma
-                                        WHERE discord_server_id = $1
-                                        ORDER BY amount DESC
-                                        LIMIT (SELECT CEIL(0.1 * COUNT(*)) FROM karma)
-                                     ) AS top_karma;'''
-            # How much karma do the top 10% of users have?
-            top_percentile = await self.bot.db.fetchval(stmt_top_percentile, ctx.guild.id) or 0
-            percantege_of_total_karma = (top_percentile / total_karma) * 100
-            embed.add_field(name='Top 10% users karma', value=f"`{top_percentile:n} ({percantege_of_total_karma:.2f}% of total)`", inline=False)
+            # Top percentile calculation
+            stmt_top_percentile = '''
+                SELECT amount
+                FROM karma
+                WHERE discord_server_id = $1
+                ORDER BY amount DESC
+                LIMIT (SELECT CEIL($2 * CAST(COUNT(*) AS float)) FROM karma)'''
 
+            percentiles = [(0.1, '10'), (0.01, '1')]
+            for percentile, label in percentiles:
+                top_percentile = await self.bot.db.fetch(stmt_top_percentile, ctx.guild.id, percentile)
+                top_percentile = sum(entry['amount'] for entry in top_percentile)
+                percantege = (top_percentile / total_karma) * 100
+                embed.add_field(name=f'Top {label}% users karma', value=f'`{top_percentile:n} ({percantege:.2f}% of total)`', inline=False)
 
-            stmt_top_percentile = '''SELECT SUM(amount) AS total_karma
-                                     FROM (
-                                        SELECT amount
-                                        FROM karma
-                                        WHERE discord_server_id = $1
-                                        ORDER BY amount DESC
-                                        LIMIT (SELECT CEIL(0.01 * COUNT(*)) FROM karma)
-                                     ) AS top_karma;'''
-            # How much karma do the top 1% of users have?
-            top_percentile = await self.bot.db.fetchval(stmt_top_percentile, ctx.guild.id) or 0
-            percantege_of_total_karma = (top_percentile / total_karma) * 100
-            embed.add_field(name='Top 1% users karma', value=f'`{top_percentile:n} ({percantege_of_total_karma:.2f}% of total)`', inline=False)
+            stmt_avg_upvote_ratio = '''
+                SELECT AVG(upvotes / downvotes) as average, COUNT(*) as post_count
+                FROM post
+                WHERE discord_server_id = $1 AND upvotes + downvotes > 2'''
 
-            # Average upvote to downvote ratio per post
-            stmt_avg_upvote_ratio = "SELECT AVG(upvotes / downvotes) as average, COUNT(*) as post_count FROM post WHERE discord_server_id = $1 AND upvotes + downvotes > 2"
             avg_post_query = await self.bot.db.fetchrow(stmt_avg_upvote_ratio, ctx.guild.id)
             avg_ratio = avg_post_query['average'] or 0
             post_count = avg_post_query['post_count'] or 0
             embed.add_field(name='Average upvote ratio per post', value=f'`{avg_ratio:.1f} ({post_count} posts)`', inline=False)
 
             await ctx.send(embed=embed)
+        locale.setlocale(locale.LC_NUMERIC, '')
+
+    @karma.command(name='graph', usage="graph")
+    async def karma_stats_graph(self, ctx: commands.Context):
+        """
+        Shows a graph of the amount of karma form every ten percent of users.
+        """
+        async with ctx.typing():
+            stmt_karma = '''
+                SELECT amount
+                FROM karma
+                WHERE discord_server_id = $1
+                ORDER BY amount ASC
+            '''
+            
+            karma = await self.bot.db.fetch(stmt_karma, ctx.guild.id)
+            users_count = len(karma)
+            karma_percentiles = []
+            for i in range(0, 100, 5):
+                total_percentile_karma = sum(entry['amount'] for entry in karma[:int(users_count * (i / 100))])
+                karma_percentiles.append((total_percentile_karma, i))
+            karma_percentiles.append((sum(entry['amount'] for entry in karma), 100))
+
+            x = [entry[1] for entry in karma_percentiles]
+            y = [entry[0] for entry in karma_percentiles]
+
+            # fig = go.Figure(data=go.Scatter(x=x, y=y))
+            # fig.update_layout(title='Karma Graph', xaxis_title='Percentile', yaxis_title='Karma')
+            # fig.update_xaxes(type='category')
+            # fig.update_yaxes(type='log')
+            # fig.update_layout(template='plotly_dark')
+            # fig.write_image('karma_graph.png')
+
+            fig = go.Figure(data=go.Bar(x=x, y=y))
+            fig.update_layout(title='Karma Graph', xaxis_title='Percentile', yaxis_title='Karma')
+            # fig.update_xaxes(type='category')
+            # fig.update_yaxes(type='log')
+            fig.update_layout(template='plotly_dark')
+            fig.write_image('karma_graph.png')
+
+            await ctx.send(file=discord.File('karma_graph.png'))
+            os.remove('karma_graph.png')
 
 
     @commands.hybrid_command(aliases=['plb'], usage="postlb")
@@ -442,10 +484,11 @@ class Karma(commands.Cog):
             downvotes
         )
 
-        embed_string = f"""Old post upvotes: {old_upvotes}, Old post downvotes: {old_downvotes}\n
-                           Rechecked post upvotes: {upvotes}, Rechecked post downvotes: {downvotes}\n
-                           Karma difference: {karma_difference}
-                        """
+        embed_string = f"""
+            Old post upvotes: {old_upvotes}, Old post downvotes: {old_downvotes}\n
+            Rechecked post upvotes: {upvotes}, Rechecked post downvotes: {downvotes}\n
+            Karma difference: {karma_difference}
+        """
 
         embed = discord.Embed(title=f'Post {post_id} check', description=embed_string)
         await ctx.send(embed=embed, delete_after=60)
@@ -659,8 +702,9 @@ class Karma(commands.Cog):
             await self._update_post_votes(payload, user, 0, -1)
             
     async def _insert_user(self, user: discord.Member):
-        stmt = '''INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
-                  ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3;'''
+        stmt = '''
+            INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
+            ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3;'''
         await self.bot.db.execute(
             stmt,
             user.id,

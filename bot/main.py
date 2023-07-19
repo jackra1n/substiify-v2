@@ -53,6 +53,15 @@ if not config.TOKEN:
 
 
 async def main():
+    try:
+        con: asyncpg.Connection = await asyncpg.connect(dsn=config.POSTGRESQL_DSN)
+        await con.close()
+    except Exception as error:
+        logger.error(f"Could not connect to database: {error}")
+        exit()
+
+    util.print_system_info()
+
     async with Substiify() as substiify, asyncpg.create_pool(
         dsn=config.POSTGRESQL_DSN, max_inactive_connection_lifetime=0
     ) as pool:
@@ -65,7 +74,6 @@ async def main():
 
 if __name__ == "__main__":
     prepare_files()
-    util.print_system_info()
     setup_logging()
 
     try:

@@ -7,4 +7,6 @@ toml
 psutil
 wavelink
 vacefron.py
+plotly
+kaleido
 #jishaku  # for debugging, not needed for normal use
