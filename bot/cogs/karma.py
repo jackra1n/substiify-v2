@@ -1,5 +1,6 @@
 import logging
 import shutil
+import locale
 from datetime import datetime
 from pathlib import Path
 
@@ -325,33 +326,53 @@ class Karma(commands.Cog):
         Shows karma stats for the server.
         Some stats incluce total karma, karma amount in top percentile and more.
         """
+        locale.setlocale(locale.LC_NUMERIC, 'de_CH.utf8')
         async with ctx.typing():
             embed = discord.Embed(title='Karma Stats')
 
             stmt_total_karma = "SELECT SUM(amount) FROM karma WHERE discord_server_id = $1"
             total_karma = await self.bot.db.fetchval(stmt_total_karma, ctx.guild.id) or 0
-            embed.add_field(name='Total Karma', value=f'`{total_karma}`', inline=False)
+            karma_users = await self.bot.db.fetchval("SELECT COUNT(*) FROM karma WHERE discord_server_id = $1", ctx.guild.id)
+            embed.add_field(name='Total Server Karma', value=f'`{total_karma:n} (of {karma_users} users)`', inline=False)
 
-            user_count = await self.bot.db.fetchval("SELECT COUNT(*) FROM karma WHERE discord_server_id = $1", ctx.guild.id)
+            avg_karma = total_karma / karma_users if karma_users > 0 else 0
+            embed.add_field(name='Average Karma per user', value=f'`{avg_karma:.2f}`', inline=False)
 
+            stmt_top_percentile = '''SELECT SUM(amount) AS total_karma
+                                     FROM (
+                                        SELECT amount
+                                        FROM karma
+                                        WHERE discord_server_id = $1
+                                        ORDER BY amount DESC
+                                        LIMIT (SELECT CEIL(0.1 * COUNT(*)) FROM karma)
+                                     ) AS top_karma;'''
             # How much karma do the top 10% of users have?
-            stmt_top_percentile = "SELECT SUM(amount) FROM karma WHERE discord_server_id = $1 ORDER BY amount DESC GROUP BY discord_server_id LIMIT $2"
-            top_percentile = await self.bot.db.fetchval(stmt_top_percentile, ctx.guild.id, int(user_count / 10)) or 0
-            embed.add_field(name='Top 10% users karma', value=f'`{top_percentile}`', inline=False)
+            top_percentile = await self.bot.db.fetchval(stmt_top_percentile, ctx.guild.id) or 0
+            percantege_of_total_karma = (top_percentile / total_karma) * 100
+            embed.add_field(name='Top 10% users karma', value=f"`{top_percentile:n} ({percantege_of_total_karma:.2f}% of total)`", inline=False)
 
+
+            stmt_top_percentile = '''SELECT SUM(amount) AS total_karma
+                                     FROM (
+                                        SELECT amount
+                                        FROM karma
+                                        WHERE discord_server_id = $1
+                                        ORDER BY amount DESC
+                                        LIMIT (SELECT CEIL(0.01 * COUNT(*)) FROM karma)
+                                     ) AS top_karma;'''
             # How much karma do the top 1% of users have?
-            stmt_top_percentile = "SELECT SUM(amount) FROM karma WHERE discord_server_id = $1 ORDER BY amount DESC GROUP BY discord_server_id LIMIT $2"
-            top_percentile = await self.bot.db.fetchval(stmt_top_percentile, ctx.guild.id, int(user_count / 100)) or 0
-            embed.add_field(name='Top 1% users karma', value=f'`{top_percentile}`', inline=False)
+            top_percentile = await self.bot.db.fetchval(stmt_top_percentile, ctx.guild.id) or 0
+            percantege_of_total_karma = (top_percentile / total_karma) * 100
+            embed.add_field(name='Top 1% users karma', value=f'`{top_percentile:n} ({percantege_of_total_karma:.2f}% of total)`', inline=False)
 
             # Average upvote to downvote ratio per post
-            stmt_avg_upvote_ratio = "SELECT AVG(upvotes / downvotes), COUNT(*) FROM post WHERE discord_server_id = $1 AND upvotes + downvotes > 2"
-            avg_upvote_ratio, post_count = await self.bot.db.fetchrow(stmt_avg_upvote_ratio, ctx.guild.id) or 0
-            embed.add_field(name='Average upvote ratio per post', value=f'`{avg_upvote_ratio:.2f}` ({post_count} posts)', inline=False)
+            stmt_avg_upvote_ratio = "SELECT AVG(upvotes / downvotes) as average, COUNT(*) as post_count FROM post WHERE discord_server_id = $1 AND upvotes + downvotes > 2"
+            avg_post_query = await self.bot.db.fetchrow(stmt_avg_upvote_ratio, ctx.guild.id)
+            avg_ratio = avg_post_query['average'] or 0
+            post_count = avg_post_query['post_count'] or 0
+            embed.add_field(name='Average upvote ratio per post', value=f'`{avg_ratio:.1f} ({post_count} posts)`', inline=False)
 
             await ctx.send(embed=embed)
-            await ctx.message.delete()
-
 
 
     @commands.hybrid_command(aliases=['plb'], usage="postlb")
