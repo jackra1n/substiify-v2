@@ -259,31 +259,33 @@ class Util(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
-        if payload.guild_id is None or payload.channel_id is None or payload.member is None or payload.message_id is None:
-            return
-        if payload.member.bot:
+        if payload.guild_id is None or payload.member.bot:
             return
 
         channel_map = {
             self.bug_channel_id: 'bug',
             self.suggestion_channel_id: 'suggestion',
         }
-
         if payload.channel_id not in channel_map:
             return
-        message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
-        if message.author != self.bot.user:
+
+        stmt_feedback = '''SELECT * FROM feedback WHERE discord_message_id = $1'''
+        feedback = await self.bot.db.fetchrow(stmt_feedback, payload.message_id)
+        if feedback is None:
             return
-        message_type = channel_map[payload.channel_id]
+
+        channel = await self.bot.fetch_channel(payload.channel_id)
+        feedback_message = await channel.fetch_message(payload.channel_id, payload.message_id)
+        feedback_type = feedback['feedback_type']
         if payload.emoji == self.accept_emoji:
             await self.edit_feedback_embed(payload, 'accepted')
-            await self.send_user_reply(payload, message_type, f'**accepted** {self.accept_emoji}')
+            await self.send_user_reply(feedback_message.embed, feedback_type, f'**accepted** {self.accept_emoji}')
         elif payload.emoji == self.deny_emoji:
             await self.edit_feedback_embed(payload, 'denied')
-            await self.send_user_reply(payload, message_type, f'**denied** {self.deny_emoji}')
+            await self.send_user_reply(feedback_message.embed, feedback_type, f'**denied** {self.deny_emoji}')
         else:
             return
-        await message.clear_reactions()       
+        await feedback_message.clear_reactions()       
 
     async def edit_feedback_embed(self, payload: discord.RawReactionActionEvent, action: str):
         color = discord.Colour.red() if 'denied' in action else discord.Colour.green()
