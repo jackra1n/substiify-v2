@@ -257,17 +257,6 @@ class Util(commands.Cog):
         embed.add_field(name="Hosted By:", value=host)
         return embed
 
-    @commands.hybrid_command(aliases=['report'], invoke_without_command=True)
-    async def feedback(self, ctx: commands.Context):
-        """
-        Allows you to report a bug or suggest a feature or an improvement to the developer team.
-        After submitting your bug, you will be able to see if it has been accepted or denied.
-        """
-        view = discord.ui.View()
-        view.add_item(FeedbackSelect())
-        await ctx.send('Choose a type of submission', view=view)
-
-
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if payload.guild_id is None or payload.channel_id is None or payload.member is None or payload.message_id is None:
@@ -280,31 +269,36 @@ class Util(commands.Cog):
             self.suggestion_channel_id: 'suggestion',
         }
 
-        if payload.channel_id in channel_map:
-            message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
-            if message.author != self.bot.user:
-                return
-            message_type = channel_map[payload.channel_id]
-            if payload.emoji == self.accept_emoji:
-                await self.send_user_reply(payload, message_type, f'**accepted** {self.accept_emoji}')
-            elif payload.emoji == self.deny_emoji:
-                await self.send_user_reply(payload, message_type, f'**denied** {self.deny_emoji}')
-            else:
-                return
-            await message.clear_reactions()        
+        if payload.channel_id not in channel_map:
+            return
+        message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        if message.author != self.bot.user:
+            return
+        message_type = channel_map[payload.channel_id]
+        if payload.emoji == self.accept_emoji:
+            await self.edit_feedback_embed(payload, 'accepted')
+            await self.send_user_reply(payload, message_type, f'**accepted** {self.accept_emoji}')
+        elif payload.emoji == self.deny_emoji:
+            await self.edit_feedback_embed(payload, 'denied')
+            await self.send_user_reply(payload, message_type, f'**denied** {self.deny_emoji}')
+        else:
+            return
+        await message.clear_reactions()       
 
-    async def send_user_reply(self, payload: discord.RawReactionActionEvent, submission_type: str, action: str):
+    async def edit_feedback_embed(self, payload: discord.RawReactionActionEvent, action: str):
         color = discord.Colour.red() if 'denied' in action else discord.Colour.green()
         channel = await self.bot.fetch_channel(payload.channel_id)
         message = await channel.fetch_message(payload.message_id)
         embed = message.embeds[0]
         embed.color = color
         await message.edit(embed=embed)
-        
-        user = await self.bot.fetch_user(int(embed.footer.text))
+
+    async def send_user_reply(self, feedback_embed: discord.Embed, submission_type: str, action: str):
+        color = discord.Colour.red() if 'denied' in action else discord.Colour.green()
+        user = await self.bot.fetch_user(int(feedback_embed.footer.text))
         new_embed = discord.Embed(
             title=f'{submission_type.capitalize()} submission',
-            description=embed.description,
+            description=feedback_embed.description,
             color=color
         )
         message_to_user = f'Hello {user.name}!\nYour {self.bot.user.mention} {submission_type} submission has been {action}.'
@@ -452,6 +446,16 @@ class Util(commands.Cog):
         await ctx.send(embed=embed)
         await ctx.message.delete()
 
+    @commands.hybrid_command(aliases=['report'], invoke_without_command=True)
+    async def feedback(self, ctx: commands.Context):
+        """
+        Allows you to report a bug or suggest a feature or an improvement to the developer team.
+        After submitting your bug, you will be able to see if it has been accepted or denied.
+        """
+        view = discord.ui.View()
+        view.add_item(FeedbackSelect())
+        await ctx.send('Choose a type of submission', view=view)
+
 class FeedbackSelect(discord.ui.Select):
     
     def __init__(self):
@@ -496,6 +500,12 @@ class Feedback(discord.ui.Modal):
         )
         embed.set_footer(text=interaction.user.id, icon_url=interaction.user.display_avatar.url)
         message = await channel.send(embed=embed)
+        
+        stmt_feedback = '''INSERT INTO feedback
+                           (feedback_type, feedback_text, discord_user_id, discord_server_id, discord_channel_id, discord_message_id)
+                           VALUES ($1, $2, $3, $4, $5, $6)'''
+        await interaction.client.db.execute(stmt_feedback, self.feedback_type, self.feedback.value, interaction.user.id, interaction.guild.id, channel_id, message.id)
+        
         await message.add_reaction(f'{self.accept_emoji}')
         await message.add_reaction(f'{self.deny_emoji}')
         await interaction.response.send_message(f'Thank you for submitting the {self.feedback_type}!', delete_after=30)

@@ -88,3 +88,14 @@ CREATE TABLE IF NOT EXISTS kasino_bet (
   option BIGINT,
   UNIQUE (kasino_id, discord_user_id)
 );
+
+CREATE TABLE IF NOT EXISTS feedback (
+  id SERIAL PRIMARY KEY,
+  discord_user_id BIGINT REFERENCES discord_user(discord_user_id),
+  discord_server_id BIGINT REFERENCES discord_server(discord_server_id),
+  discord_channel_id BIGINT REFERENCES discord_channel(discord_channel_id),
+  discord_message_id BIGINT NOT NULL,
+  feedback_type VARCHAR(255),
+  feedback TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
