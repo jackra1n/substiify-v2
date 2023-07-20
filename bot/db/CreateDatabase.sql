@@ -98,5 +98,5 @@ CREATE TABLE IF NOT EXISTS feedback (
   feedback_type VARCHAR(255) NOT NULL,
   content TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  accepted BOOLEAN,
+  accepted BOOLEAN
 );

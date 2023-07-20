@@ -34,35 +34,29 @@ class Feedback(commands.Cog):
     
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
-        if payload.guild_id is None or payload.channel_id is None or payload.member is None or payload.message_id is None:
+        if payload.guild_id is None or payload.member is None:
             return
+
         if payload.member.bot:
             return
 
         if payload.channel_id not in [BUG_CHANNEL_ID, SUGGESTION_CHANNEL_ID]:
+            return
+
+        if payload.emoji not in [ACCEPT_EMOJI, DENY_EMOJI]:
             return
     
         message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
         if message.author != self.bot.user:
             return
     
-        feedback_type = FeedbackType.BUG if payload.channel_id == BUG_CHANNEL_ID else FeedbackType.SUGGESTION
         stmt_update_feedback = '''UPDATE feedback SET accepted = $1 WHERE discord_message_id = $2'''
-        if payload.emoji == ACCEPT_EMOJI:
-            await self.bot.db.execute(stmt_update_feedback, True, payload.message_id)
-            feedback = await self.bot.db.fetchrow('SELECT * FROM feedback WHERE discord_message_id = $1', payload.message_id)
+        accepted = payload.emoji == ACCEPT_EMOJI
+        await self.bot.db.execute(stmt_update_feedback, accepted, payload.message_id) 
+        feedback = await self.bot.db.fetchrow('SELECT * FROM feedback WHERE discord_message_id = $1', payload.message_id)
 
-            await self.edit_feedback_embed(feedback)
-            await self.send_user_reply(payload, feedback, feedback_type)
-
-        elif payload.emoji == DENY_EMOJI:
-            await self.bot.db.execute(stmt_update_feedback, False, payload.message_id)
-            feedback = await self.bot.db.fetchrow('SELECT * FROM feedback WHERE discord_message_id = $1', payload.message_id)
-
-            await self.edit_feedback_embed(feedback)
-            await self.send_user_reply(payload, feedback, feedback_type)
-        else:
-            return
+        await self.edit_feedback_embed(feedback)
+        await self.send_user_reply(feedback)
 
         await message.clear_reactions()       
 
@@ -78,9 +72,13 @@ class Feedback(commands.Cog):
 
         await message.edit(embed=embed)
 
-    async def send_user_reply(self, feedback: Record, feedback_type: FeedbackType):
+    async def send_user_reply(self, feedback: Record):
+        feedback_type_str = feedback['feedback_type']
+        feedback_type = FeedbackType(feedback_type_str)
+
         is_accepted = feedback['accepted']
         outcome = 'accepted' if is_accepted else 'denied'
+
         color = discord.Colour.green() if is_accepted else discord.Colour.red()
         emoji = ACCEPT_EMOJI if is_accepted else DENY_EMOJI
 
@@ -123,9 +121,9 @@ class FeedbackModal(discord.ui.Modal):
 
     def __init__(self, feedback_type: FeedbackType):
         super().__init__(title='Suggestions & Feedback')
-        self.feedback_type = feedback_type
+        self.feedback_type = FeedbackType(feedback_type)
         self.feedback = discord.ui.TextInput(
-            label=feedback_type.value.capitalize(),
+            label=self.feedback_type.value.capitalize(),
             style=discord.TextStyle.long,
             placeholder='Write your bug fix or improvement suggestion here...',
             required=True,
@@ -148,7 +146,7 @@ class FeedbackModal(discord.ui.Modal):
         stmt_feedback = '''INSERT INTO feedback
                            (feedback_type, content, discord_user_id, discord_server_id, discord_channel_id, discord_message_id)
                            VALUES ($1, $2, $3, $4, $5, $6)'''
-        await interaction.client.db.execute(stmt_feedback, self.feedback_type, self.feedback.value, interaction.user.id, interaction.guild.id, channel_id, message.id)
+        await interaction.client.db.execute(stmt_feedback, self.feedback_type.value, self.feedback.value, interaction.user.id, interaction.guild.id, channel_id, message.id)
         
         await message.add_reaction(ACCEPT_EMOJI)
         await message.add_reaction(DENY_EMOJI)
