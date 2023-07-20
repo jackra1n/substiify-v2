@@ -12,6 +12,7 @@ from wavelink.ext import spotify
 logger = logging.getLogger(__name__)
 
 INITIAL_EXTENSIONS = [
+    'cogs.feedback'
     'cogs.free_games',
     'cogs.fun',
     'cogs.help',

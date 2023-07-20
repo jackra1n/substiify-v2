@@ -95,7 +95,8 @@ CREATE TABLE IF NOT EXISTS feedback (
   discord_server_id BIGINT REFERENCES discord_server(discord_server_id),
   discord_channel_id BIGINT REFERENCES discord_channel(discord_channel_id),
   discord_message_id BIGINT NOT NULL,
-  feedback_type VARCHAR(255),
-  feedback TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  feedback_type VARCHAR(255) NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  accepted BOOLEAN,
 );

@@ -3,7 +3,6 @@ import datetime
 import logging
 import math
 import platform
-import random
 import subprocess
 from random import choice, seed, shuffle
 
@@ -13,7 +12,6 @@ from core import values
 from core.bot import Substiify
 from discord import MessageType, app_commands
 from discord.ext import commands, tasks
-from discord.ext.commands import BucketType
 from pytz import timezone
 
 logger = logging.getLogger(__name__)
@@ -25,10 +23,6 @@ class Util(commands.Cog):
 
     def __init__(self, bot: Substiify):
         self.bot = bot
-        self.suggestion_channel_id = 876413286978031676
-        self.bug_channel_id = 876412993498398740
-        self.accept_emoji = discord.PartialEmoji.from_str('greenTick:876177251832590348')
-        self.deny_emoji = discord.PartialEmoji.from_str('redCross:876177262813278288')
         self.giveaway_task.start()
 
     @commands.command(name='teams', aliases=['team'])
@@ -257,55 +251,6 @@ class Util(commands.Cog):
         embed.add_field(name="Hosted By:", value=host)
         return embed
 
-    @commands.Cog.listener()
-    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
-        if payload.guild_id is None or payload.member.bot:
-            return
-
-        channel_map = {
-            self.bug_channel_id: 'bug',
-            self.suggestion_channel_id: 'suggestion',
-        }
-        if payload.channel_id not in channel_map:
-            return
-
-        stmt_feedback = '''SELECT * FROM feedback WHERE discord_message_id = $1'''
-        feedback = await self.bot.db.fetchrow(stmt_feedback, payload.message_id)
-        if feedback is None:
-            return
-
-        channel = await self.bot.fetch_channel(payload.channel_id)
-        feedback_message = await channel.fetch_message(payload.channel_id, payload.message_id)
-        feedback_type = feedback['feedback_type']
-        if payload.emoji == self.accept_emoji:
-            await self.edit_feedback_embed(payload, 'accepted')
-            await self.send_user_reply(feedback_message.embed, feedback_type, f'**accepted** {self.accept_emoji}')
-        elif payload.emoji == self.deny_emoji:
-            await self.edit_feedback_embed(payload, 'denied')
-            await self.send_user_reply(feedback_message.embed, feedback_type, f'**denied** {self.deny_emoji}')
-        else:
-            return
-        await feedback_message.clear_reactions()       
-
-    async def edit_feedback_embed(self, payload: discord.RawReactionActionEvent, action: str):
-        color = discord.Colour.red() if 'denied' in action else discord.Colour.green()
-        channel = await self.bot.fetch_channel(payload.channel_id)
-        message = await channel.fetch_message(payload.message_id)
-        embed = message.embeds[0]
-        embed.color = color
-        await message.edit(embed=embed)
-
-    async def send_user_reply(self, feedback_embed: discord.Embed, submission_type: str, action: str):
-        color = discord.Colour.red() if 'denied' in action else discord.Colour.green()
-        user = await self.bot.fetch_user(int(feedback_embed.footer.text))
-        new_embed = discord.Embed(
-            title=f'{submission_type.capitalize()} submission',
-            description=feedback_embed.description,
-            color=color
-        )
-        message_to_user = f'Hello {user.name}!\nYour {self.bot.user.mention} {submission_type} submission has been {action}.'
-        await user.send(content=message_to_user, embed=new_embed)
-
     async def _cooldown_error(self, ctx: commands.Context, error):
         if isinstance(error, commands.CommandOnCooldown):
             embed = discord.Embed(
@@ -362,7 +307,7 @@ class Util(commands.Cog):
     @commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
     async def clear_bot(self, ctx: commands.Context, amount: int):
         """Clears the bot's messages even in DMs"""
-        bots_messages = [messages async for messages in ctx.channel.history(limit=amount + 1) if messages.author == self.bot.user]
+        bots_messages = [message async for message in ctx.channel.history(limit=amount + 1) if message.author == self.bot.user]
 
         if len(bots_messages) <= 100 and isinstance(ctx.channel, discord.TextChannel):
             await ctx.message.delete()
@@ -392,14 +337,14 @@ class Util(commands.Cog):
         await ctx.message.delete()
         await ctx.send(embed=embed)
 
-    @commands.command(name="specialThanks",hidden=True)
+    @commands.command(name="specialThanks", hidden=True)
     async def special_thanks(self, ctx: commands.Context):
         peeople_who_helped = [
-            "<@205704051856244736>", # Sprütz#2222
-            "<@299478604809764876>", # TheBadGod#7826
-            "<@291291715598286848>", # joniiii#0742
-            "<@231151428167663616>", # Acurisu#0001
-            "<@153929916977643521>"  # BattleRush#1960
+            "<@205704051856244736>", # @sprutz
+            "<@299478604809764876>", # @thebadgod
+            "<@291291715598286848>", # @joniiiiii
+            "<@231151428167663616>", # @acurisu
+            "<@153929916977643521>"  # @battlerush
         ]
         shuffle(peeople_who_helped)
         embed = discord.Embed(
@@ -447,74 +392,6 @@ class Util(commands.Cog):
         embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar.url)
         await ctx.send(embed=embed)
         await ctx.message.delete()
-
-    @commands.hybrid_command(aliases=['report'], invoke_without_command=True)
-    async def feedback(self, ctx: commands.Context):
-        """
-        Allows you to report a bug or suggest a feature or an improvement to the developer team.
-        After submitting your bug, you will be able to see if it has been accepted or denied.
-        """
-        view = discord.ui.View()
-        view.add_item(FeedbackSelect())
-        await ctx.send('Choose a type of submission', view=view)
-
-class FeedbackSelect(discord.ui.Select):
-    
-    def __init__(self):
-        super().__init__(
-            placeholder='Select a type of submission...',
-            options=[
-                discord.SelectOption(label='Bug fix', description='Report a bug that needs to be fixed', emoji='🐛', value='bug'),
-                discord.SelectOption(label='Improvement suggestion', description='Suggest an improvement to the bot', emoji='👍', value='suggestion')
-            ]
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(Feedback(self.values[0]))
-
-class Feedback(discord.ui.Modal):
-
-    def __init__(self, feedback_type: str):
-        super().__init__(title='Suggestions & Feedback')
-        self.feedback_type = feedback_type
-        self.feedback = discord.ui.TextInput(
-            label=feedback_type.capitalize(),
-            style=discord.TextStyle.long,
-            placeholder='Write your bug fix or improvement suggestion here...',
-            required=True,
-            min_length=10,
-            max_length=300
-        )
-        self.add_item(self.feedback)
-
-    accept_emoji = discord.PartialEmoji.from_str('greenTick:876177251832590348')
-    deny_emoji = discord.PartialEmoji.from_str('redCross:876177262813278288')
-    suggestion_channel_id = 876413286978031676
-    bug_channel_id = 876412993498398740
-
-    async def on_submit(self, interaction: discord.Interaction):
-        channel_id = self.bug_channel_id if self.feedback_type == 'bug' else self.suggestion_channel_id
-        channel: discord.TextChannel = interaction.client.get_channel(channel_id)
-        embed = discord.Embed(
-            title=f'New {self.feedback_type} submission',
-            description=f'```{self.feedback.value}```\nSubmitted by: {interaction.user.mention}',
-            color=0x1E9FE3
-        )
-        embed.set_footer(text=interaction.user.id, icon_url=interaction.user.display_avatar.url)
-        message = await channel.send(embed=embed)
-        
-        stmt_feedback = '''INSERT INTO feedback
-                           (feedback_type, feedback_text, discord_user_id, discord_server_id, discord_channel_id, discord_message_id)
-                           VALUES ($1, $2, $3, $4, $5, $6)'''
-        await interaction.client.db.execute(stmt_feedback, self.feedback_type, self.feedback.value, interaction.user.id, interaction.guild.id, channel_id, message.id)
-        
-        await message.add_reaction(f'{self.accept_emoji}')
-        await message.add_reaction(f'{self.deny_emoji}')
-        await interaction.response.send_message(f'Thank you for submitting the {self.feedback_type}!', delete_after=30)
-
-    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-        await interaction.response.send_message('Oops! Something went wrong.', ephemeral=True)
-        logger.error(type(error), error, error.__traceback__)
 
 
 def time_up(seconds: int) -> str:
