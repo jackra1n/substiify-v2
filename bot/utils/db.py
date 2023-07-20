@@ -68,12 +68,6 @@ class Database:
     @_transaction("fetchval")
     async def fetchval(self, query, *args, **kwargs):
         pass
-    
-    async def _populate(self, ctx: Context) -> None:
-        servers = [(server.id, server.name) for server in self.bot.guilds]
-        query = "INSERT INTO discord_server(discord_server_id, server_name) VALUES ($1, $2)"
-        await self.executemany(query, servers)
-        await ctx.send("Database populated", delete_after=30)
 
     async def _insert_foundation(self, user: discord.Member, server: discord.Guild, channel: discord.abc.Messageable):
         avatar_url = user.display_avatar.url if user.display_avatar else None

@@ -793,7 +793,6 @@ class Karma(commands.Cog):
         to_embed = discord.Embed(description="Opening kasino, hold on tight...")
         kasino_msg = await ctx.send(embed=to_embed)
 
-        await self.bot.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
         stmt_kasino = '''INSERT INTO kasino (discord_server_id, discord_channel_id, discord_message_id, question, option_1, option_2)
                          VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'''
         return await self.bot.db.fetchval(stmt_kasino, ctx.guild.id, ctx.channel.id, kasino_msg.id, question, option_1, option_2)

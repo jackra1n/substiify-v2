@@ -12,6 +12,7 @@ from wavelink.ext import spotify
 logger = logging.getLogger(__name__)
 
 INITIAL_EXTENSIONS = [
+    'core.events',
     'cogs.feedback',
     'cogs.free_games',
     'cogs.fun',
@@ -72,8 +73,6 @@ class Substiify(commands.Bot):
 
     async def on_command_completion(self, ctx: commands.Context) -> None:
         logger.info(f'[{ctx.command.qualified_name}] executed for -> [{ctx.author}]')
-
-        await self.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
 
         server_id = ctx.guild.id if ctx.guild else None
         parameters = ctx.kwargs.values() if ctx.kwargs else ctx.args[2:]

@@ -447,7 +447,6 @@ class Owner(commands.Cog):
         Generates test data for the database
         """
         # fetch all users from the server
-        await self.bot.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
         async for user in ctx.guild.fetch_members(limit=None):
             print(f"inserting user: {user}...")
             stmt_insert_user = '''INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
