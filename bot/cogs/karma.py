@@ -373,7 +373,7 @@ class Karma(commands.Cog):
             embed.add_field(name='Average upvote ratio per post', value=f'`{avg_ratio:.1f} ({post_count} posts)`', inline=False)
 
             await ctx.send(embed=embed)
-        locale.setlocale(locale.LC_NUMERIC, '')
+        locale.setlocale(locale.LC_NUMERIC, None)
 
     @karma.command(name='graph', usage="graph")
     async def karma_stats_graph(self, ctx: commands.Context):
@@ -399,17 +399,8 @@ class Karma(commands.Cog):
             x = [entry[1] for entry in karma_percentiles]
             y = [entry[0] for entry in karma_percentiles]
 
-            # fig = go.Figure(data=go.Scatter(x=x, y=y))
-            # fig.update_layout(title='Karma Graph', xaxis_title='Percentile', yaxis_title='Karma')
-            # fig.update_xaxes(type='category')
-            # fig.update_yaxes(type='log')
-            # fig.update_layout(template='plotly_dark')
-            # fig.write_image('karma_graph.png')
-
             fig = go.Figure(data=go.Bar(x=x, y=y))
-            fig.update_layout(title='Karma Graph', xaxis_title='Percentile', yaxis_title='Karma')
-            # fig.update_xaxes(type='category')
-            # fig.update_yaxes(type='log')
+            fig.update_layout(title='Karma Graph', xaxis_title='Percentile of users', yaxis_title='Total karma')
             fig.update_layout(template='plotly_dark')
             fig.write_image('karma_graph.png')
 

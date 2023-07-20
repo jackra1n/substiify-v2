@@ -4,6 +4,7 @@ import logging
 from core.bot import Substiify
 from asyncpg import Record
 from enum import Enum
+from discord import app_commands
 from discord.ext import commands
 
 
@@ -92,15 +93,13 @@ class Feedback(commands.Cog):
         message_to_user = f'Hello {user.name}!\nYour {self.bot.user.mention} {feedback_type.value} submission has been **{outcome}** {emoji}.'
         await user.send(content=message_to_user, embed=new_embed)
 
-    @commands.hybrid_command(aliases=['report'], invoke_without_command=True)
-    async def feedback(self, ctx: commands.Context):
+    @app_commands.command(name='feedback', description='Allows you to report a bug or suggest a feature or an improvement to the developer team.')
+    async def feedback(self, interaction: discord.Interaction, feedback_type: FeedbackType):
         """
         Allows you to report a bug or suggest a feature or an improvement to the developer team.
-        After submitting your bug, you will be able to see if it has been accepted or denied.
+        After submitting your bug, you will get a message from the bot with the outcome of your submission.
         """
-        view = discord.ui.View()
-        view.add_item(FeedbackSelect())
-        await ctx.send('Choose a type of submission', view=view, ephemeral=True)
+        await interaction.response.send_modal(FeedbackModal(feedback_type))
 
 
 class FeedbackSelect(discord.ui.Select):
