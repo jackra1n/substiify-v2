@@ -52,7 +52,10 @@ class Events(commands.Cog):
         await self.bot.db.execute(stmt, after.name, after.category_id, after.id)
 
     async def _insert_server(self, guild: discord.Guild):
-        stmt = 'INSERT INTO discord_server (discord_server_id, server_name) VALUES ($1, $2)'
+        stmt = '''
+            INSERT INTO discord_server (discord_server_id, server_name) VALUES ($1, $2)
+            ON CONFLICT (discord_server_id) DO UPDATE SET server_name = $2
+        '''
         await self.bot.db.execute(stmt, guild.id, guild.name)
 
 

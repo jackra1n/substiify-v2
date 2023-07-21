@@ -52,7 +52,7 @@ class Util(commands.Cog):
         embed.add_field(name='Team 2', value="\n".join([f'{member.mention} ' for member in team_2]))
         await ctx.send(embed=embed)
 
-    @commands.hybrid_group(aliases=["give"], invoke_without_command=True)
+    @commands.hybrid_group(aliases=["give"])
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     async def giveaway(self, ctx: commands.Context):
         """
@@ -136,8 +136,8 @@ class Util(commands.Cog):
         await msg.edit(embed=embed)
         await ctx.message.delete()
 
-    @giveaway.command(usage="list")
-    async def list(self, ctx: commands.Context):
+    @giveaway.command(name='list',usage="list")
+    async def giveaway_list(self, ctx: commands.Context):
         """
         Lists all active giveaways.
         """

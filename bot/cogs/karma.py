@@ -395,10 +395,9 @@ class Karma(commands.Cog):
                 return await ctx.send(embed=embed)
 
             karma_percentiles = []
-            for i in range(0, 100, 5):
+            for i in range(100, 0, -5):
                 total_percentile_karma = sum(entry['amount'] for entry in karma[:int(users_count * (i / 100))])
                 karma_percentiles.append((total_percentile_karma, i))
-            karma_percentiles.append((sum(entry['amount'] for entry in karma), 100))
 
             x = [entry[1] for entry in karma_percentiles]
             y = [entry[0] for entry in karma_percentiles]
