@@ -27,10 +27,9 @@ class Karma(commands.Cog):
 
     COG_EMOJI = "☯️"
 
-    def __init__(self, bot: Substiify):
+    def __init__(self, bot: Substiify, vote_channels: list[int]):
         self.bot = bot
-        self.vote_channels = None
-        bot.loop.create_task(self.load_vote_channels())
+        self.vote_channels = vote_channels
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -118,14 +117,12 @@ class Karma(commands.Cog):
         stmt = '''INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote)
                   VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO UPDATE SET upvote = $5'''
         await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, channel.category_id, False)
+
         if channel.id in self.vote_channels:
             self.vote_channels.remove(channel.id)
+
         await ctx.message.delete()
         await ctx.send(embed=discord.Embed(description=f'Votes has been stopped in {channel.mention}!', color=0xf66045))
-
-    async def load_vote_channels(self) -> list:
-        query = await self.bot.db.fetch('SELECT * FROM discord_channel WHERE upvote = true')
-        self.vote_channels = [x['discord_channel_id'] for x in query] if query is not None else []
 
     def get_upvote_emote(self):
         return self.bot.get_emoji(values.UPVOTE_EMOTE_ID)
@@ -144,10 +141,13 @@ class Karma(commands.Cog):
         """
         if user is None:
             user = ctx.author
+
         if user.bot:
             return await ctx.reply(embed=discord.Embed(description="Bots don't have karma!", color=0xf66045))
+
         user_karma = await self._get_user_karma(user.id, ctx.guild.id)
         user_karma = 0 if user_karma is None else user_karma
+
         embed = discord.Embed(title=f'Karma - {ctx.guild.name}', description=f'{user.mention} has {user_karma} karma.')
         await ctx.send(embed=embed, delete_after=120)
         await ctx.message.delete()
@@ -387,9 +387,13 @@ class Karma(commands.Cog):
                 WHERE discord_server_id = $1
                 ORDER BY amount ASC
             '''
-            
+
             karma = await self.bot.db.fetch(stmt_karma, ctx.guild.id)
             users_count = len(karma)
+            if users_count == 0:
+                embed = discord.Embed(title='Karma graph', description='No users have karma.')
+                return await ctx.send(embed=embed)
+
             karma_percentiles = []
             for i in range(0, 100, 5):
                 total_percentile_karma = sum(entry['amount'] for entry in karma[:int(users_count * (i / 100))])
@@ -668,40 +672,48 @@ class Karma(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
-        user = await self.check_payload(payload)
-        if user is None:
-            return
-        await self._insert_user(user)
-        if payload.emoji.id in await self._get_karma_upvote_emotes(payload.guild_id):
-            await self._update_karma(payload, user, 1)
-            await self._update_post_votes(payload, user, 1, 0)
-        elif payload.emoji.id in await self._get_karma_downvote_emotes(payload.guild_id):
-            await self._update_karma(payload, user, -1)
-            await self._update_post_votes(payload, user, -1, 0)
+        await self.process_reaction(payload, add_reaction=True)
 
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
+        await self.process_reaction(payload, add_reaction=False)
+
+    async def process_reaction(self, payload: discord.RawReactionActionEvent, add_reaction: bool) -> None:
         user = await self.check_payload(payload)
         if user is None:
             return
+
+        upvote_emotes = await self._get_karma_upvote_emotes(payload.guild_id)
+        downvote_emotes = await self._get_karma_downvote_emotes(payload.guild_id)
+
+        if payload.emoji.id in upvote_emotes:
+            karma_modifier = 1 if add_reaction else -1
+            post_votes_modifier = 1 if add_reaction else 0
+        elif payload.emoji.id in downvote_emotes:
+            karma_modifier = -1 if add_reaction else 1
+            post_votes_modifier = -1 if add_reaction else 0
+        else:
+            return
+        
+        server = self.bot.get_guild(payload.guild_id) or await self.bot.fetch_guild(payload.guild_id)
+
         await self._insert_user(user)
-        if payload.emoji.id in await self._get_karma_upvote_emotes(payload.guild_id):
-            await self._update_karma(payload, user, -1)
-            await self._update_post_votes(payload, user, 0, 1)
-        elif payload.emoji.id in await self._get_karma_downvote_emotes(payload.guild_id):
-            await self._update_karma(payload, user, 1)
-            await self._update_post_votes(payload, user, 0, -1)
+        await self._insert_server(server)
+
+        await self._update_karma(payload, user, karma_modifier)
+        await self._update_post_votes(payload, user, post_votes_modifier, 0)
             
     async def _insert_user(self, user: discord.Member):
         stmt = '''
             INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
             ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3;'''
-        await self.bot.db.execute(
-            stmt,
-            user.id,
-            user.display_name,
-            user.display_avatar.url,
-        )
+        await self.bot.db.execute(stmt, user.id, user.display_name, user.display_avatar.url)
+
+    async def _insert_server(self, server: discord.Guild):
+        stmt = '''
+            INSERT INTO discord_server (discord_server_id, name, icon) VALUES ($1, $2, $3)
+            ON CONFLICT (discord_server_id) DO UPDATE SET name = $2, icon = $3;'''
+        await self.bot.db.execute(stmt, server.id, server.name, server.icon.url)
 
     async def _update_karma(self, payload: discord.RawReactionActionEvent, user: discord.Member, amount: int):
         await self.bot.db.execute(
@@ -918,4 +930,6 @@ class Karma(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(Karma(bot))
+    query = await bot.db.fetch('SELECT * FROM discord_channel WHERE upvote = True')
+    upvote_channels = [channel['discord_channel_id'] for channel in query] or []
+    await bot.add_cog(Karma(bot, upvote_channels))

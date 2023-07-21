@@ -37,7 +37,7 @@ class Util(commands.Cog):
         if len(voice_members) < 4:
             return await ctx.send('You must have at least 4 members in your voice channel to use this command.')
 
-        random.shuffle(voice_members)
+        shuffle(voice_members)
         team_1 = []
         team_2 = []
 
