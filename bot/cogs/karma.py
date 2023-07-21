@@ -395,20 +395,24 @@ class Karma(commands.Cog):
                 return await ctx.send(embed=embed)
 
             karma_percentiles = []
-            for i in range(100, 0, -5):
-                total_percentile_karma = sum(entry['amount'] for entry in karma[:int(users_count * (i / 100))])
+            for i in range(0, 101, 5):
+                karma_percentile_list = karma[:int(users_count * (i / 100))]
+                total_percentile_karma = sum(entry['amount'] for entry in karma_percentile_list)
                 karma_percentiles.append((total_percentile_karma, i))
 
             x = [entry[1] for entry in karma_percentiles]
             y = [entry[0] for entry in karma_percentiles]
 
+            timestamp = datetime.now().timestamp()
+            filename = f'karma_graph_{timestamp}.png'
+
             fig = go.Figure(data=go.Bar(x=x, y=y))
             fig.update_layout(title='Karma Graph', xaxis_title='Percentile of users', yaxis_title='Total karma')
             fig.update_layout(template='plotly_dark')
-            fig.write_image('karma_graph.png')
+            fig.write_image(filename)
 
-            await ctx.send(file=discord.File('karma_graph.png'))
-            os.remove('karma_graph.png')
+            await ctx.send(file=discord.File(filename))
+            os.remove(filename)
 
 
     @commands.hybrid_command(aliases=['plb'], usage="postlb")
