@@ -133,7 +133,7 @@ class Karma(commands.Cog):
     def get_downvote_emote(self):
         return self.bot.get_emoji(values.DOWNVOTE_EMOTE_ID)
 
-    @commands.hybrid_group(aliases=["k"], usage="karma [user]", invoke_without_command=True,)
+    @commands.group(aliases=["k"], usage="karma [user]", invoke_without_command=True,)
     @app_commands.describe(
         user='Which user do you want to see the karma of? If not specified, it will show your own karma.'
     )

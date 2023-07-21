@@ -16,7 +16,7 @@ class Events(commands.Cog):
 
     @commands.Cog.listener()
     async def on_command(self, ctx: commands.Context):
-        self.bot.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
+        await self.bot.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
 
     #
     # GUILD EVENTS
