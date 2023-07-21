@@ -4,7 +4,7 @@ import logging
 import math
 import platform
 import subprocess
-from random import choice, seed, shuffle
+from random import SystemRandom, shuffle
 
 import discord
 import psutil
@@ -125,32 +125,26 @@ class Util(commands.Cog):
         except Exception:
             await ctx.send("The message couldn't be found in this channel")
             return
+
         users = [user async for user in msg.reactions[0].users() if not user.bot]
-        users.pop(users.index(self.bot.user))
 
         prize = await self.get_giveaway_prize(msg)
         giveaway_host = msg.embeds[0].fields[0].value
         embed = self.create_giveaway_embed(giveaway_host, prize)
-        random_seed_value = datetime.datetime.now().timestamp()
 
-        if len(users) <= 0:
-            embed.set_footer(text="No one won the Giveaway")
-        else:
-            seed(random_seed_value + ctx.message.id)
-            winner = choice(users)
-            embed.add_field(name=f"Congratulations on winning '{prize}'", value=winner.mention)
-            await msg.channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
+        await self.pick_winner(msg.channel, users, prize, embed)
         await msg.edit(embed=embed)
         await ctx.message.delete()
 
     @giveaway.command(usage="list")
-    async def list(self, ctx):
+    async def list(self, ctx: commands.Context):
         """
         Lists all active giveaways.
         """
         giveaways = await self.bot.db.fetch("SELECT * FROM giveaway WHERE discord_server_id = $1", ctx.guild.id)
         if len(giveaways) == 0:
             return await ctx.send("There are no active giveaways")
+
         embed = discord.Embed(title="Active Giveaways", description="")
         for giveaway in giveaways:
             embed.description += f"[{giveaway['prize']}](https://discord.com/channels/{giveaway['discord_server_id']}/{giveaway['discord_channel_id']}/{giveaway['discord_message_id']}) - Ends <t:{int(giveaway['end_date'].timestamp())}:R>\n"
@@ -158,7 +152,7 @@ class Util(commands.Cog):
 
     @commands.command(name="giveawayInfo", hidden=True)
     @commands.is_owner()
-    async def giveaway_info(self, ctx):
+    async def giveaway_info(self, ctx: commands.Context):
         """
         Shows information about he giveaway task.
         """
@@ -198,7 +192,6 @@ class Util(commands.Cog):
     async def giveaway_task(self):
         giveaways = await self.bot.db.fetch('SELECT * FROM giveaway')
         for giveaway in giveaways:
-            random_seed_value = datetime.datetime.now().timestamp()
             if datetime.datetime.now() < giveaway['end_date']:
                 return
             channel = await self.bot.fetch_channel(giveaway['discord_channel_id'])
@@ -207,24 +200,26 @@ class Util(commands.Cog):
             except discord.NotFound:
                 await self.bot.db.execute('DELETE FROM giveaway WHERE id = $1', giveaway['id'])
                 return await channel.send("Could not find the giveaway message! Deleting the giveaway.", delete_after=180)
-            users = [user async for user in message.reactions[0].users() if not user.bot]
             author_id = giveaway['discord_user_id']
             author = self.bot.get_user(author_id) or await self.bot.fetch_user(author_id)
+            users = [user async for user in message.reactions[0].users() if not user.bot]
             prize = giveaway['prize']
             embed = self.create_giveaway_embed(author, prize)
 
-            # Check if User list is not empty
-            if len(users) <= 0:
-                embed.remove_field(0)
-                embed.set_footer(text="No one won the Giveaway")
-                await channel.send('No one won the Giveaway')
-            else:
-                seed(random_seed_value + giveaway['discord_message_id'])
-                winner = choice(users)
-                embed.add_field(name=f"Congratulations on winning '{prize}'", value=winner.mention)
-                await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
+            await self.pick_winner(users, channel, prize, embed)
             await message.edit(embed=embed)
             await self.bot.db.execute('DELETE FROM giveaway WHERE id = $1', giveaway['id'])
+
+    async def pick_winner(self, users: list[discord.Member], channel: discord.TextChannel, prize: str, embed: discord.Embed):
+        # Check if User list is not empty
+        if len(users) <= 0:
+            embed.remove_field(0)
+            embed.set_footer(text="No one won the Giveaway")
+            await channel.send('No one won the Giveaway')
+        else:
+            winner = SystemRandom.choice(users)
+            embed.add_field(name=f"Congratulations on winning '{prize}'", value=winner.mention)
+            await channel.send(f'Congratulations {winner.mention}! You won **{prize}**!')
 
     async def get_giveaway_prize(self, msg: discord.Message):
         return msg.embeds[0].description.split("Win **")[1].split("**!")[0]
