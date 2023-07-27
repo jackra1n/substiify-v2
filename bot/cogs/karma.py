@@ -238,7 +238,7 @@ class Karma(commands.Cog):
                 embed.description = 'No users have any karma.'
             embed.description = ''
             for index, entry in enumerate(query, start=1):
-                user = await self.bot.fetch_user(entry.discord_user_id)
+                user = self.bot.get_user(entry.discord_user_id) or await self.bot.fetch_user(entry.discord_user_id)
                 embed.description += f'`{str(index).rjust(2)}.` | `{entry.amount}` - {user.mention}\n'
             await ctx.send(embed=embed)
             await ctx.message.delete()
