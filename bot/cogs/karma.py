@@ -835,9 +835,9 @@ class Karma(commands.Cog):
         stmt_kasino_and_bets = '''SELECT * FROM kasino JOIN kasino_bet ON kasino.id = kasino_bet.kasino_id
                                   WHERE kasino.id = $1'''
         kasino_and_bets = await self.bot.db.fetch(stmt_kasino_and_bets, kasino_id)
+        stmt_update_user_karma = '''UPDATE user_karma SET karma = karma + $1
+                                    WHERE discord_user_id = $2 AND discord_server_id = $3'''
         for bet in kasino_and_bets:
-            stmt_update_user_karma = '''UPDATE user_karma SET karma = karma + $1
-                                        WHERE discord_user_id = $2 AND discord_server_id = $3'''
             await self.bot.db.execute(stmt_update_user_karma, bet['amount'], bet['discord_user_id'], bet['discord_server_id'])
             user_karma = await self._get_user_karma(bet['discord_user_id'], bet['discord_server_id'])
             output = discord.Embed(
