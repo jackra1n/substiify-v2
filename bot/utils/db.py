@@ -4,7 +4,6 @@ from pathlib import Path
 import asyncpg
 import discord
 from asyncpg import Record
-from discord.ext.commands import Context
 
 logger = logging.getLogger(__name__)
 

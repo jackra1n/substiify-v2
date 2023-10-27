@@ -1,7 +1,5 @@
 import logging
-import subprocess
 import random
-from os import path, walk
 from typing import Literal, Optional
 
 import discord

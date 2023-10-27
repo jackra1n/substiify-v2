@@ -3,7 +3,6 @@ import asyncio
 import datetime
 import logging
 import random
-import re
 
 import discord
 import wavelink
@@ -127,7 +126,7 @@ class Music(commands.Cog):
             if not tracks:
                 return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
 
-        elif "soundcloud.com" in search and not "sets/" in search:
+        elif "soundcloud.com" in search and "sets/" not in search:
             tracks = await player.current_node.get_tracks(query=search, cls=wavelink.SoundCloudTrack)
 
         else: 
