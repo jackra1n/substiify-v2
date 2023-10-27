@@ -226,7 +226,7 @@ class Karma(commands.Cog):
         last_action = ''
         for emote in karma_emotes:
             if emote['increase_karma'] != last_action:
-                embed_string += f'\n`{"add" if emote["increase_karma"] == True else "remove"}:` '
+                embed_string += f'\n`{"add" if emote["increase_karma"] is True else "remove"}:` '
                 last_action = emote['increase_karma']
             embed_string += f"{self.bot.get_emoji(emote['discord_emote_id'])} "
         embed = discord.Embed(title=f'Karma Emotes - {ctx.guild.name}', description=embed_string)
