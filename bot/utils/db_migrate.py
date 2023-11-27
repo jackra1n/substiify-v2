@@ -5,6 +5,8 @@ import asyncio
 from asyncpg.connection import Connection
 from pathlib import Path
 
+from datetime import datetime
+
 
 async def migrate_db() -> None:
     # get sqlite databse path
@@ -45,9 +47,17 @@ async def migrate_db() -> None:
     sqlite_cursor.execute("SELECT * FROM discord_channel")
     channel_rows = sqlite_cursor.fetchall()
     for row in channel_rows:
+        # if parent_discord_channel_id exists, find it in the db and insert it first
+        if row[3] is not None:
+            sqlite_cursor.execute("SELECT * FROM discord_channel WHERE discord_channel_id = ?", (row[3],))
+            parent_row = sqlite_cursor.fetchone()
+            await postgres_conn.execute(
+                "INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO NOTHING",
+                int(parent_row[0]), str(parent_row[1]), int(parent_row[2]), int(parent_row[3]), int(parent_row[4])
+            )
         await postgres_conn.execute(
-            "INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_server_id, upvote) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO NOTHING",
-            row[0], row[1], row[2], row[3], row[4]
+            "INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO NOTHING",
+            int(row[0]), str(row[1]), int(row[2]), int(row[3]), int(row[4])
         )
 
     # migrate discord_user
@@ -57,7 +67,7 @@ async def migrate_db() -> None:
     for row in user_rows:
         await postgres_conn.execute(
             "INSERT INTO discord_user (discord_user_id, username, avatar, is_bot) VALUES ($1, $2, $3, $4) ON CONFLICT (discord_user_id) DO NOTHING",
-            row[0], row[1], row[2], row[3]
+            int(row[0]), str(row[1]), str(row[2]), bool(row[3])
         )
 
     # migrate command_history
@@ -67,17 +77,7 @@ async def migrate_db() -> None:
     for row in command_rows:
         await postgres_conn.execute(
             "INSERT INTO command_history (id, command_name, parameters, discord_user_id, discord_server_id, discord_channel_id, discord_message_id, timestamp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING",
-            row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]
-        )
-
-    # migrate giveaway
-    print("Migrating giveaway...")
-    sqlite_cursor.execute("SELECT * FROM giveaway")
-    giveaway_rows = sqlite_cursor.fetchall()
-    for row in giveaway_rows:
-        await postgres_conn.execute(
-            "INSERT INTO giveaway (id, start_date, end_date, prize, discord_user_id, discord_server_id, discord_channel_id, discord_message_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING",
-            row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]
+            int(row[0]), str(row[1]), str(row[2]), int(row[3]), int(row[4]), int(row[5]), int(row[6]), int(row[7])
         )
 
     # migrate karma
@@ -87,7 +87,7 @@ async def migrate_db() -> None:
     for row in karma_rows:
         await postgres_conn.execute(
             "INSERT INTO karma (id, discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING",
-            row[0], row[1], row[2], row[3]
+            int(row[0]), int(row[1]), int(row[2]), int(row[3])
         )
 
     # migrate post
@@ -97,7 +97,7 @@ async def migrate_db() -> None:
     for row in post_rows:
         await postgres_conn.execute(
             "INSERT INTO post (discord_message_id, discord_user_id, discord_server_id, discord_channel_id, created_at, upvotes, downvotes) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (discord_message_id) DO NOTHING",
-            row[0], row[1], row[2], row[3], row[4], row[5], row[6]
+            int(row[0]), int(row[1]), int(row[2]), int(row[3]), datetime.fromtimestamp(int(row[4])), int(row[5]), int(row[6])
         )
 
     # migrate karma_emote
@@ -107,28 +107,7 @@ async def migrate_db() -> None:
     for row in karma_emote_rows:
         await postgres_conn.execute(
             "INSERT INTO karma_emote (id, discord_emote_id, discord_server_id, increase_karma) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING",
-            row[0], row[1], row[2], row[3]
-        )
-
-
-    # migrate kasino
-    print("Migrating kasino...")
-    sqlite_cursor.execute("SELECT * FROM kasino")
-    kasino_rows = sqlite_cursor.fetchall()
-    for row in kasino_rows:
-        await postgres_conn.execute(
-            "INSERT INTO kasino (id, discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING",
-            row[0], row[1], row[2], row[3]
-        )
-    
-    # migrate kasino_bet
-    print("Migrating kasino_bet...")
-    sqlite_cursor.execute("SELECT * FROM kasino_bet")
-    kasino_bet_rows = sqlite_cursor.fetchall()
-    for row in kasino_bet_rows:
-        await postgres_conn.execute(
-            "INSERT INTO kasino_bet (id, kasino_id, discord_user_id, amount, option) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (id) DO NOTHING",
-            row[0], row[1], row[2], row[3], row[4]
+            int(row[0]), int(row[1]), int(row[2]), bool(row[3])
         )
 
     # close connections
