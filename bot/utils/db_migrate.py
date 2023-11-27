@@ -2,6 +2,10 @@ import sqlite3
 import asyncpg
 import asyncio
 
+from asyncpg.connection import Connection
+from pathlib import Path
+
+
 async def migrate_db() -> None:
     # get sqlite databse path
     db_path = input("Enter the path to the sqlite database: ")
@@ -13,12 +17,20 @@ async def migrate_db() -> None:
         print(f"Error connecting to sqlite database: {e}")
         return
     # connect to postgresql database
-    postgres_dsn = input("Enter the postgresql dsn: ")
+    postgres_dsn = input("Enter the postgresql dsn (leave blank for default): ")
+    if postgres_dsn == "":
+        postgres_dsn = "postgresql://postgres:example@localhost:5432/substiify"
     try:
-        postgres_conn = await asyncpg.connect(postgres_dsn)
+        postgres_conn: Connection = await asyncpg.connect(postgres_dsn)
     except Exception as e:
         print(f"Error connecting to postgresql: {e}")
         return
+    
+    # create tables in postgresql using the sql script
+    print("Creating tables in postgresql...")
+    db_script = Path("../db/CreateDatabase.sql").read_text('utf-8')
+    await postgres_conn.execute(db_script)              
+
     # migrate discord_server
     print("Migrating discord_server...")
     sqlite_cursor.execute("SELECT * FROM discord_server")
