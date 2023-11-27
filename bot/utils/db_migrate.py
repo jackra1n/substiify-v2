@@ -51,13 +51,14 @@ async def migrate_db() -> None:
         if row[3] is not None:
             sqlite_cursor.execute("SELECT * FROM discord_channel WHERE discord_channel_id = ?", (row[3],))
             parent_row = sqlite_cursor.fetchone()
-            await postgres_conn.execute(
-                "INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO NOTHING",
-                int(parent_row[0]), str(parent_row[1]), int(parent_row[2]), int(parent_row[3]), int(parent_row[4])
-            )
+            if parent_row is not None:
+                await postgres_conn.execute(
+                    "INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO NOTHING",
+                    parent_row[0], parent_row[1], parent_row[2], parent_row[3], bool(parent_row[4])
+                )
         await postgres_conn.execute(
             "INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO NOTHING",
-            int(row[0]), str(row[1]), int(row[2]), int(row[3]), int(row[4])
+            row[0], row[1], row[2], row[3], bool(row[4])
         )
 
     # migrate discord_user
