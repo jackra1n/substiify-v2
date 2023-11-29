@@ -1,6 +1,6 @@
 #install with "pip3 install -r requirements.txt"
 
-discord.py[voice,speed]
+discord.py[voice]
 asyncpg
 pytz
 toml
