@@ -403,7 +403,7 @@ def create_command_usage_embed(results):
     commands_count = ""
     for result in results:
         commands_used += f"`{result['command_name']}`\n"
-        commands_count += f"{result['count']}\n"
+        commands_count += f"{result['cnt']}\n"
     embed = discord.Embed(color=values.PRIMARY_COLOR)
     embed.add_field(name="Command", value=commands_used, inline=True)
     embed.add_field(name="Count", value=commands_count, inline=True)
