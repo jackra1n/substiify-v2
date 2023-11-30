@@ -1,4 +1,3 @@
-import locale
 import logging
 import os
 import shutil
@@ -327,8 +326,6 @@ class Karma(commands.Cog):
         Shows karma stats for the server.
         Some stats incluce total karma, karma amount in top percentile and more.
         """
-        locale.setlocale(locale.LC_NUMERIC, 'de_CH.utf8')
-
         async with ctx.typing():
             embed = discord.Embed(title='Karma Stats')
 
@@ -372,7 +369,6 @@ class Karma(commands.Cog):
             embed.add_field(name='Average upvote ratio per post', value=f'`{avg_ratio:.1f} ({post_count} posts)`', inline=False)
 
             await ctx.send(embed=embed)
-        locale.setlocale(locale.LC_NUMERIC, None)
 
     @karma.command(name='graph', usage="graph")
     async def karma_stats_graph(self, ctx: commands.Context):
