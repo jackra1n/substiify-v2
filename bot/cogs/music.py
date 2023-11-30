@@ -224,6 +224,7 @@ class MusicController(ui.View):
     @ui.button(label='Skip', emoji='⏭️', row=2, style=ButtonStyle.secondary)
     async def skip_button(self, interaction: discord.Interaction, button: ui.Button):
         await self.player.skip()
+        await interaction.response.defer()
 
     @ui.button(label='Shuffle', emoji='🔀', row=2, style=ButtonStyle.secondary)
     async def shuffle_button(self, interaction: discord.Interaction, button: ui.Button):
