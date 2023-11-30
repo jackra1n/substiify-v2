@@ -210,7 +210,7 @@ class Owner(commands.Cog):
         """
         Shows a lits of most used command on the current server
         """
-        stmt_usage = 'SELECT command_name, COUNT(*) AS cnt FROM command_history WHERE guild_id = $1 GROUP BY command_name ORDER BY cnt DESC LIMIT 10'
+        stmt_usage = 'SELECT command_name, COUNT(*) AS cnt FROM command_history WHERE discord_server_id = $1 GROUP BY command_name ORDER BY cnt DESC LIMIT 10'
         commands_used = await self.bot.db.fetch(stmt_usage, ctx.guild.id)
         embed = create_command_usage_embed(commands_used)
         embed.title = f"Top 10 used commands on: **{ctx.guild.name}**"
@@ -238,7 +238,7 @@ class Owner(commands.Cog):
         amount = min(amount, 20)
         stmt_last = '''SELECT * FROM command_history JOIN discord_user
                        ON command_history.discord_user_id = discord_user.discord_user_id
-                       WHERE guild_id = $1 ORDER BY date DESC LIMIT $2'''
+                       WHERE discord_server_id = $1 ORDER BY date DESC LIMIT $2'''
         commands_used = await self.bot.db.fetch(stmt_last, ctx.guild.id, amount)
         longest_user = self.get_longest_property_length(commands_used, 'username')
         longest_cmd = self.get_longest_property_length(commands_used, 'command_name')
