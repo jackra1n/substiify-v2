@@ -717,9 +717,9 @@ class Karma(commands.Cog):
 
     async def _insert_server(self, server: discord.Guild):
         stmt = '''
-            INSERT INTO discord_server (discord_server_id, name, icon) VALUES ($1, $2, $3)
-            ON CONFLICT (discord_server_id) DO UPDATE SET name = $2, icon = $3;'''
-        await self.bot.db.execute(stmt, server.id, server.name, server.icon.url)
+            INSERT INTO discord_server (discord_server_id, server_name) VALUES ($1, $2)
+            ON CONFLICT (discord_server_id) DO UPDATE SET server_name = $2;'''
+        await self.bot.db.execute(stmt, server.id, server.name)
 
     async def _update_karma(self, payload: discord.RawReactionActionEvent, user: discord.Member, amount: int):
         await self.bot.db.execute(
