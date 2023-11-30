@@ -19,7 +19,6 @@ from datetime import datetime
 from pathlib import Path
 
 
-
 class Owner(commands.Cog):
 
     COG_EMOJI = "👑"
