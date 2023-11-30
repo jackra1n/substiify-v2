@@ -11,7 +11,6 @@ from utils.db import Database
 logger = logging.getLogger(__name__)
 
 INITIAL_EXTENSIONS = [
-    'core.events',
     'cogs.feedback',
     'cogs.free_games',
     'cogs.fun',
