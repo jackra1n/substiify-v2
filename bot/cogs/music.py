@@ -131,13 +131,10 @@ class Music(commands.Cog):
         Disconnects the player from the voice channel and clears its queue.
         """
         player: wavelink.Player = ctx.voice_client
-        await player.disconnect()
 
         if hasattr(player, 'controller_message'):
-            try:
-                await player.controller_message.delete()
-            except discord.NotFound:
-                pass
+            await player.controller_message.delete()
+        await player.disconnect()
         embed = discord.Embed(title='⏹️ Disconnected', color=EMBED_COLOR)
         await ctx.send(embed=embed, delete_after=30)
 
@@ -195,26 +192,10 @@ class Music(commands.Cog):
         embed.set_footer(text=f'Use `{ctx.prefix}cleanup <enable/disable>` to toggle.')
         await ctx.send(embed=embed)
 
-
-class LoopSelect(ui.Select):
-    def __init__(self, player: wavelink.Player):
-        mode = player.queue.mode
-        options=[
-            discord.SelectOption(label='No Loop', value='normal', emoji='❌', default=(mode == wavelink.QueueMode.normal)),
-            discord.SelectOption(label='Loop', value='loop', emoji='🔂', default=(mode == wavelink.QueueMode.loop)),
-            discord.SelectOption(label='Loop All', value='loop_all', emoji='🔁', default=(mode == wavelink.QueueMode.loop_all)),
-        ]
-        super().__init__(row=1, placeholder='Select Loop Mode', options=options)
-        self.player = player
-
-    async def callback(self, interaction: discord.Interaction):
-        value = self.values[0]
-        self.player.queue.mode = wavelink.QueueMode[value]
-        await interaction.response.defer()
-
 class MusicController(ui.View):
     def __init__(self, player: wavelink.Player, ctx: commands.Context):
         super().__init__()
+        self.add_item(RadioButton(player))
         self.add_item(LoopSelect(player))
         self.player = player
         self.ctx = ctx
@@ -222,6 +203,7 @@ class MusicController(ui.View):
     async def on_timeout(self):
         await self.player.controller_message.edit(view=None)
         await self.player.controller_message.delete()
+        del self.player.controller_message
 
     async def interaction_check(self, interaction: Interaction) -> bool:
         if interaction.user != self.ctx.author:
@@ -249,15 +231,38 @@ class MusicController(ui.View):
         embed = await create_controller_embed(self.player)
         await interaction.response.edit_message(embed=embed)
 
-    @ui.button(label='Radio', emoji='📻', row=2, style=ButtonStyle.secondary)
-    async def radio_button(self, interaction: discord.Interaction, button: ui.Button):
+class LoopSelect(ui.Select):
+    def __init__(self, player: wavelink.Player):
+        mode = player.queue.mode
+        options=[
+            discord.SelectOption(label='No Loop', value='normal', emoji='❌', default=(mode == wavelink.QueueMode.normal)),
+            discord.SelectOption(label='Loop', value='loop', emoji='🔂', default=(mode == wavelink.QueueMode.loop)),
+            discord.SelectOption(label='Loop All', value='loop_all', emoji='🔁', default=(mode == wavelink.QueueMode.loop_all)),
+        ]
+        super().__init__(row=1, placeholder='Select Loop Mode', options=options)
+        self.player = player
+
+    async def callback(self, interaction: discord.Interaction):
+        value = self.values[0]
+        self.player.queue.mode = wavelink.QueueMode[value]
+        await interaction.response.defer()
+
+class RadioButton(ui.Button):
+    def __init__(self, player: wavelink.Player):
+        btn_style = ButtonStyle.secondary
+        if player.autoplay == wavelink.AutoPlayMode.enabled:
+            btn_style = ButtonStyle.green
+        super().__init__(label='Radio', emoji='📻', row=2, style=btn_style)
+        self.player = player
+
+    async def callback(self, interaction: discord.Interaction):
         if self.player.autoplay != wavelink.AutoPlayMode.enabled:
             self.player.autoplay = wavelink.AutoPlayMode.enabled
-            button.style = ButtonStyle.green
+            self.style = ButtonStyle.green
         else:
             self.player.autoplay = wavelink.AutoPlayMode.partial
-            button.style = ButtonStyle.secondary
-        await interaction.response.edit_message(view=self)
+            self.style = ButtonStyle.secondary
+        await interaction.response.edit_message(view=self.view)
 
 async def create_controller_embed(player: wavelink.Player):
     embed = discord.Embed(title='🎚️ Music Controller', color=EMBED_COLOR)
