@@ -8,8 +8,8 @@ from core import values
 from core.bot import Substiify
 from core.version import Version
 from utils import util
-from utils.db import Database
 from utils.custom_logger import CustomLogFormatter, RemoveNoise
+from utils.db import Database
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +53,19 @@ if not config.TOKEN:
 
 
 async def main():
+    try:
+        con: asyncpg.Connection = await asyncpg.connect(dsn=config.POSTGRESQL_DSN)
+        await con.close()
+    except Exception as error:
+        logger.error(f"Could not connect to database: {error}")
+        exit()
+
+    util.print_system_info()
+
     async with Substiify() as substiify, asyncpg.create_pool(
         dsn=config.POSTGRESQL_DSN, max_inactive_connection_lifetime=0
     ) as pool:
         if pool is None:
-            # thanks asyncpg...
             raise RuntimeError("Could not connect to database.")
 
         substiify.db = Database(substiify, pool)
@@ -66,7 +74,6 @@ async def main():
 
 if __name__ == "__main__":
     prepare_files()
-    util.print_system_info()
     setup_logging()
 
     try:

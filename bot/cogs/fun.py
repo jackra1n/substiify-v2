@@ -107,7 +107,7 @@ class Fun(commands.Cog):
         """
         user = user or ctx.author
         async with ctx.typing():
-            stonks_image = await self.vac_api.stonks(user.avatar,stonks=not_stonks)
+            stonks_image = await self.vac_api.stonks(user.display_avatar.url, stonks=not_stonks)
             await ctx.send(file=discord.File(await stonks_image.read(), filename="stonks.png"))
         await ctx.message.delete()
 
@@ -133,9 +133,9 @@ class Fun(commands.Cog):
         await ctx.message.delete()
 
     async def _meme_with_two_users(self, func, ctx, user1, user2):
-        avatar2 = user2.avatar if user2 else None
+        avatar2 = user2.display_avatar.url if user2 else None
         async with ctx.typing():
-            meme_image = await func(user1.avatar, avatar2)
+            meme_image = await func(user1.display_avatar.url, avatar2)
             deletes_at = datetime.datetime.now() + datetime.timedelta(minutes=5)
             await ctx.send(f'Autodestruction <t:{int(deletes_at.timestamp())}:R>', file=discord.File(await meme_image.read(), filename="meme.png"), delete_after=300)
         await ctx.message.delete()
@@ -143,14 +143,14 @@ class Fun(commands.Cog):
     async def _meme_with_user(self, func, ctx, user: discord.User):
         user = user or ctx.author
         async with ctx.typing():
-            meme_image = await func(user.avatar)
+            meme_image = await func(user.display_avatar.url)
             deletes_at = datetime.datetime.now() + datetime.timedelta(minutes=5)
             await ctx.send(f'Autodestruction <t:{int(deletes_at.timestamp())}:R>', file=discord.File(await meme_image.read(), filename="meme.png"), delete_after=300)
         await ctx.message.delete()
 
     @commands.cooldown(6, 5)
     @commands.command(name='8ball', aliases=['eightball'], usage='8ball <question>')
-    async def eightball(self, ctx, *, question):
+    async def eightball(self, ctx: commands.Context, *, question:str):
         """
         AKA 8ball, Ask the bot a question that you dont want the answer to.
         """
@@ -182,7 +182,7 @@ class Fun(commands.Cog):
             description=f'Question: {question}',
             colour=discord.Colour.orange()
         )
-        embed.set_footer(text=f'Question by {ctx.author}', icon_url=ctx.author.avatar)
+        embed.set_footer(text=f'Question by {ctx.author}', icon_url=ctx.author.display_avatar.url)
         await ctx.send(embed=embed)
 
 

@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS discord_channel (
 CREATE TABLE IF NOT EXISTS discord_user (
   discord_user_id BIGINT PRIMARY KEY,
   username VARCHAR(255),
-  discriminator VARCHAR(10),
   avatar VARCHAR(255),
   is_bot BOOLEAN DEFAULT FALSE
 );
@@ -24,6 +23,7 @@ CREATE TABLE IF NOT EXISTS discord_user (
 CREATE TABLE IF NOT EXISTS command_history (
   id SERIAL PRIMARY KEY,
   command_name VARCHAR(255),
+  parameters TEXT,
   discord_user_id BIGINT REFERENCES discord_user(discord_user_id),
   discord_server_id BIGINT REFERENCES discord_server(discord_server_id),
   discord_channel_id BIGINT REFERENCES discord_channel(discord_channel_id),
@@ -87,4 +87,16 @@ CREATE TABLE IF NOT EXISTS kasino_bet (
   amount BIGINT,
   option BIGINT,
   UNIQUE (kasino_id, discord_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS feedback (
+  id SERIAL PRIMARY KEY,
+  discord_user_id BIGINT REFERENCES discord_user(discord_user_id),
+  discord_server_id BIGINT REFERENCES discord_server(discord_server_id),
+  discord_channel_id BIGINT REFERENCES discord_channel(discord_channel_id),
+  discord_message_id BIGINT NOT NULL,
+  feedback_type VARCHAR(255) NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  accepted BOOLEAN
 );

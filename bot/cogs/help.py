@@ -5,7 +5,9 @@ from core import values
 from discord import Embed
 from discord.ext import commands
 
-DELETE_AFTER = 90
+ANSI_RESET = "\u001b[0;0m"
+ANSI_GRAY = "\u001b[0;30m"
+ANSI_GREEN = "\u001b[0;32m"
 
 
 class Help(commands.MinimalHelpCommand):
@@ -23,12 +25,12 @@ class Help(commands.MinimalHelpCommand):
             set_author=True,
         )
         embed.set_footer(text=f"Use {self.context.clean_prefix}help <command / category> to get more information.")
-        self.response = await self.get_destination().send(embed=embed, delete_after=DELETE_AFTER)
+        self.response = await self.get_destination().send(embed=embed)
 
     # help <cog>
     async def send_cog_help(self, cog: commands.Cog):
         embed = await self.cog_help_embed(cog)
-        await self.get_destination().send(embed=embed, delete_after=DELETE_AFTER)
+        await self.get_destination().send(embed=embed)
 
     # help <group>
     async def send_group_help(self, group):
@@ -38,7 +40,7 @@ class Help(commands.MinimalHelpCommand):
         if len(command_chain := group.full_parent_name) > 0:
             command_chain = f"{group.full_parent_name} "
         embed.set_footer(text=f"This command has subcommands. Check their help page with `{self.context.clean_prefix}help {command_chain}{group.name} <subcommand>`")
-        await self.context.send(embed=embed, delete_after=DELETE_AFTER)
+        await self.context.send(embed=embed)
 
     async def cog_help_embed(self, cog: Optional[commands.Cog]) -> Embed:
         if cog is None:
@@ -54,7 +56,7 @@ class Help(commands.MinimalHelpCommand):
     # help <command>
     async def send_command_help(self, command: commands.Command):
         embed = self.create_command_help_embed(command)
-        await self.get_destination().send(embed=embed, delete_after=DELETE_AFTER)
+        await self.get_destination().send(embed=embed)
 
     async def _help_embed(
         self, title: str, description: Optional[str] = None, mapping: Optional[str] = None,
@@ -79,10 +81,10 @@ class Help(commands.MinimalHelpCommand):
             # add a short description of commands in each cog
             for cog, cmds in sorted(mapping.items(), key=lambda e: len(e[1]), reverse=True):
                 if cmds := [c for c in cmds if not c.hidden]:
-                    cmd_list = "```md\n"
+                    cmd_list = "```ansi\n"
                     for com in sorted(cmds, key=lambda e: e.name):
-                        prefix = "*" if await self.can_run_cmd(com) else ">"
-                        cmd_list += f"{prefix} {com}\n"
+                        prefix = f"{ANSI_GREEN}+{ANSI_RESET}" if await self.can_run_cmd(com) else f"{ANSI_GRAY}>"
+                        cmd_list += f"{prefix} {com}{ANSI_RESET}\n"
                     cmd_list += "```"
 
                     name = cog.qualified_name if cog else "No category"
