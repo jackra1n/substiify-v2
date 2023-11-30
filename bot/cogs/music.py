@@ -207,7 +207,7 @@ class MusicController(ui.View):
 
     async def interaction_check(self, interaction: Interaction) -> bool:
         if interaction.user != self.ctx.author:
-            await interaction.response.send_message(f':warn: {interaction.user.mention} **You aren\'t the author of this embed**')
+            await interaction.response.send_message(f'⚠️ {interaction.user.mention} **You aren\'t the author of this embed**', ephemeral=True)
             return False
         return True
 
