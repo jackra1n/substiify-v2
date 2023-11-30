@@ -150,7 +150,6 @@ class Karma(commands.Cog):
 
         embed = discord.Embed(title=f'Karma - {ctx.guild.name}', description=f'{user.mention} has {user_karma} karma.')
         await ctx.send(embed=embed, delete_after=120)
-        await ctx.message.delete()
 
     @karma.error
     async def karma_error(self, ctx: commands.Context, error):
@@ -208,7 +207,6 @@ class Karma(commands.Cog):
         elif isinstance(error, commands.BadArgument):
             embed.description=f'Wrong command usage! Command usage is `{ctx.prefix}karma donate <user> <amount>`'
         await ctx.send(embed=embed)
-        await ctx.message.delete()
 
     @karma.group(name='emotes', aliases=['emote'], usage="emotes", invoke_without_command=True)
     async def karma_emotes(self, ctx: commands.Context):
@@ -231,7 +229,6 @@ class Karma(commands.Cog):
             embed_string += f"{self.bot.get_emoji(emote['discord_emote_id'])} "
         embed = discord.Embed(title=f'Karma Emotes - {ctx.guild.name}', description=embed_string)
         await ctx.send(embed=embed, delete_after=60)
-        await ctx.message.delete()
 
     @karma_emotes.command(name='add', usage="add <emote> <action>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
