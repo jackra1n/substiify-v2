@@ -13,12 +13,6 @@ from discord.ext.commands import Greedy
 logger = logging.getLogger(__name__)
 
 
-# temporary imports for migration
-import sqlite3
-from datetime import datetime
-from pathlib import Path
-
-
 class Owner(commands.Cog):
 
     COG_EMOJI = "👑"
@@ -351,107 +345,6 @@ class Owner(commands.Cog):
                                         ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = $3'''
             random_karma = random.randint(500, 3000)
             await self.bot.db.execute(stmt_insert_user_karma, user.id, ctx.guild.id, random_karma)
-
-    @commands.is_owner()
-    @db_command.command(name="migrate")
-    async def db_migrate(self, ctx: commands.Context):
-        """
-        Migrates the sqlite database to postgresql
-        """
-        await migrate_db(self.bot, ctx)
-        await ctx.send("Database migrated")
-
-async def migrate_db(bot: Substiify, ctx: commands.Context) -> None:
-    try:
-        sqlite_conn = sqlite3.connect('main.sqlite')
-        sqlite_cursor = sqlite_conn.cursor()
-    except Exception as e:
-        print(f"Error connecting to sqlite database: {e}")
-        return
-    
-    # create tables in postgresql using the sql script
-    print("Creating tables in postgresql...")
-    db_script = Path("./bot/db/CreateDatabase.sql").read_text('utf-8')
-    await bot.db.execute(db_script)              
-
-    # migrate discord_user
-    print("Migrating discord_user...")
-    sqlite_cursor.execute("SELECT * FROM discord_user")
-    user_rows = sqlite_cursor.fetchall()
-    for row in user_rows:
-        await bot.db.execute(
-            "INSERT INTO discord_user (discord_user_id, username, avatar, is_bot) VALUES ($1, $2, $3, $4) ON CONFLICT (discord_user_id) DO NOTHING",
-            int(row[0]), str(row[1]), str(row[2]), bool(row[3])
-        )
-
-    # migrate command_history
-    print("Migrating command_history...")
-    sqlite_cursor.execute("SELECT * FROM command_history")
-    command_rows = sqlite_cursor.fetchall()
-    for row in command_rows:
-        try:
-            await bot.db.execute(
-                "INSERT INTO command_history (id, command_name, parameters, discord_user_id, discord_server_id, discord_channel_id, discord_message_id, date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING",
-                row[0], row[1], None, row[3], row[4], row[5], row[6], datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S.%f')
-            )
-        except Exception as e:
-            print(f"Error inserting command_history row: {e}")
-    # restart the sequence
-    max_id = await bot.db.fetchval("SELECT MAX(id) FROM command_history")
-    print(f"Restarting sequence with {max_id + 1}...")
-    await bot.db.execute(f"ALTER SEQUENCE command_history_id_seq RESTART WITH {max_id + 1}")
-
-    # migrate karma
-    print("Migrating karma...")
-    sqlite_cursor.execute("SELECT * FROM karma")
-    karma_rows = sqlite_cursor.fetchall()
-    for row in karma_rows:
-        try:
-            await bot.db.execute(
-                "INSERT INTO karma (id, discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING",
-                row[0], row[1], row[2], row[3]
-            )
-        except Exception as e:
-            print(f"Error inserting karma row: {e}")
-    # restart the sequence
-    max_id = await bot.db.fetchval("SELECT MAX(id) FROM karma")
-    print(f"Restarting sequence with {max_id + 1}...")
-    await bot.db.execute(f"ALTER SEQUENCE karma_id_seq RESTART WITH {max_id + 1}")
-
-    # migrate post
-    print("Migrating post...")
-    sqlite_cursor.execute("SELECT * FROM post")
-    post_rows = sqlite_cursor.fetchall()
-    for row in post_rows:
-        try:
-            await bot.db.execute(
-                "INSERT INTO post (discord_message_id, discord_user_id, discord_server_id, discord_channel_id, created_at, upvotes, downvotes) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (discord_message_id) DO NOTHING",
-                int(row[0]), int(row[1]), int(row[2]), int(row[3]), datetime.strptime(row[4], '%Y-%m-%d %H:%M:%S.%f'), int(row[5]), int(row[6])
-            )
-        except Exception as e:
-            print(f"Error inserting post row: {e}")
-
-    # migrate karma_emote
-    print("Migrating karma_emote...")
-    sqlite_cursor.execute("SELECT * FROM karma_emote")
-    karma_emote_rows = sqlite_cursor.fetchall()
-    for row in karma_emote_rows:
-        try:
-            await bot.db.execute(
-                "INSERT INTO karma_emote (discord_emote_id, discord_server_id, increase_karma) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING",
-                int(row[0]), int(row[1]), bool(row[2])
-            )
-        except Exception as e:
-            print(f"Error inserting karma_emote row: {e}")
-    # restart the sequence
-    max_id = await bot.db.fetchval("SELECT MAX(id) FROM karma_emote")
-    print(f"Restarting sequence with {max_id + 1}...")
-    await bot.db.execute(f"ALTER SEQUENCE karma_emote_id_seq RESTART WITH {max_id + 1}")
-
-    # close connections
-    sqlite_cursor.close()
-    sqlite_conn.close()
-    print("Done!")
 
 async def check_if_server_exists_and_insert(bot: Substiify, server_id: int) -> bool:
     server = await bot.db.fetchrow("SELECT * FROM discord_server WHERE discord_server_id = $1", server_id)
