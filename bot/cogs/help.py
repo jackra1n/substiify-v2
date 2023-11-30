@@ -5,6 +5,10 @@ from core import values
 from discord import Embed
 from discord.ext import commands
 
+ANSI_RESET = "\u001b[0;0m"
+ANSI_GRAY = "\u001b[0;30m"
+ANSI_GREEN = "\u001b[0;32m"
+
 
 class Help(commands.MinimalHelpCommand):
     """Shows help info for commands and cogs"""
@@ -77,10 +81,10 @@ class Help(commands.MinimalHelpCommand):
             # add a short description of commands in each cog
             for cog, cmds in sorted(mapping.items(), key=lambda e: len(e[1]), reverse=True):
                 if cmds := [c for c in cmds if not c.hidden]:
-                    cmd_list = "```md\n"
+                    cmd_list = "```ansi\n"
                     for com in sorted(cmds, key=lambda e: e.name):
-                        prefix = "*" if await self.can_run_cmd(com) else ">"
-                        cmd_list += f"{prefix} {com}\n"
+                        prefix = f"{ANSI_GREEN}+{ANSI_RESET}" if await self.can_run_cmd(com) else f"{ANSI_GRAY}>"
+                        cmd_list += f"{prefix} {com}{ANSI_RESET}\n"
                     cmd_list += "```"
 
                     name = cog.qualified_name if cog else "No category"

@@ -2,6 +2,19 @@ version: "3.7"
 
 services:
 
+  postgres:
+    image: postgres:16
+    container_name: substiify-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: substiify
+      POSTGRES_PASSWORD: example
+      TZ: "Europe/Zurich"
+
   lavalink:
     image: fredboat/lavalink:master
     ports:
@@ -15,8 +28,10 @@ services:
 
   bot:
     build: .
+    depends_on:
+      - postgres
     restart: unless-stopped
     volumes:
-      - ./data:/bot/data
       - ./logs:/bot/logs
-      - "/etc/localtime:/etc/localtime:ro"
+      - ./bot/core/version.toml:/bot/core/version.toml
+      - /etc/localtime:/etc/localtime:ro

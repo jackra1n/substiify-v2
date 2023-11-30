@@ -1,29 +1,31 @@
+import asyncio
 import logging
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
-from core import bot, config, values
+import asyncpg
+from core import values
+from core.bot import Substiify
 from core.version import Version
-from utils import db, util
-from utils.CustomLogger import CustomLogFormatter, RemoveNoise
+from utils import util
+from utils.custom_logger import CustomLogFormatter, RemoveNoise
+from utils.db import Database
 
 logger = logging.getLogger(__name__)
 
+try:
+    from core import config
+except ImportError:
+    logger.warning("No config.py found. Make sure to copy config.py.example to config.py and fill in the values.")
+    exit()
 
-def prepareFiles() -> None:
+
+def prepare_files() -> None:
     # Create 'logs' folder if it doesn't exist
     Path(values.LOGS_PATH).mkdir(parents=True, exist_ok=True)
 
-    # Create 'data' folder if it doesn't exist
-    Path(values.DATA_PATH).mkdir(parents=True, exist_ok=True)
-
     if not Path(values.VERSION_CONFIG_PATH).is_file():
         Version.create_version_file()
-
-    # Create database file if it doesn't exist
-    if not Path(values.DB_PATH).is_file():
-        logger.info(f'Creating {values.DB_PATH}')
-        open(values.DB_PATH, 'a')
 
     logger.info('All system files ready')
 
@@ -37,7 +39,7 @@ def setup_logging() -> None:
     stream_handler.setFormatter(CustomLogFormatter())
     log.addHandler(stream_handler)
 
-    file_handler = TimedRotatingFileHandler(f'{values.LOGS_PATH}/substiify_', when="midnight", interval=1, encoding='utf-8')
+    file_handler = TimedRotatingFileHandler(f'{values.LOGS_PATH}/substiify', when="midnight", interval=1, encoding='utf-8')
     file_formatter = logging.Formatter('[{asctime}] [{levelname:<7}] {name}: {message}', '%Y-%m-%d %H:%M:%S', style='{')
     file_handler.suffix = "%Y-%m-%d.log"
     file_handler.setFormatter(file_formatter)
@@ -49,11 +51,32 @@ if not config.TOKEN:
     logger.error('No token in config.py! Please add it and try again.')
     exit()
 
-if __name__ == "__main__":
-    prepareFiles()
-    util.print_system_info()
-    setup_logging()
-    db.create_database()
 
-    substiify = bot.Substiify()
-    substiify.run(config.TOKEN, log_handler=None)
+async def main():
+    try:
+        con: asyncpg.Connection = await asyncpg.connect(dsn=config.POSTGRESQL_DSN)
+        await con.close()
+    except Exception as error:
+        logger.error(f"Could not connect to database: {error}")
+        exit()
+
+    util.print_system_info()
+
+    async with Substiify() as substiify, asyncpg.create_pool(
+        dsn=config.POSTGRESQL_DSN, max_inactive_connection_lifetime=0
+    ) as pool:
+        if pool is None:
+            raise RuntimeError("Could not connect to database.")
+
+        substiify.db = Database(substiify, pool)
+        await substiify.db.create_database()
+        await substiify.start(config.TOKEN)
+
+if __name__ == "__main__":
+    prepare_files()
+    setup_logging()
+
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass

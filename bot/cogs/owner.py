@@ -1,16 +1,14 @@
 import logging
-import subprocess
-from os import path, walk
+import random
 from typing import Literal, Optional
 
 import discord
 from core import config, values
+from core.bot import Substiify
 from core.version import VersionType
 from discord import Activity, ActivityType
 from discord.ext import commands, tasks
-from discord.ext.commands import Context, Greedy
-from sqlalchemy import func
-from utils import db
+from discord.ext.commands import Greedy
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +17,7 @@ class Owner(commands.Cog):
 
     COG_EMOJI = "👑"
 
-    def __init__(self, bot):
+    def __init__(self, bot: Substiify):
         self.bot = bot
         self.status_task.start()
         self.message_server = None
@@ -31,8 +29,8 @@ class Owner(commands.Cog):
     async def set_default_status(self):
         if self.bot.is_ready():
             servers = len(self.bot.guilds)
-            activityName = f"{config.PREFIX}help | {servers} servers"
-            activity = Activity(type=ActivityType.listening, name=activityName)
+            activity_name = f"{config.PREFIX}help | {servers} servers"
+            activity = Activity(type=ActivityType.listening, name=activity_name)
             await self.bot.change_presence(activity=activity)
 
     @tasks.loop(minutes=30)
@@ -41,7 +39,7 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @commands.command(hidden=True)
-    async def shutdown(self, ctx):
+    async def shutdown(self, ctx: commands.Context):
         """
         Shuts down the bot. Made this in case something goes wrong.
         """
@@ -49,27 +47,10 @@ class Owner(commands.Cog):
         await ctx.send(embed=embed)
         await self.bot.close()
 
-    @commands.is_owner()
-    @commands.command()
-    async def reload(self, ctx):
-        """
-        Fetches the lates git commit and reloads the bot.
-        """
-        await ctx.message.add_reaction('<:greenTick:876177251832590348>')
-        subprocess.run(["/bin/git", "pull", "--no-edit"])
-        try:
-            for cog in self.get_modules():
-                self.bot.reload_extension(f'modules.{cog}')
-        except Exception as e:
-            exc = f'{type(e).__name__}: {e}'
-            await ctx.send(f'Failed to reload extensions\n{exc}')
-        await ctx.send('Reloaded all cogs', delete_after=120)
-        await ctx.message.delete()
-
     @commands.command()
     @commands.guild_only()
     @commands.is_owner()
-    async def sync(self, ctx: Context, guilds: Greedy[discord.Object], spec: Optional[Literal["~", "*", "^"]] = None) -> None:
+    async def sync(self, ctx: commands.Context, guilds: Greedy[discord.Object], spec: Optional[Literal["~", "*", "^"]] = None) -> None:
         if not guilds:
             if spec == "~":
                 synced = await ctx.bot.tree.sync(guild=ctx.guild)
@@ -99,7 +80,7 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @commands.group()
-    async def status(self, ctx):
+    async def status(self, ctx: commands.Context):
         """
         Shows the bot's status.
         """
@@ -107,18 +88,18 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @status.command()
-    async def count(self, ctx, count):
+    async def count(self, ctx: commands.Context, count: int):
         """
         Sets the bot's status to a fake number of servers the bot is in.
         """
         self.status_task.stop()
-        activityName = f"{self.prefix}help | {count} servers"
-        activity = Activity(type=ActivityType.listening, name=activityName)
+        activity_name = f"{ctx.prefix}help | {count} servers"
+        activity = Activity(type=ActivityType.listening, name=activity_name)
         await self.bot.change_presence(activity=activity)
 
     @commands.is_owner()
     @status.command()
-    async def set(self, ctx, *text: str):
+    async def set(self, ctx: commands.Context, *text: str):
         """
         Sets the bot's status to the given text.
         """
@@ -129,7 +110,7 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @status.command()
-    async def reset(self, ctx):
+    async def reset(self, ctx: commands.Context):
         """
         Resets the bot's status to the default.
         """
@@ -137,138 +118,8 @@ class Owner(commands.Cog):
         self.status_task.restart()
 
     @commands.is_owner()
-    @commands.group(invoke_without_command=True, hidden=True)
-    async def message(self, ctx):
-        embed = discord.Embed(title="Current message settings", color=0xf66045)
-        embed.add_field(name="Server", value=self.message_server)
-        embed.add_field(name="Channel", value=self.message_channel)
-        embed.add_field(name="Message", value=self.message_text)
-        embed.add_field(name="Embed", value=self.message_embed)
-        embed.add_field(name="Embed title", value=self.embed_title)
-        await ctx.send(embed=embed, delete_after=30)
-        await ctx.message.delete()
-
-    @commands.is_owner()
-    @message.group(invoke_without_command=True, name="embed")
-    async def _embed(self, ctx, option: bool):
-        self.message_embed = option
-        await ctx.send(f'Embed messages set to {option}', delete_after=30)
-        await ctx.message.delete()
-
-    @commands.is_owner()
-    @_embed.command(name="title")
-    async def title(self, ctx, title: str):
-        self.embed_title = title
-        await ctx.send(f'Embed title set to `{title}`', delete_after=30)
-        await ctx.message.delete()
-
-    @commands.is_owner()
-    @message.command(name="server")
-    async def message_server(self, ctx, server_id: int = None):
-        await ctx.message.delete()
-        if server_id is None:
-            return await ctx.send("Please provide a server id", delete_after=30)
-        server = await self.bot.fetch_guild(server_id)
-        if server is None:
-            return await ctx.send("Server not found", delete_after=30)
-        self.message_server = server
-        await ctx.send(f"Server set to `{server}`", delete_after=30)
-
-    @commands.is_owner()
-    @message.command(name="channel")
-    async def message_channel(self, ctx, channel_id: int = None, ignore_permissions: bool = False):
-        if channel_id is not None:
-            channel = await self.bot.fetch_channel(channel_id)
-            if channel is None:
-                return await ctx.send("Channel not found", delete_after=30)
-            # check if has send_message permission
-            if not channel.permissions_for(ctx.me).send_messages and not ignore_permissions:
-                return await ctx.send("I don't have permission to send messages in that channel")
-            self.message_channel = channel
-            await ctx.message.delete()
-            return await ctx.send(f"Channel set to {channel.mention}", delete_after=30)
-
-        if self.message_server is None:
-            return await ctx.send("Please set a server first", delete_after=30)
-
-        channels = await self.message_server.fetch_channels()
-        text_channels = [channel for channel in channels if type(channel) == discord.channel.TextChannel]
-        if len(channels) == 0:
-            return await ctx.send("No text channels found in this server", delete_after=30)
-        embed = discord.Embed(title="Channels", color=0xf66045)
-        channel_string = ""
-        for index, channel in enumerate(text_channels):
-            channel_string += f"{index}. {channel.name}\n"
-        embed.add_field(name="Channels", value=channel_string)
-        await ctx.send(embed=embed, delete_after=120)
-
-        def check(m):
-            return m.author == ctx.author and m.channel == ctx.channel
-
-        try:
-            message = await self.bot.wait_for('message', timeout=60, check=check)
-        except TimeoutError:
-            return await ctx.send("You didn't answer the questions in Time", delete_after=30)
-        if message.content.isdigit():
-            channel = await self.bot.fetch_channel(text_channels[int(message.content)].id)
-            if channel is not None:
-                self.message_channel = channel
-                await ctx.send(f"Channel set to `{channel.name}`", delete_after=30)
-            else:
-                await ctx.send("That channel doesn't exist", delete_after=30)
-        await ctx.message.delete()
-
-    @commands.is_owner()
-    @message.command(name="text")
-    async def message_text(self, ctx, *text: str):
-        self.message_text = " ".join(text[:])
-        await ctx.send(f"Text set to:\n`{self.message_text}`", delete_after=30)
-        await ctx.message.delete()
-
-    @commands.is_owner()
-    @message.command(name="send")
-    async def message_send(self, ctx):
-        if self.message_server is None or self.message_channel is None or self.message_text is None:
-            return await ctx.send("Please set all the settings first", delete_after=30)
-        embed = discord.Embed(title="Message overview", color=discord.Colour.blurple())
-        embed.description = "⚠️ Are you sure you want to send this message ⚠️"
-        embed.add_field(name="Server", value=self.message_server)
-        embed.add_field(name="Channel", value=self.message_channel)
-        embed.add_field(name="Message", value=self.message_text)
-        embed.add_field(name="Embed", value=self.message_embed)
-        embed.add_field(name="Embed title", value=self.embed_title)
-        message = await ctx.send(embed=embed)
-        await message.add_reaction("✅")
-        await message.add_reaction("❌")
-
-        def check(reaction, user):
-            return user == ctx.author and reaction.message.id == message.id and reaction.emoji in ("✅", "❌")
-
-        try:
-            reaction, user = await self.bot.wait_for('reaction_add', timeout=30, check=check)
-        except TimeoutError:
-            await ctx.send("You didn't answer the questions in Time", delete_after=30)
-            return
-
-        if reaction.emoji == "✅":
-            await message.delete()
-            if self.message_embed:
-                embed = discord.Embed(title=self.embed_title, color=discord.Colour.blurple())
-                if self.message_text is None:
-                    return await ctx.send("Please set the text first", delete_after=30)
-                embed.description = self.message_text
-                await self.message_channel.send(embed=embed)
-            else:
-                await self.message_channel.send(self.message_text)
-            await ctx.send("Message sent", delete_after=30)
-        else:
-            await message.delete()
-            await ctx.send("Message not sent", delete_after=30)
-        await ctx.message.delete()
-
-    @commands.is_owner()
     @commands.group()
-    async def server(self, ctx):
+    async def server(self, ctx: commands.Context):
         """
         Shows server information.
         """
@@ -276,7 +127,7 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @server.command(name='list')
-    async def server_list(self, ctx):
+    async def server_list(self, ctx: commands.Context):
         """
         Lists all the servers the bot is in.
         """
@@ -298,7 +149,7 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @server.command(name='ids')
-    async def server_ids(self, ctx):
+    async def server_ids(self, ctx: commands.Context):
         servers = ''
         server_ids = ''
         for guild in self.bot.guilds:
@@ -314,7 +165,7 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @server.command(name='channels', hidden=True)
-    async def channel_list(self, ctx, guild_id: int):
+    async def channel_list(self, ctx: commands.Context, guild_id: int):
         """
         Lists all the channels in a server.
         """
@@ -329,7 +180,7 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @commands.group(invoke_without_command=True)
-    async def version(self, ctx):
+    async def version(self, ctx: commands.Context):
         """
         Sets the bot's version.
         """
@@ -339,7 +190,7 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @version.command(name='set')
-    async def set_version(self, ctx, version_type: VersionType, value: int):
+    async def set_version(self, ctx: commands.Context, version_type: VersionType, value: int):
         """
         Sets the minor version.
         """
@@ -348,65 +199,79 @@ class Owner(commands.Cog):
         await ctx.send(embed=embed, delete_after=15)
 
     @set_version.error
-    async def set_version_error(self, ctx, error):
+    async def set_version_error(self, ctx: commands.Context, error):
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.send("Please specify the version type and value", delete_after=30)
         if isinstance(error, commands.BadArgument):
             await ctx.send("Version type not recognized. Version types are 'major' or 'minor'", delete_after=30)
 
-    def get_modules(self):
-        filenames = next(walk("modules"), (None, None, []))[2]
-        filenames.remove(path.basename(__file__))
-        return [name.replace('.py', '') for name in filenames]
-
     @commands.group(name="usage", invoke_without_command=True)
-    async def usage(self, ctx):
+    async def usage(self, ctx: commands.Context):
         """
         Shows a lits of most used command on the current server
         """
-        commands_used_query = db.session.query(db.command_history.command, func.count('*')).filter_by(discord_server_id=ctx.guild.id).group_by(db.command_history.command).order_by(func.count('*').desc()).limit(10).all()
-        embed = create_command_usage_embed(commands_used_query, f"Top 10 used commands on: **{ctx.guild.name}**")
+        stmt_usage = 'SELECT command, COUNT(*) AS cnt FROM command_history WHERE guild_id = $1 GROUP BY command ORDER BY cnt DESC LIMIT 10'
+        commands_used = await self.bot.db.fetch(stmt_usage, ctx.guild.id)
+        embed = create_command_usage_embed(commands_used)
+        embed.title = f"Top 10 used commands on: **{ctx.guild.name}**"
         await ctx.send(embed=embed, delete_after=180)
         await ctx.message.delete()
 
     @usage.command(name="all")
-    async def usage_all(self, ctx):
+    async def usage_all(self, ctx: commands.Context):
         """
         Shows a list of most used commands on all servers
         """
-        commands_used_query = db.session.query(db.command_history.command, func.count('*')).group_by(db.command_history.command).order_by(func.count('*').desc()).limit(10).all()
-        embed = create_command_usage_embed(commands_used_query, "Top 10 total used commands")
+        stmt_usage = 'SELECT command, COUNT(*) AS cnt FROM command_history GROUP BY command ORDER BY cnt DESC LIMIT 10'
+        commands_used = await self.bot.db.fetch(stmt_usage)
+        embed = create_command_usage_embed(commands_used)
+        embed.title = "Top 10 total used commands"
         await ctx.send(embed=embed, delete_after=180)
         await ctx.message.delete()
 
     @usage.command(name="last")
     @commands.is_owner()
-    async def usage_last(self, ctx, amount: int = 10):
+    async def usage_last(self, ctx: commands.Context, amount: int = 10):
         """
-        Shows a list of most used commands on the last server
+        Shows a list of last used commands on the current server
         """
-        commands_used_query = db.session.query(db.command_history, db.discord_user).join(db.command_history, db.command_history.discord_user_id == db.discord_user.discord_user_id).filter_by(discord_server_id=ctx.guild.id).order_by(db.command_history.date.desc()).limit(amount).all()
-        commands_used = ""
-        for command in commands_used_query:
-            formated_date = command[0].date.strftime("%d/%m/%Y %H:%M:%S")
-            commands_used += f"`{command[0].command}` used by `{command[1].username}` at {formated_date}\n"
-        embed = discord.Embed(title=f"Top {amount} used commands on: **{ctx.guild.name}**", color=values.PRIMARY_COLOR)
-        embed.description = commands_used
+        amount = min(amount, 20)
+        stmt_last = '''SELECT * FROM command_history JOIN discord_user
+                       ON command_history.discord_user_id = discord_user.discord_user_id
+                       WHERE guild_id = $1 ORDER BY date DESC LIMIT $2'''
+        commands_used = await self.bot.db.fetch(stmt_last, ctx.guild.id, amount)
+        longest_user = self.get_longest_property_length(commands_used, 'username')
+        longest_cmd = self.get_longest_property_length(commands_used, 'command_name')
+        commands_used_string = ""
+        for command in commands_used:
+            discord_tmstmp = f"<t:{int(command['date'].timestamp())}:R>"
+            cmd = command['command_name'].center(longest_cmd)
+            user = command['username'].center(longest_user)
+            commands_used_string += f"`{user}` used `{cmd}` {discord_tmstmp}\n"
+        embed = discord.Embed(title=f"Last {amount} used commands on: **{ctx.guild.name}**", color=values.PRIMARY_COLOR)
+        embed.description = commands_used_string
         await ctx.send(embed=embed, delete_after=60)
         await ctx.message.delete()
 
+    def get_longest_property_length(self, record_list: list, prprty: str) -> len:
+        longest_record = max(record_list, key=lambda x: len(x[prprty]))
+        return len(longest_record[prprty])
+
     @usage.command(name="servers")
     @commands.is_owner()
-    async def usage_servers(self, ctx):
+    async def usage_servers(self, ctx: commands.Context):
         """
         Shows a list of servers with most used commands
         """
-        commands_used_query = db.session.query(db.command_history.discord_server_id, db.discord_server, func.count('*')).join(db.command_history, db.command_history.discord_server_id == db.discord_server.discord_server_id).group_by(db.command_history.discord_server_id).order_by(func.count('*').desc()).all()
+        stmt = '''SELECT COUNT(*) AS count, server_name FROM command_history JOIN discord_server
+                  ON command_history.discord_server_id = discord_server.discord_server_id
+                  GROUP BY server_name ORDER BY count DESC LIMIT 10'''
+        commands_used_query = await self.bot.db.fetch(stmt)
         commands_used = ""
         commands_count = ""
         for row in commands_used_query:
-            commands_used += f"`{row[1].server_name}`\n"
-            commands_count += f"{row[2]}\n"
+            commands_used += f"`{row['server_name']}`\n"
+            commands_count += f"{row['count']}\n"
         embed = discord.Embed(title="Top servers used commands", color=values.PRIMARY_COLOR)
         embed.add_field(name="Command", value=commands_used, inline=True)
         embed.add_field(name="Count", value=commands_count, inline=True)
@@ -415,80 +280,131 @@ class Owner(commands.Cog):
 
     @commands.is_owner()
     @commands.group(name="db", invoke_without_command=True, hidden=True)
-    async def db_command(self, ctx):
+    async def db_command(self, ctx: commands.Context):
         """
         Database commands
         """
         pass
 
     @commands.is_owner()
-    @db_command.command(name="create")
-    async def db_create(self, ctx):
-        """
-        Creates the database
-        """
-        db.Base.metadata.create_all(db.engine)
-        await ctx.send("Database created", delete_after=30)
-
-    @commands.is_owner()
-    @db_command.command(name="execute")
-    async def db_execute(self, ctx, *, query):
-        """
-        Executes a statement on the database
-        """
-        try:
-            result = db.execute_sql(query)
-            await ctx.send(result, delete_after=30)
-        except Exception as e:
-            await ctx.send(e, delete_after=30)
-
-    @commands.is_owner()
-    @db_command.command(name="convert")
-    async def db_convert(self, ctx, version):
-        """
-        Converts the database to the specified version
-        """
-        try:
-            db.convert_db(version)
-            await ctx.send("Database converted", delete_after=30)
-        except Exception as e:
-            await ctx.send(e, delete_after=30)
-
-    @commands.is_owner()
     @db_command.command(name="populate")
-    async def db_populate(self, ctx):
+    async def db_populate(self, ctx: commands.Context):
         """
         Populates the database with the default values
         """
+        print("starting to populate database...")
         servers = self.bot.guilds
+
         for server in servers:
-            if db.session.query(db.discord_server).filter_by(discord_server_id=server.id).first() is None:
-                db.session.add(db.discord_server(server))
+            stmt = '''INSERT INTO discord_server (discord_server_id, server_name) VALUES ($1, $2)
+                      ON CONFLICT (discord_server_id) DO UPDATE SET server_name = $2'''
+            await self.bot.db.execute(stmt, server.id, server.name)
+
             for channel in server.channels:
-                if db.session.query(db.discord_channel).filter_by(discord_channel_id=channel.id).first() is None:
-                    db.session.add(db.discord_channel(channel))
-        db.session.commit()
-        for post in db.session.query(db.post).group_by(db.post.discord_user_id).all():
-            if db.session.query(db.discord_user).filter_by(discord_user_id=post.discord_user_id).first() is None:
-                discord_user = await self.bot.fetch_user(post.discord_user_id)
-                print(f"fetched user: {discord_user}...")
-                db.session.add(db.discord_user(discord_user))
-        db.session.commit()
-        for command in db.session.query(db.command_history).group_by(db.command_history.discord_user_id).all():
-            if db.session.query(db.discord_user).filter_by(discord_user_id=command.discord_user_id).first() is None:
-                discord_user = await self.bot.fetch_user(command.discord_user_id)
-                db.session.add(db.discord_user(discord_user))
-        db.session.commit()
+                if hasattr(channel, 'parent_id'):
+                    print(f"inserting parent channel: {channel.parent}...")
+                    stmt = '''INSERT INTO discord_channel (discord_channel_id, discord_server_id, channel_name) VALUES ($1, $2, $3)
+                              ON CONFLICT (discord_channel_id) DO UPDATE SET channel_name = $3'''
+                    await self.bot.db.execute(stmt, channel.parent.id, server.id, channel.parent.name)
+
+                print(f"inserting channel: {channel}...")
+                stmt = '''INSERT INTO discord_channel (discord_channel_id, discord_server_id, channel_name) VALUES ($1, $2, $3)
+                          ON CONFLICT (discord_channel_id) DO UPDATE SET channel_name = $3'''
+                await self.bot.db.execute(stmt, channel.id, server.id, channel.name)
+
+        for post in await self.bot.db.fetch("SELECT * FROM post"):
+            user_id = post['discord_user_id']
+            discord_user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+            print(f"fetched user: {discord_user}...")
+            stmt = '''INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
+                      ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3'''
+            await self.bot.db.execute(stmt, discord_user.id, discord_user.name, discord_user.display_avatar.url)
+    
+        for command in await self.bot.db.fetch("SELECT discord_user_id FROM command_history GROUP BY discord_user_id"):
+            user_id = command['discord_user_id']
+            discord_user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+            stmt = '''INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
+                      ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3'''
+            await self.bot.db.execute(stmt, discord_user.id, discord_user.name, discord_user.display_avatar.url)
+
         await ctx.send("Database populated", delete_after=30)
 
+    @commands.is_owner()
+    @db_command.command(name="generateTestData")
+    async def db_generate_test_data(self, ctx: commands.Context):
+        """
+        Generates test data for the database
+        """
+        # fetch all users from the server
+        async for user in ctx.guild.fetch_members(limit=None):
+            print(f"inserting user: {user}...")
+            stmt_insert_user = '''INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
+                                  ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3'''
+            await self.bot.db.execute(stmt_insert_user, user.id, user.name, user.display_avatar.url)
+            stmt_insert_user_karma = '''INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
+                                        ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = $3'''
+            random_karma = random.randint(500, 3000)
+            await self.bot.db.execute(stmt_insert_user_karma, user.id, ctx.guild.id, random_karma)
 
-def create_command_usage_embed(commands_used_query, embed_title):
+async def check_if_server_exists_and_insert(bot: Substiify, server_id: int) -> bool:
+    server = await bot.db.fetchrow("SELECT * FROM discord_server WHERE discord_server_id = $1", server_id)
+    if server is None:
+        try:
+            bot_server = bot.get_guild(server_id) or await bot.fetch_guild(server_id)
+        except Exception as e:
+            print(f"Error fetching server: {e}")
+            return False
+        if bot_server is None:
+            print(f"Server with id {server_id} does not exist in the database. Skipping...")
+            return False
+        bot.db.execute(
+            "INSERT INTO discord_server (discord_server_id, server_name) VALUES ($1, $2) ON CONFLICT (discord_server_id) DO NOTHING",
+            server_id, bot_server.name
+        )
+    return True
+
+async def check_if_channel_exists_and_insert(bot: Substiify, channel_id: int) -> bool:
+    channel = await bot.db.fetchrow("SELECT * FROM discord_channel WHERE discord_channel_id = $1", channel_id)
+    if channel is None:
+        try:
+            bot_channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
+        except Exception as e:
+            print(f"Error fetching channel: {e}")
+            return False
+        if bot_channel is None:
+            print(f"Channel with id {channel_id} does not exist in the database. Skipping...")
+            return False
+        bot.db.execute(
+            "INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id) VALUES ($1, $2, $3) ON CONFLICT (discord_channel_id) DO NOTHING",
+            channel_id, bot_channel.name, bot_channel.guild.id
+        )
+    return True
+
+async def check_if_user_exists_and_insert(bot: Substiify, user_id: int) -> bool:
+    user = await bot.db.fetchrow("SELECT * FROM discord_user WHERE discord_user_id = $1", user_id)
+    if user is None:
+        try:
+            bot_user = bot.get_user(user_id) or await bot.fetch_user(user_id)
+        except Exception as e:
+            print(f"Error fetching user: {e}")
+            return False
+        if bot_user is None:
+            print(f"User with id {user_id} does not exist in the database. Skipping...")
+            return False
+        bot.db.execute(
+            "INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3) ON CONFLICT (discord_user_id) DO NOTHING",
+            user_id, bot_user.name, bot_user.display_avatar.url
+        )
+    return True
+
+
+def create_command_usage_embed(results):
     commands_used = ""
     commands_count = ""
-    for row in commands_used_query:
-        commands_used += f"`{row[0]}`\n"
-        commands_count += f"{row[1]}\n"
-    embed = discord.Embed(title=embed_title, color=values.PRIMARY_COLOR)
+    for result in results:
+        commands_used += f"`{result['command_name']}`\n"
+        commands_count += f"{result['count']}\n"
+    embed = discord.Embed(color=values.PRIMARY_COLOR)
     embed.add_field(name="Command", value=commands_used, inline=True)
     embed.add_field(name="Count", value=commands_count, inline=True)
     return embed

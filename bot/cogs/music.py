@@ -1,22 +1,15 @@
-
-import asyncio
 import datetime
 import logging
-import random
-import re
 
 import discord
 import wavelink
 from core import config
-from discord import Interaction
+from core.bot import Substiify
+from discord import ButtonStyle, Interaction, ui
 from discord.ext import commands
-from utils import db
-from wavelink import Playable, Player
-from wavelink.ext import spotify
 
 logger = logging.getLogger(__name__)
 
-URL = re.compile(r'https?://(?:www\.)?.+')
 EMBED_COLOR = 0x292B3E
 
 
@@ -24,7 +17,7 @@ class Music(commands.Cog):
 
     COG_EMOJI = "🎵"
 
-    def __init__(self, bot):
+    def __init__(self, bot: Substiify):
         self.bot = bot
 
     async def cog_command_error(self, ctx, error):
@@ -37,9 +30,20 @@ class Music(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before: discord.VoiceState, after):
         if self.is_bot_last_vc_member(before.channel):
-            player: Player = before.channel.guild.voice_client
+            player: wavelink.Player = before.channel.guild.voice_client
             if player is not None:
                 await player.disconnect()
+
+    @commands.Cog.listener()
+    async def on_wavelink_track_start(self, payload: wavelink.TrackStartEventPayload):
+        player: wavelink.Player = payload.player
+        if not hasattr(player, 'controller_message'):
+            return
+        try:
+            embed = await create_controller_embed(player)
+            await player.controller_message.edit(embed=embed)
+        except discord.NotFound:
+            pass
 
     def is_bot_last_vc_member(self, channel: discord.VoiceChannel):
         return channel and self.bot.user in channel.members and len(self.get_vc_users(channel)) == 0
@@ -47,32 +51,7 @@ class Music(commands.Cog):
     def get_vc_users(self, channel: discord.VoiceChannel):
         return [member for member in channel.members if not member.bot]
 
-    @commands.Cog.listener()
-    async def on_wavelink_node_ready(self, node: wavelink.Node):
-        """Event fired when a node has finished connecting."""
-        logger.info(f'Node: <{node.id}> is ready!')
-
-    @commands.Cog.listener()
-    async def on_wavelink_track_end(self, payload: wavelink.TrackEventPayload):
-        """Event fired when a track ends."""
-        player = payload.player
-        if player.queue.loop:
-            track = await player.play(payload.track)
-        elif not player.queue.is_empty:
-            partial = await player.queue.get_wait()
-            track = await player.play(partial)
-            track.requester = partial.requester
-        else:
-            await player.stop()
-
-        def check(payload: wavelink.TrackEventPayload):
-            return payload.player.guild == player.guild
-        try:
-            await self.bot.wait_for("wavelink_track_start", check=check, timeout=300)
-        except asyncio.TimeoutError:
-            await player.disconnect()
-
-    async def cog_before_invoke(self, ctx):
+    async def cog_before_invoke(self, ctx: commands.Context):
         """ Command before-invoke handler. """
         guild_check = ctx.guild is not None
 
@@ -81,15 +60,15 @@ class Music(commands.Cog):
 
         return guild_check
 
-    async def ensure_voice(self, ctx):
+    async def ensure_voice(self, ctx: commands.Context):
         """ This check ensures that the bot and command author are in the same voicechannel. """
-        if wavelink.NodePool.nodes is None:
+        if wavelink.Pool.nodes is None:
             raise NoNodeAccessible()
 
         if ctx.command.name in ['players', 'cleanup']:
             return True
 
-        player = ctx.voice_client
+        player: wavelink.Player = ctx.voice_client
         if ctx.command.name in ['show', 'now']:
             if player is None:
                 raise NoPlayerFound()
@@ -107,226 +86,78 @@ class Music(commands.Cog):
             if not permissions.connect or not permissions.speak:
                 raise NoPermissions()
 
-            await ctx.author.voice.channel.connect(cls=Player)
+            await ctx.author.voice.channel.connect(cls=wavelink.Player)
             return True
 
         if player.channel != ctx.author.voice.channel:
             raise DifferentVoiceChannel()
 
     @commands.hybrid_command(aliases=['p'], usage='play <url/query>')
-    async def play(self, ctx, *, search: str):
-        """ Plays or queues a song/playlist. Can be a YouTube URL, Soundcloud URL or a search query.
+    async def play(self, ctx: commands.Context, *, search: str):
+        """ Plays or queues a song/playlist. Can be a YouTube, Spotify, Soundcloud link or a search query.
 
         Examples:
         `<<play All girls are the same Juice WRLD` - searches for a song and queues it
         `<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
         """
-        player: Player = ctx.voice_client
-        tracks = []
+        player: wavelink.Player = ctx.voice_client
+        player.autoplay = wavelink.AutoPlayMode.partial
+        player.queue.mode = wavelink.QueueMode.normal
 
         search = search.strip('<>')
         if not ctx.interaction:
             await ctx.message.delete()
 
-        # Check spotify
-        if (decoded := spotify.decode_url(search)) is not None:
-            if decoded["type"] is spotify.SpotifySearchType.unusable:
-                return await ctx.reply("This Spotify URL is not usable.", ephemeral=True)
-            elif decoded["type"] in (spotify.SpotifySearchType.playlist, spotify.SpotifySearchType.album):
-                async for track in spotify.SpotifyTrack.iterator(query=decoded["id"], type=decoded["type"]):
-                    tracks.append(track)
-            else:
-                tracks = await spotify.SpotifyTrack.search(search)
-            if not isinstance(tracks, list):
-                tracks = [tracks]
-
-        elif URL.match(search):
-            if 'list=' in search:
-                tracks = await player.current_node.get_playlist(wavelink.YouTubePlaylist, search)
-            else:
-                tracks = await player.current_node.get_tracks(Playable, search)
-
-        else:
-            track = await wavelink.YouTubeTrack.search(search)
-            tracks = track[:1]
-
+        tracks: wavelink.Search = await wavelink.Playable.search(search)
         if not tracks:
             raise NoTracksFound()
-        embed = await self._queue_songs(tracks, player, ctx.author)
+    
+        stmt_cleanup = "SELECT music_cleanup FROM discord_server WHERE discord_server_id = $1"
+        music_cleanup = await self.bot.db.fetchval(stmt_cleanup, ctx.guild.id)
+        delete_after = 60 if music_cleanup else None
 
-        server = db.get_discord_server(ctx.guild)
-        delete_after = 60 if server.music_cleanup else None
+        queued_songs_count = await player.queue.put_wait(tracks)
+        embed = discord.Embed(color=EMBED_COLOR)
+        embed.title = f'Songs Queued ({queued_songs_count})'
+
+        if not player.playing:
+            track = await player.play(player.queue.get())
+            embed.description = f'[{track.title}]({track.uri})'
         await ctx.send(embed=embed, delete_after=delete_after)
 
-    async def _queue_songs(self, songs, player: wavelink.Player, requester):
-        embed = discord.Embed(color=EMBED_COLOR)
-        if isinstance(songs, wavelink.YouTubePlaylist):
-            for track in songs.tracks:
-                track.requester = requester
-                player.queue.put(track)
-            embed.title = 'Playlist Queued'
-            embed.description = f'{songs.name} - {len(songs.tracks)} tracks'
-        else:
-            for song in songs:
-                song.requester = requester
-                player.queue.put(song)
-            song = songs[0]
-            embed.title = 'Song Queued' if len(songs) == 1 else f'Songs Queued ({len(songs)})'
-            embed.description = f'[{song.title}]({song.uri})'
-        if not player.is_playing():
-            track = await player.play(await player.queue.get_wait())
-            track.requester = requester
-        return embed
-
-    @commands.hybrid_command(name="loop")
-    async def _loop(self, ctx):
-        """ Loops the current song. """
-        player: Player = ctx.voice_client
-        looping = not player.queue.loop
-        player.queue.loop = looping
-        embed_color = discord.Color.green() if looping else discord.Color.red()
-        embed = discord.Embed(color=embed_color)
-        embed.title = '🔁 Looping' if looping else '⏭️ Not looping'
-        embed.description = 'Now looping the current song.' if looping else 'Stopped looping.'
-        await ctx.send(embed=embed)
-
     @commands.hybrid_command(aliases=['disconnect', 'stop'])
-    async def leave(self, ctx):
+    async def leave(self, ctx: commands.Context):
         """
         Disconnects the player from the voice channel and clears its queue.
         """
-        player: Player = ctx.voice_client
+        player: wavelink.Player = ctx.voice_client
 
-        if player is None:
-            raise NoPlayerFound()
-
-        if ctx.author.voice.channel != player.channel:
-            raise DifferentVoiceChannel()
-
-        await player.stop()
-        player.queue.reset()
+        if hasattr(player, 'controller_message'):
+            await player.controller_message.delete()
         await player.disconnect()
-
-        embed = discord.Embed(title='*⃣ | Disconnected', color=EMBED_COLOR)
+        embed = discord.Embed(title='⏹️ Disconnected', color=EMBED_COLOR)
         await ctx.send(embed=embed, delete_after=30)
-        if not ctx.interaction:
-            await ctx.message.delete()
 
-    @commands.hybrid_command()
-    async def skip(self, ctx):
+    @commands.hybrid_command(aliases=['con'])
+    async def controller(self, ctx: commands.Context):
         """
-        Skips the current track. If there no more tracks in the queue, disconnects the player.
+        Shows the music controller.
         """
-        player: Player = ctx.voice_client
-
-        if not player.is_playing():
-            return await ctx.send('Not playing anything currently.', delete_after=15)
-
-        old_song = f'Skipped: [{player.current.title}]({player.current.uri})'
-        await player.stop()
-        if player.queue.is_empty:
-            old_song += '\n*⃣ | Queue is empty.'
-        embed = discord.Embed(color=EMBED_COLOR, title='⏭ | Skipped.', description=old_song)
-        embed.set_footer(text=f'Requested by {ctx.author}', icon_url=ctx.author.avatar)
-        await ctx.send(embed=embed, delete_after=30)
-        if not ctx.interaction:
-            await ctx.message.delete()
-
-    @commands.hybrid_command(name="now", aliases=['np', 'current'])
-    async def now_playing(self, ctx):
-        """
-        Shows info about the currently playing track.
-        """
-        player: Player = ctx.voice_client
-        if not ctx.interaction:
-            await ctx.message.delete()
-
-        if player is None:
-            raise NoPlayerFound()
-
-        if not player.is_playing():
-            return await ctx.send('Nothing playing.', delete_after=10)
-
-        embed = self._create_current_song_embed(player)
-        await ctx.send(embed=embed, delete_after=60)
-
-    @commands.hybrid_command()
-    async def shuffle(self, ctx):
-        """
-        Randomly shuffles the queue.
-        """
-        player: Player = ctx.voice_client
-
-        if len(player.queue) < 2:
-            return await ctx.reply('Not enough tracks to shuffle.', delete_after=15)
-
-        random.shuffle(player.queue._queue)
-        embed = discord.Embed(color=EMBED_COLOR, title='🔀 | Queue shuffled.')
-        await ctx.send(embed=embed, delete_after=15)
-        if not ctx.interaction:
-            await ctx.message.delete()
-
-    @commands.hybrid_group()
-    async def queue(self, ctx):
-        if ctx.invoked_subcommand is None:
-            embed = discord.Embed(color=EMBED_COLOR)
-            embed.description = "You probably want to call `<<queue show`.\nUsing a slash command for that might be even handier."
-
-    @queue.command(name='show')
-    async def _show(self, ctx):
-        """
-        Shows the queue in a paginated menu.
-        """
-        player: Player = ctx.voice_client
-        if not ctx.interaction:
-            await ctx.message.delete()
-        if player.queue.count < 1:
-            embed = self._create_current_song_embed(player) if player.current else None
-            await ctx.send('Nothing queued.', embed=embed, delete_after=120)
-            return
-
-        queue_pages = self._create_queue_embed_list(ctx)
-        view = PaginatorView(ctx.author, queue_pages) if len(queue_pages) > 1 else None
-        await ctx.send(embed=queue_pages[0], delete_after=120, view=view)
-
-    @queue.command(name='move')
-    async def queue_move(self, ctx, from_index: int, to_index: int):
-        """
-        Moves a track from one position in the queue to another.
-        """
-        player: Player = ctx.voice_client
-        if not ctx.interaction:
-            await ctx.message.delete()
-        if not player.queue:
-            embed = discord.Embed(color=EMBED_COLOR, title='*⃣ | Queue is empty.')
-            return await ctx.send(embed=embed, delete_after=15)
-
-        song_to_move = player.queue._queue[from_index - 1]
-        player.queue.put_at_index(to_index - 1, song_to_move)
-        del player.queue._queue[from_index]
-        embed = discord.Embed(color=EMBED_COLOR, title='*⃣ | Queue moved.')
-        embed.description = f'Moved `{song_to_move.title}` from position {from_index} to {to_index}.'
-        await ctx.send(embed=embed, delete_after=15)
-
-    @queue.command(name='clear')
-    async def queue_clear(self, ctx):
-        """
-        Clears the queue.
-        """
-        player: Player = ctx.voice_client
-        player.queue.clear()
-        embed = discord.Embed(color=EMBED_COLOR, title='*⃣ | Queue cleared.')
-        await ctx.send(embed=embed, delete_after=30)
-        if not ctx.interaction:
-            await ctx.message.delete()
+        player: wavelink.Player = ctx.voice_client
+        if hasattr(player, 'controller_message'):
+            await player.controller_message.delete()
+        view = MusicController(player, ctx)
+        embed = await create_controller_embed(player)
+        controller_message = await ctx.send(embed=embed, view=view)
+        player.controller_message = controller_message
 
     @commands.is_owner()
     @commands.command(hidden=True)
-    async def players(self, ctx):
+    async def players(self, ctx: commands.Context):
         """
         Shows all active players. Mostly used to check before deploying a new version.
         """
-        players = wavelink.NodePool.get_node().players
+        players = wavelink.Pool.get_node().players
         if not ctx.interaction:
             await ctx.message.delete()
         if not players:
@@ -334,7 +165,7 @@ class Music(commands.Cog):
             return await ctx.send(embed=embed, delete_after=15)
 
         # get server names by id
-        server_names = [f'{player.guild.name}, queued: `{player.queue.count}`, {"`playing`" if player.is_playing() else "`not playing`"}' for _, player in players.items()]
+        server_names = [f'{player.guild.name}, queued: `{len(player.queue)}`, {"`playing`" if player.playing else "`not playing`"}' for _, player in players.items()]
 
         embed = discord.Embed(color=EMBED_COLOR)
         embed.title = 'Active players'
@@ -343,107 +174,106 @@ class Music(commands.Cog):
 
     @commands.hybrid_command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def cleanup(self, ctx, enable: bool = None):
+    async def cleanup(self, ctx: commands.Context, enable: bool = None):
         """
         Enables/disables the auto-cleanup of the music queue messages that appear after queueing a new song.
         """
-        server = db.get_discord_server(ctx.guild)
-
         if enable is not None:
-            server.music_cleanup = enable
-            db.session.commit()
+            stmt_cleanup = 'UPDATE discord_server SET music_cleanup = $1 WHERE discord_server.discord_server_id = $2'
+            await self.bot.db.execute(stmt_cleanup, enable, ctx.guild.id)
 
-        embed = self.create_song_cleanup_embed(ctx, enable, server)
-        await ctx.send(embed=embed)
-        if not ctx.interaction:
-            await ctx.message.delete()
-
-    def create_song_cleanup_embed(self, ctx, enable, server):
         embed = discord.Embed(color=discord.Color.red())
-        if enable or server.music_cleanup:
+        status_string = '`disabled` <:redCross:876177262813278288>'
+        if enable:
             embed = discord.Embed(color=discord.Color.green())
-        if server.music_cleanup:
             status_string = '`enabled` <:greenTick:876177251832590348>'
-        else:
-            status_string = '`disabled` <:redCross:876177262813278288>'
         embed.title = 'Cleanup status'
         embed.description = f'Song messages auto-cleanup is {status_string}.'
         embed.set_footer(text=f'Use `{ctx.prefix}cleanup <enable/disable>` to toggle.')
-        return embed
+        await ctx.send(embed=embed)
 
-    def _create_current_song_embed(self, player: wavelink.Player):
-        embed = discord.Embed(color=EMBED_COLOR)
-        embed.title = 'Now Playing'
-        if player.queue.loop:
-            embed.title += ' | (Looping)'
-        embed.description = f'[{player.current.title}]({player.current.uri})'
-        if not player.current.is_stream:
-            song_timestamp = player.position if player.position > 0 else player.last_position
-            position = str(datetime.timedelta(milliseconds=song_timestamp)).split(".")[0]
-            song_length = str(datetime.timedelta(milliseconds=player.current.duration)).split(".")[0]
-            embed.add_field(name='Duration', value=f"{position}/{song_length}")
-        else:
-            embed.add_field(name='Duration', value='LIVE 🔴')
-        requester = 'Unknown'
-        if hasattr(player.current, 'requester'):
-            requester = player.current.requester.mention
-        embed.add_field(name='Queued By', value=requester)
-        return embed
-
-    def _create_queue_embed_list(self, ctx):
-        player: Player = ctx.voice_client
-        songs_array = []
-        for song in player.queue:
-            try:
-                songs_array.append(song)
-            except IndexError:
-                break
-
-        pages = []
-        for i in range(0, player.queue.count, 10):
-            embed = discord.Embed(color=EMBED_COLOR, timestamp=datetime.datetime.now(datetime.timezone.utc))
-
-            embed.title = f"Queue ({player.queue.count})"
-            embed.add_field(name='Now Playing', value=f'[{player.current.title}]({player.current.uri})')
-            embed.set_footer(text=f"Queued by {ctx.author}", icon_url=ctx.author.avatar)
-
-            upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(songs_array[i:i + 10], start=i)])
-            embed.add_field(name="Next up", value=upcoming, inline=False)
-            pages.append(embed)
-        return pages
-
-
-class PaginatorView(discord.ui.View):
-    def __init__(self, author: discord.Member | discord.User, pages: list[discord.Embed]):
+class MusicController(ui.View):
+    def __init__(self, player: wavelink.Player, ctx: commands.Context):
         super().__init__()
-        self.current_page = 0
-        self.author = author
-        self.pages = pages
+        self.add_item(RadioButton(player))
+        self.add_item(LoopSelect(player))
+        self.player = player
+        self.ctx = ctx
+
+    async def on_timeout(self):
+        await self.player.controller_message.edit(view=None)
+        await self.player.controller_message.delete()
+        del self.player.controller_message
 
     async def interaction_check(self, interaction: Interaction) -> bool:
-        if interaction.user != self.author:
+        if interaction.user != self.ctx.author:
             await interaction.response.send_message(f':warn: {interaction.user.mention} **You aren\'t the author of this embed**')
             return False
         return True
 
-    @discord.ui.button(emoji='⏮', style=discord.ButtonStyle.primary)
-    async def previous(self, interaction: Interaction, button: discord.ui.Button):
-        self.current_page = max(self.current_page - 1, 0)
-        button.disabled = (self.current_page == 0)
-        await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
-        button.disabled = False
+    @ui.button(label='Stop', emoji='⏹️', row=2, style=ButtonStyle.danger)
+    async def leave_button(self, interaction: discord.Interaction, button: ui.Button):
+        await self.player.disconnect()
+        await interaction.response.edit_message(view=None)
+        if hasattr(self.player, 'controller_message'):
+            await self.player.controller_message.delete()
+        embed = discord.Embed(title='⏹️ Disconnected', color=EMBED_COLOR)
+        embed.description = f'By: {interaction.user.mention}'
+        await interaction.channel.send(embed=embed, delete_after=60)
 
-    @discord.ui.button(emoji='❌', style=discord.ButtonStyle.grey)
-    async def close(self, interaction: Interaction, button: discord.ui.Button):
-        self.stop()
-        await interaction.message.delete()
+    @ui.button(label='Skip', emoji='⏭️', row=2, style=ButtonStyle.secondary)
+    async def skip_button(self, interaction: discord.Interaction, button: ui.Button):
+        await self.player.skip()
 
-    @discord.ui.button(emoji='⏭', style=discord.ButtonStyle.primary)
-    async def next(self, interaction: Interaction, button: discord.ui.Button):
-        self.current_page = min(self.current_page + 1, len(self.pages) - 1)
-        button.disabled = (self.current_page == len(self.pages) - 1)
-        await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
-        button.disabled = False
+    @ui.button(label='Shuffle', emoji='🔀', row=2, style=ButtonStyle.secondary)
+    async def shuffle_button(self, interaction: discord.Interaction, button: ui.Button):
+        self.player.queue.shuffle()
+        embed = await create_controller_embed(self.player)
+        await interaction.response.edit_message(embed=embed)
+
+class LoopSelect(ui.Select):
+    def __init__(self, player: wavelink.Player):
+        mode = player.queue.mode
+        options=[
+            discord.SelectOption(label='No Loop', value='normal', emoji='❌', default=(mode == wavelink.QueueMode.normal)),
+            discord.SelectOption(label='Loop', value='loop', emoji='🔂', default=(mode == wavelink.QueueMode.loop)),
+            discord.SelectOption(label='Loop All', value='loop_all', emoji='🔁', default=(mode == wavelink.QueueMode.loop_all)),
+        ]
+        super().__init__(row=1, placeholder='Select Loop Mode', options=options)
+        self.player = player
+
+    async def callback(self, interaction: discord.Interaction):
+        value = self.values[0]
+        self.player.queue.mode = wavelink.QueueMode[value]
+        await interaction.response.defer()
+
+class RadioButton(ui.Button):
+    def __init__(self, player: wavelink.Player):
+        btn_style = ButtonStyle.secondary
+        if player.autoplay == wavelink.AutoPlayMode.enabled:
+            btn_style = ButtonStyle.green
+        super().__init__(label='Radio', emoji='📻', row=2, style=btn_style)
+        self.player = player
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.player.autoplay != wavelink.AutoPlayMode.enabled:
+            self.player.autoplay = wavelink.AutoPlayMode.enabled
+            self.style = ButtonStyle.green
+        else:
+            self.player.autoplay = wavelink.AutoPlayMode.partial
+            self.style = ButtonStyle.secondary
+        await interaction.response.edit_message(view=self.view)
+
+async def create_controller_embed(player: wavelink.Player):
+    embed = discord.Embed(title='🎚️ Music Controller', color=EMBED_COLOR)
+    embed.set_thumbnail(url=player.current.artwork)
+    embed.add_field(name='Now Playing', value=f'[{player.current.title}]({player.current.uri})', inline=False)
+    embed.add_field(name='Position', value=f'`{str(datetime.timedelta(milliseconds=player.position)).split(".")[0]}`')
+    upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(player.queue[:5])])
+    if upcoming:
+        upcoming += f'\n`... and {len(player.queue) - 5} more`'
+        embed.add_field(name="Next up ", value=upcoming, inline=False)
+    return embed
 
 
 class MusicError(commands.CommandError):
@@ -467,7 +297,7 @@ class NoPlayerFound(MusicError):
 
 class NoTracksFound(MusicError):
     def __init__(self):
-        super().__init__('No tracks were found.')
+        super().__init__('Could not find any tracks with that query. Please try again.')
 
 
 class DifferentVoiceChannel(MusicError):

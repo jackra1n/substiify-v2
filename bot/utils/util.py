@@ -1,10 +1,10 @@
 import importlib.resources
-import os
 import platform
+import shutil
 
 import discord
 from core.version import Version
-from utils.colors import colors, get_colored
+from utils.colors import Colors, get_colored
 
 
 def get_system_description() -> str:
@@ -14,13 +14,13 @@ def get_system_description() -> str:
 
 
 def print_system_info() -> None:
-    system_label = get_colored("Running on:", colors.green, True)
-    python_label = get_colored("Python:", colors.cyan, True)
-    discord_label = get_colored("discord.py:", colors.yellow, True)
-    substiify_label = get_colored("substiify:", colors.red, True)
+    system_label = get_colored("Running on:", Colors.green, True)
+    python_label = get_colored("Python:", Colors.cyan, True)
+    discord_label = get_colored("discord.py:", Colors.yellow, True)
+    substiify_label = get_colored("substiify:", Colors.red, True)
 
     ascii_art = importlib.resources.read_text("utils", "art.txt")
-    shell_width = os.get_terminal_size().columns
+    shell_width = shutil.get_terminal_size().columns
     center_art = shell_width - (shell_width // 15)
     for line in ascii_art.splitlines():
         print(line.center(center_art))
