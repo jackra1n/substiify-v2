@@ -210,7 +210,7 @@ class Owner(commands.Cog):
         """
         Shows a lits of most used command on the current server
         """
-        stmt_usage = 'SELECT command, COUNT(*) AS cnt FROM command_history WHERE guild_id = $1 GROUP BY command ORDER BY cnt DESC LIMIT 10'
+        stmt_usage = 'SELECT command_name, COUNT(*) AS cnt FROM command_history WHERE guild_id = $1 GROUP BY command_name ORDER BY cnt DESC LIMIT 10'
         commands_used = await self.bot.db.fetch(stmt_usage, ctx.guild.id)
         embed = create_command_usage_embed(commands_used)
         embed.title = f"Top 10 used commands on: **{ctx.guild.name}**"
@@ -222,7 +222,7 @@ class Owner(commands.Cog):
         """
         Shows a list of most used commands on all servers
         """
-        stmt_usage = 'SELECT command, COUNT(*) AS cnt FROM command_history GROUP BY command ORDER BY cnt DESC LIMIT 10'
+        stmt_usage = 'SELECT command_name, COUNT(*) AS cnt FROM command_history GROUP BY command_name ORDER BY cnt DESC LIMIT 10'
         commands_used = await self.bot.db.fetch(stmt_usage)
         embed = create_command_usage_embed(commands_used)
         embed.title = "Top 10 total used commands"
