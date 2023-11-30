@@ -375,53 +375,6 @@ async def migrate_db(bot: Substiify, ctx: commands.Context) -> None:
     db_script = Path("./bot/db/CreateDatabase.sql").read_text('utf-8')
     await bot.db.execute(db_script)              
 
-    # migrate discord_server
-    print("Migrating discord_server...")
-    sqlite_cursor.execute("SELECT * FROM discord_server")
-    server_rows = sqlite_cursor.fetchall()
-    for row in server_rows:
-        await bot.db.execute(
-            "INSERT INTO discord_server (discord_server_id, server_name, music_cleanup) VALUES ($1, $2, $3) ON CONFLICT (discord_server_id) DO NOTHING",
-            int(row[0]), str(row[1]), bool(row[2])
-        )
-    # migrate discord_channel
-    print("Migrating discord_channel...")
-    sqlite_cursor.execute("SELECT * FROM discord_channel")
-    channel_rows = sqlite_cursor.fetchall()
-    for row in channel_rows:
-        # check if the server of the channel exists in the postgresql db
-        server_exists = await check_if_server_exists_and_insert(bot, row[2])
-        if not server_exists:
-            continue
-        # if parent_discord_channel_id exists, find it in the db and insert it first
-        if row[3] is not None:
-            sqlite_cursor.execute("SELECT * FROM discord_channel WHERE discord_channel_id = ?", (row[3],))
-            parent_row = sqlite_cursor.fetchone()
-            if parent_row is None:
-                # try getting the parent channel from discord
-                try:
-                    discord_channel = bot.get_channel(row[3]) or await bot.fetch_channel(row[3])
-                except Exception as e:
-                    print(f"Error fetching parent channel: {e}")
-                    continue
-                if discord_channel is None:
-                    print(f"Parent channel with id {row[3]} does not exist in the database. Skipping...")
-                    continue
-                await bot.db.execute(
-                    "INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO NOTHING",
-                    discord_channel.id, discord_channel.name, discord_channel.guild.id, discord_channel.category_id, False
-                )
-            else:
-                await bot.db.execute(
-                    "INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO NOTHING",
-                    parent_row[0], parent_row[1], parent_row[2], parent_row[3], bool(parent_row[4])
-                )
-        await bot.db.execute(
-            "INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO NOTHING",
-            row[0], row[1], row[2], row[3], bool(row[4])
-        )
-            
-
     # migrate discord_user
     print("Migrating discord_user...")
     sqlite_cursor.execute("SELECT * FROM discord_user")
@@ -437,80 +390,64 @@ async def migrate_db(bot: Substiify, ctx: commands.Context) -> None:
     sqlite_cursor.execute("SELECT * FROM command_history")
     command_rows = sqlite_cursor.fetchall()
     for row in command_rows:
-        # check if the server, channel or user exists in the postgresql db and try to fetch them from discord if they don't
-        server_exists = await check_if_server_exists_and_insert(bot, row[4])
-        if not server_exists:
-            continue
-        channel_exists = await check_if_channel_exists_and_insert(bot, row[5])
-        if not channel_exists:
-            continue
-        user_exists = await check_if_user_exists_and_insert(bot, row[3])
-        if not user_exists:
-            continue
-        await bot.db.execute(
-            "INSERT INTO command_history (id, command_name, parameters, discord_user_id, discord_server_id, discord_channel_id, discord_message_id, date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING",
-            row[0], row[1], None, row[3], row[4], row[5], row[6], datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S.%f')
-        )
+        try:
+            await bot.db.execute(
+                "INSERT INTO command_history (id, command_name, parameters, discord_user_id, discord_server_id, discord_channel_id, discord_message_id, date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (id) DO NOTHING",
+                row[0], row[1], None, row[3], row[4], row[5], row[6], datetime.strptime(row[2], '%Y-%m-%d %H:%M:%S.%f')
+            )
+        except Exception as e:
+            print(f"Error inserting command_history row: {e}")
     # restart the sequence
-    print("Restarting sequence...")
-    await bot.db.execute("ALTER SEQUENCE command_history_id_seq RESTART WITH $1", len(command_rows) + 1)
+    max_id = await bot.db.fetchval("SELECT MAX(id) FROM command_history")
+    print(f"Restarting sequence with {max_id + 1}...")
+    await bot.db.execute(f"ALTER SEQUENCE command_history_id_seq RESTART WITH {max_id + 1}")
 
     # migrate karma
     print("Migrating karma...")
     sqlite_cursor.execute("SELECT * FROM karma")
     karma_rows = sqlite_cursor.fetchall()
     for row in karma_rows:
-        # check if the server or user exists in the postgresql db
-        server_exists = await check_if_server_exists_and_insert(bot, row[2])
-        if not server_exists:
-            continue
-        user_exists = await check_if_user_exists_and_insert(bot, row[1])
-        if not user_exists:
-            continue
-        await bot.db.execute(
-            "INSERT INTO karma (id, discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING",
-            row[0], row[1], row[2], row[3]
-        )
+        try:
+            await bot.db.execute(
+                "INSERT INTO karma (id, discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING",
+                row[0], row[1], row[2], row[3]
+            )
+        except Exception as e:
+            print(f"Error inserting karma row: {e}")
     # restart the sequence
-    print("Restarting sequence...")
-    await bot.db.execute("ALTER SEQUENCE karma_id_seq RESTART WITH $1", len(karma_rows) + 1)
+    max_id = await bot.db.fetchval("SELECT MAX(id) FROM karma")
+    print(f"Restarting sequence with {max_id + 1}...")
+    await bot.db.execute(f"ALTER SEQUENCE karma_id_seq RESTART WITH {max_id + 1}")
 
     # migrate post
     print("Migrating post...")
     sqlite_cursor.execute("SELECT * FROM post")
     post_rows = sqlite_cursor.fetchall()
     for row in post_rows:
-        # check if the server, channel or user exists in the postgresql db and try to fetch them from discord if they don't
-        server_exists = await check_if_server_exists_and_insert(bot, row[2])
-        if not server_exists:
-            continue
-        channel_exists = await check_if_channel_exists_and_insert(bot, row[3])
-        if not channel_exists:
-            continue
-        user_exists = await check_if_user_exists_and_insert(bot, row[1])
-        if not user_exists:
-            continue
-        await bot.db.execute(
-            "INSERT INTO post (discord_message_id, discord_user_id, discord_server_id, discord_channel_id, created_at, upvotes, downvotes) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (discord_message_id) DO NOTHING",
-            int(row[0]), int(row[1]), int(row[2]), int(row[3]), datetime.strptime(row[4], '%Y-%m-%d %H:%M:%S.%f'), int(row[5]), int(row[6])
-        )
+        try:
+            await bot.db.execute(
+                "INSERT INTO post (discord_message_id, discord_user_id, discord_server_id, discord_channel_id, created_at, upvotes, downvotes) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (discord_message_id) DO NOTHING",
+                int(row[0]), int(row[1]), int(row[2]), int(row[3]), datetime.strptime(row[4], '%Y-%m-%d %H:%M:%S.%f'), int(row[5]), int(row[6])
+            )
+        except Exception as e:
+            print(f"Error inserting post row: {e}")
 
     # migrate karma_emote
     print("Migrating karma_emote...")
     sqlite_cursor.execute("SELECT * FROM karma_emote")
     karma_emote_rows = sqlite_cursor.fetchall()
     for row in karma_emote_rows:
-        # check if the server or user exists in the postgresql db
-        server_exists = await check_if_server_exists_and_insert(bot, row[2])
-        if not server_exists:
-            continue
-        await bot.db.execute(
-            "INSERT INTO karma_emote (id, discord_emote_id, discord_server_id, increase_karma) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING",
-            int(row[0]), int(row[1]), int(row[2]), bool(row[3])
-        )
+        try:
+            await bot.db.execute(
+                "INSERT INTO karma_emote (discord_emote_id, discord_server_id, increase_karma) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING",
+                int(row[0]), int(row[1]), bool(row[2])
+            )
+        except Exception as e:
+            print(f"Error inserting karma_emote row: {e}")
     # restart the sequence
-    print("Restarting sequence...")
-    await bot.db.execute("ALTER SEQUENCE karma_emote_id_seq RESTART WITH $1", len(karma_emote_rows) + 1)
+    max_id = await bot.db.fetchval("SELECT MAX(id) FROM karma_emote")
+    print(f"Restarting sequence with {max_id + 1}...")
+    await bot.db.execute(f"ALTER SEQUENCE karma_emote_id_seq RESTART WITH {max_id + 1}")
 
     # close connections
     sqlite_cursor.close()
