@@ -57,7 +57,8 @@ class Util(commands.Cog):
     async def giveaway(self, ctx: commands.Context):
         """
         Allows you to create giveaways on the server.
-        If you want to create a giveaway, check the `giveaway create` command.
+        To quickly create a giveaway, use the short command `<<give c [hosted_by]`. Hosted_by is optional.
+        For more info, check the `giveaway create` help page.
         """
         await ctx.send_help(ctx.command)
 
@@ -77,6 +78,8 @@ class Util(commands.Cog):
 
         Example:
         `<<giveaway create` or `<<giveaway create @user`
+        Short:
+        `<<give c` or `<<give c @user`
         """
         if hosted_by is None or hosted_by.bot:
             hosted_by = ctx.author
@@ -242,7 +245,7 @@ class Util(commands.Cog):
             description=f"Win **{prize}**!",
             color=0x00FFFF
         )
-        host = author.mention if isinstance(author, discord.Member) else author
+        host = author.mention if isinstance(author, (discord.Member, discord.User)) else author
         embed.add_field(name="Hosted By:", value=host)
         return embed
 
