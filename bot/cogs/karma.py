@@ -45,7 +45,6 @@ class Karma(commands.Cog):
         """
         Shows if votes are enabled in the current channel
         """
-        await ctx.message.delete()
         if ctx.channel.id in self.vote_channels:
             embed = discord.Embed(color=0x23b40c)
             embed.description = f'Votes are **ALREADY enabled** in {ctx.channel.mention}!'
@@ -64,6 +63,9 @@ class Karma(commands.Cog):
         upvote_channels = await self.bot.db.fetch(stmt, ctx.guild.id)
         channels_string = '\n'.join([f"{x['discord_channel_id']} ({x['channel_name']})" for x in upvote_channels])
         embed = discord.Embed(color=0x23b40c)
+        if not channels_string:
+            embed.description = 'No votes channels found.'
+            return await ctx.send(embed=embed, delete_after=20)
         embed.description = f'Votes are enabled in the following channels: {channels_string}'
         await ctx.send(embed=embed, delete_after=20)
 
@@ -149,7 +151,7 @@ class Karma(commands.Cog):
         user_karma = 0 if user_karma is None else user_karma
 
         embed = discord.Embed(title=f'Karma - {ctx.guild.name}', description=f'{user.mention} has {user_karma} karma.')
-        await ctx.send(embed=embed, delete_after=120)
+        await ctx.send(embed=embed)
 
     @karma.error
     async def karma_error(self, ctx: commands.Context, error):
@@ -197,7 +199,6 @@ class Karma(commands.Cog):
         embed = discord.Embed(color=0x23b40c)
         embed.description = f'{ctx.author.mention} has donated {amount} karma to {user.mention}!'
         await ctx.send(embed=embed)
-        await ctx.message.delete()
 
     @karma_donate.error
     async def karma_donate_error(self, ctx: commands.Context, error):
@@ -216,7 +217,7 @@ class Karma(commands.Cog):
         If you want to add or remove an emote from the karma system,
         check the subcommand `karma emotes add` or `karma emotes remove`
         """
-        stmt = "SELECT * FROM karma_emote WHERE discord_server_id = $1"
+        stmt = "SELECT * FROM karma_emote WHERE discord_server_id = $1 ORDER BY increase_karma DESC"
         karma_emotes = await self.bot.db.fetch(stmt, ctx.guild.id)
         if not karma_emotes:
             return await ctx.send(embed=discord.Embed(title='No emotes found.'), delete_after=60)
@@ -339,8 +340,7 @@ class Karma(commands.Cog):
                 embed.description = 'No users have karma.'
                 return await ctx.send(embed=embed)
 
-            avg_karma = total_karma / karma_users if karma_users > 0 else 0
-
+            avg_karma = total_karma / max(karma_users, 1)
             embed.add_field(name='Total Server Karma', value=f'`{total_karma:n} (of {karma_users} users)`', inline=False)
             embed.add_field(name='Average Karma per user', value=f'`{avg_karma:.2f}`', inline=False)
 
@@ -362,7 +362,9 @@ class Karma(commands.Cog):
             stmt_avg_upvote_ratio = '''
                 SELECT AVG(upvotes / downvotes) as average, COUNT(*) as post_count
                 FROM post
-                WHERE discord_server_id = $1 AND upvotes + downvotes > 2'''
+                WHERE discord_server_id = $1 
+                    AND upvotes >= 1
+                    AND downvotes >= 1'''
 
             avg_post_query = await self.bot.db.fetchrow(stmt_avg_upvote_ratio, ctx.guild.id)
             avg_ratio = avg_post_query['average'] or 0
@@ -417,9 +419,9 @@ class Karma(commands.Cog):
         """
         Posts the leaderboard of the most upvoted posts.
         """
-        stmt_top_server = "SELECT * FROM post WHERE discord_server_id = $1 ORDER BY upvotes DESC"
-        stmt_top_monthly = "SELECT * FROM post WHERE discord_server_id = $1 AND created_at > NOW() - INTERVAL '30 days' ORDER BY upvotes DESC"
-        stmt_top_weekly = "SELECT * FROM post WHERE discord_server_id = $1 AND created_at > NOW() - INTERVAL '7 days' ORDER BY upvotes DESC"
+        stmt_top_server = "SELECT * FROM post WHERE discord_server_id = $1 ORDER BY upvotes DESC LIMIT 5"
+        stmt_top_monthly = "SELECT * FROM post WHERE discord_server_id = $1 AND created_at > NOW() - INTERVAL '30 days' ORDER BY upvotes DESC LIMIT 5"
+        stmt_top_weekly = "SELECT * FROM post WHERE discord_server_id = $1 AND created_at > NOW() - INTERVAL '7 days' ORDER BY upvotes DESC LIMIT 5"
         async with ctx.typing():
             posts = await self.bot.db.fetch(stmt_top_server, ctx.guild.id)
             monthly_posts = await self.bot.db.fetch(stmt_top_monthly, ctx.guild.id)
@@ -490,11 +492,15 @@ class Karma(commands.Cog):
         await ctx.message.delete()
 
     async def create_post_leaderboard(self, posts: list[Record]):
+        logger.info('Creating post leaderboard')
+        if not posts:
+            return 'No posts found.'
         leaderboard = ''
         for index, post in enumerate(posts, start=1):
             jump_url = self.create_message_url(post['discord_server_id'], post['discord_channel_id'], post['discord_message_id'])
-            leaderboard += f"**{index}.** [{post['username']} ({post['upvotes']})]({jump_url})\n"
-        return leaderboard if len(leaderboard) > 0 else 'No posts found.'
+            username = self.bot.get_user(post['discord_user_id']) or await self.bot.fetch_user(post['discord_user_id'])
+            leaderboard += f"**{index}.** [{username} ({post['upvotes']})]({jump_url})\n"
+        return leaderboard
 
     def create_message_url(self, server_id, channel_id, message_id):
         return f'https://discordapp.com/channels/{server_id}/{channel_id}/{message_id}'
