@@ -18,8 +18,8 @@ INITIAL_EXTENSIONS = [
     'cogs.help',
     'cogs.karma',
     'cogs.music',
-    'cogs.owner',
     'cogs.util',
+    'cogs.owner',
     'jishaku'
 ]
 
