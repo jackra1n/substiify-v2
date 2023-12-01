@@ -101,8 +101,6 @@ class Music(commands.Cog):
         `<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
         """
         player: wavelink.Player = ctx.voice_client
-        player.autoplay = wavelink.AutoPlayMode.partial
-        player.queue.mode = wavelink.QueueMode.normal
 
         search = search.strip('<>')
         if not ctx.interaction:
