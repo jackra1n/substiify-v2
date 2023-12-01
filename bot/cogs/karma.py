@@ -698,9 +698,11 @@ class Karma(commands.Cog):
             return
         
         server = self.bot.get_guild(payload.guild_id) or await self.bot.fetch_guild(payload.guild_id)
+        channel = self.bot.get_channel(payload.channel_id) or await self.bot.fetch_channel(payload.channel_id)
 
         await self._insert_user(user)
         await self._insert_server(server)
+        await self._insert_channel(channel)
 
         await self._update_karma(payload, user, karma_modifier)
         await self._update_post_votes(payload, user, post_votes_modifier, 0)
@@ -716,6 +718,15 @@ class Karma(commands.Cog):
             INSERT INTO discord_server (discord_server_id, server_name) VALUES ($1, $2)
             ON CONFLICT (discord_server_id) DO UPDATE SET server_name = $2;'''
         await self.bot.db.execute(stmt, server.id, server.name)
+
+    async def _insert_channel(self, channel: discord.abc.GuildChannel):
+        if isinstance(channel, discord.Thread) and channel.parent:
+            await self._insert_channel(channel.parent)
+        stmt = '''
+            INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id)
+            VALUES ($1, $2, $3, $4) ON CONFLICT (discord_channel_id) DO UPDATE SET channel_name = $2;'''
+        parent_channel_id = channel.parent_id if isinstance(channel, discord.Thread) else None
+        await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, parent_channel_id)
 
     async def _update_karma(self, payload: discord.RawReactionActionEvent, user: discord.Member, amount: int):
         await self.bot.db.execute(
