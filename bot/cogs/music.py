@@ -199,8 +199,8 @@ class MusicController(ui.View):
         self.ctx = ctx
 
     async def on_timeout(self):
-        await self.player.controller_message.edit(view=None)
         if hasattr(self.player, 'controller_message'):
+            await self.player.controller_message.edit(view=None)
             await self.player.controller_message.delete()
             del self.player.controller_message
 
