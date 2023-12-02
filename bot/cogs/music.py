@@ -102,6 +102,9 @@ class Music(commands.Cog):
         """
         player: wavelink.Player = ctx.voice_client
 
+        if player.autoplay == wavelink.AutoPlayMode.disabled:
+            player.autoplay = wavelink.AutoPlayMode.partial
+
         search = search.strip('<>')
         if not ctx.interaction:
             await ctx.message.delete()
@@ -109,7 +112,10 @@ class Music(commands.Cog):
         tracks: wavelink.Search = await wavelink.Playable.search(search)
         if not tracks:
             raise NoTracksFound()
-    
+
+        if 'http' not in search:
+            tracks = tracks[0]
+
         stmt_cleanup = "SELECT music_cleanup FROM discord_server WHERE discord_server_id = $1"
         music_cleanup = await self.bot.db.fetchval(stmt_cleanup, ctx.guild.id)
         delete_after = 60 if music_cleanup else None
@@ -200,9 +206,12 @@ class MusicController(ui.View):
 
     async def on_timeout(self):
         if hasattr(self.player, 'controller_message'):
-            await self.player.controller_message.edit(view=None)
-            await self.player.controller_message.delete()
-            del self.player.controller_message
+            try:
+                await self.player.controller_message.edit(view=None)
+                await self.player.controller_message.delete()
+                del self.player.controller_message
+            except discord.NotFound:
+                pass
 
     async def interaction_check(self, interaction: Interaction) -> bool:
         if interaction.user != self.ctx.author:
@@ -222,7 +231,10 @@ class MusicController(ui.View):
 
     @ui.button(label='Skip', emoji='⏭️', row=2, style=ButtonStyle.secondary)
     async def skip_button(self, interaction: discord.Interaction, button: ui.Button):
-        await self.player.skip()
+        if not self.player.queue and not self.player.playing:
+            await self.player._do_recommendation()
+        else:
+            await self.player.skip()
         await interaction.response.defer()
 
     @ui.button(label='Shuffle', emoji='🔀', row=2, style=ButtonStyle.secondary)
@@ -266,9 +278,17 @@ class RadioButton(ui.Button):
 
 async def create_controller_embed(player: wavelink.Player):
     embed = discord.Embed(title='🎚️ Music Controller', color=EMBED_COLOR)
-    embed.set_thumbnail(url=player.current.artwork)
-    embed.add_field(name='Now Playing', value=f'[{player.current.title}]({player.current.uri})', inline=False)
-    embed.add_field(name='Position', value=f'`{str(datetime.timedelta(milliseconds=player.position)).split(".")[0]}`')
+    now_playing = '⏸️ Paused'
+    position = '00:00/00:00'
+    if player.playing:
+        embed.set_thumbnail(url=player.current.artwork)
+        now_playing = f'[{player.current}]({player.current.uri})'
+        current_position = str(datetime.timedelta(milliseconds=player.position)).split(".")[0]
+        song_length = str(datetime.timedelta(milliseconds=player.current.length)).split(".")[0]
+        position = f'`{current_position}/{song_length}`'
+    embed.add_field(name='Now Playing', value=now_playing, inline=False)
+    embed.add_field(name='Position', value=position)
+    embed.add_field(name='Autoplay', value=f'`{player.autoplay.name}`')
     upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(player.queue[:5])])
     if upcoming:
         upcoming += f'\n`... and {len(player.queue) - 5} more`'
