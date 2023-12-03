@@ -113,20 +113,24 @@ class Music(commands.Cog):
         if not tracks:
             raise NoTracksFound()
 
-        if 'http' not in search:
+        if 'http' not in search or len(tracks) == 1:
             tracks = tracks[0]
 
         stmt_cleanup = "SELECT music_cleanup FROM discord_server WHERE discord_server_id = $1"
         music_cleanup = await self.bot.db.fetchval(stmt_cleanup, ctx.guild.id)
         delete_after = 60 if music_cleanup else None
 
-        queued_songs_count = await player.queue.put_wait(tracks)
+        songs_cnt = await player.queue.put_wait(tracks)
         embed = discord.Embed(color=EMBED_COLOR)
-        embed.title = f'Songs Queued ({queued_songs_count})'
+        embed.title = 'Songs Queued'
+        embed.title += f' ({songs_cnt})' if songs_cnt > 1 else ''
+        if isinstance(tracks, wavelink.Playlist):
+            embed.description = f'[{tracks}]({tracks.url})'
+        else:
+            embed.description = f'[{tracks}]({tracks.uri})'
 
         if not player.playing:
-            track = await player.play(player.queue.get())
-            embed.description = f'[{track.title}]({track.uri})'
+            await player.play(player.queue.get())
         await ctx.send(embed=embed, delete_after=delete_after)
 
     @commands.hybrid_command(aliases=['disconnect', 'stop'])
@@ -288,11 +292,10 @@ async def create_controller_embed(player: wavelink.Player):
         position = f'`{current_position}/{song_length}`'
     embed.add_field(name='Now Playing', value=now_playing, inline=False)
     embed.add_field(name='Position', value=position)
-    embed.add_field(name='Autoplay', value=f'`{player.autoplay.name}`')
     upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(player.queue[:5])])
-    if upcoming:
+    if len(player.queue) > 5:
         upcoming += f'\n`... and {len(player.queue) - 5} more`'
-        embed.add_field(name="Next up ", value=upcoming, inline=False)
+    embed.add_field(name="Next up ", value=upcoming, inline=False)
     return embed
 
 
