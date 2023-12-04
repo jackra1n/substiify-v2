@@ -34,6 +34,11 @@ class Music(commands.Cog):
             if player is not None:
                 await player.disconnect()
 
+    def is_bot_last_vc_member(self, channel: discord.VoiceChannel):
+        if channel and self.bot.user in channel.members:
+            return all(member.bot for member in channel.members)
+        return False
+
     @commands.Cog.listener()
     async def on_wavelink_track_start(self, payload: wavelink.TrackStartEventPayload):
         player: wavelink.Player = payload.player
@@ -44,12 +49,6 @@ class Music(commands.Cog):
             await player.controller_message.edit(embed=embed)
         except discord.NotFound:
             pass
-
-    def is_bot_last_vc_member(self, channel: discord.VoiceChannel):
-        return channel and self.bot.user in channel.members and len(self.get_vc_users(channel)) == 0
-
-    def get_vc_users(self, channel: discord.VoiceChannel):
-        return [member for member in channel.members if not member.bot]
 
     async def cog_before_invoke(self, ctx: commands.Context):
         """ Command before-invoke handler. """
