@@ -26,30 +26,29 @@ class Util(commands.Cog):
         self.giveaway_task.start()
 
     @commands.command(name='teams', aliases=['team'])
-    async def teams(self, ctx: commands.Context):
+    async def teams(self, ctx: commands.Context, *, players: str = None):
         """
-        Create two teams from the current members of the voice channel for you toplay custom games.
+        Create two teams from the current members of the voice channel for you to play custom games.
         """
-        if ctx.author.voice is None:
-            return await ctx.send('You must be in a voice channel to use this command.')
+        if ctx.author.voice:
+            players_list = [member for member in ctx.author.voice.channel.members if not member.bot]
+        elif players:
+            players_list = players.split(',') if ',' in players else players.split(' ')
+        else:
+            return await ctx.send('You must be in a voice channel or provide a list of players.')
 
-        voice_members = [member for member in ctx.author.voice.channel.members if not member.bot]
-        if len(voice_members) < 4:
-            return await ctx.send('You must have at least 4 members in your voice channel to use this command.')
+        if len(players_list) < 4:
+            return await ctx.send('You must have at least 4 members to use this command.')
 
-        shuffle(voice_members)
-        team_1 = []
-        team_2 = []
-
-        for member in voice_members:
-            if len(team_1) < len(voice_members) // 2:
-                team_1.append(member)
-            else:
-                team_2.append(member)
+        shuffle(players_list)
+        team_1 = players_list[:len(players_list) // 2]
+        team_2 = players_list[len(players_list) // 2:]
 
         embed = discord.Embed(title='Teams', color=0x00FFFF)
-        embed.add_field(name='Team 1', value="\n".join([f'{member.mention} ' for member in team_1]))
-        embed.add_field(name='Team 2', value="\n".join([f'{member.mention} ' for member in team_2]))
+        embed.add_field(name='Team 1', value="\n".join([f'{member} ' for member in team_1]))
+        embed.add_field(name='Team 2', value="\n".join([f'{member} ' for member in team_2]))
+        if ctx.author.voice and players:
+            embed.set_footer(text='Did you know that if you are in a voice channel you can just type `<<teams`?')
         await ctx.send(embed=embed)
 
     @commands.hybrid_group(aliases=["give"])
