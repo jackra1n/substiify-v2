@@ -410,8 +410,8 @@ class Karma(commands.Cog):
             os.remove(filename)
 
 
-    @commands.hybrid_command(aliases=['plb'], usage="postlb")
-    async def postlb(self, ctx: commands.Context):
+    @commands.hybrid_command(name='postleaderboard', aliases=['postlb','plb'], usage="postlb")
+    async def postleaderboard(self, ctx: commands.Context):
         """
         Posts the leaderboard of the most upvoted posts.
         """
@@ -488,7 +488,6 @@ class Karma(commands.Cog):
         await ctx.message.delete()
 
     async def create_post_leaderboard(self, posts: list[Record]):
-        logger.info('Creating post leaderboard')
         if not posts:
             return 'No posts found.'
         leaderboard = ''
