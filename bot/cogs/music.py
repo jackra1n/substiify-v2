@@ -217,10 +217,10 @@ class MusicController(ui.View):
                 pass
 
     async def interaction_check(self, interaction: Interaction) -> bool:
-        if interaction.user != self.ctx.author:
-            await interaction.response.send_message(f'⚠️ {interaction.user.mention} **You aren\'t the author of this embed**', ephemeral=True)
-            return False
-        return True
+        if interaction.user == self.ctx.author and interaction.user.voice.channel == self.player.channel:
+            return True
+        await interaction.response.send_message(f'⚠️ {interaction.user.mention} **You aren\'t the author of this embed**', ephemeral=True)
+        return False
 
     @ui.button(label='Stop', emoji='⏹️', row=2, style=ButtonStyle.danger)
     async def leave_button(self, interaction: discord.Interaction, button: ui.Button):

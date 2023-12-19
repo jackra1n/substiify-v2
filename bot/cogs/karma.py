@@ -410,8 +410,8 @@ class Karma(commands.Cog):
             os.remove(filename)
 
 
-    @commands.hybrid_command(name='postleaderboard', aliases=['postlb','plb'], usage="postlb")
-    async def postleaderboard(self, ctx: commands.Context):
+    @commands.hybrid_command(aliases=['plb'], usage="postlb")
+    async def postlb(self, ctx: commands.Context):
         """
         Posts the leaderboard of the most upvoted posts.
         """
