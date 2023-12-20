@@ -1,5 +1,6 @@
 import datetime
 import logging
+import asyncio
 
 import discord
 import wavelink
@@ -42,13 +43,27 @@ class Music(commands.Cog):
     @commands.Cog.listener()
     async def on_wavelink_track_start(self, payload: wavelink.TrackStartEventPayload):
         player: wavelink.Player = payload.player
+        await self._update_controller(player)
+
+    async def _update_controller(self, player: wavelink.Player):
         if not hasattr(player, 'controller_message'):
             return
+
+        embed = await create_controller_embed(player)
         try:
-            embed = await create_controller_embed(player)
             await player.controller_message.edit(embed=embed)
         except discord.NotFound:
             pass
+
+    @commands.Cog.listener()
+    async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload):
+        player: wavelink.Player = payload.player
+        if player.queue:
+            return
+        try:
+            await self.bot.wait_for('wavelink_track_end', timeout=300)
+        except asyncio.TimeoutError:
+            await player.disconnect()
 
     async def cog_before_invoke(self, ctx: commands.Context):
         """ Command before-invoke handler. """
@@ -68,7 +83,7 @@ class Music(commands.Cog):
             return True
 
         player: wavelink.Player = ctx.voice_client
-        if ctx.command.name in ['show', 'now']:
+        if ctx.command.name in ['controller']:
             if player is None:
                 raise NoPlayerFound()
             return True
@@ -124,13 +139,26 @@ class Music(commands.Cog):
         embed.title = 'Songs Queued'
         embed.title += f' ({songs_cnt})' if songs_cnt > 1 else ''
         if isinstance(tracks, wavelink.Playlist):
-            embed.description = f'[{tracks}]({tracks.url})'
+            embed.description = f'**[{tracks}]({tracks.url})**' if tracks.url else f'**{tracks}**'
         else:
-            embed.description = f'[{tracks}]({tracks.uri})'
+            embed.description = f'**[{tracks}]({tracks.uri})**'
 
         if not player.playing:
             await player.play(player.queue.get())
         await ctx.send(embed=embed, delete_after=delete_after)
+
+    @commands.hybrid_command()
+    async def skip(self, ctx: commands.Context):
+        """ Skips the current song. """
+        player: wavelink.Player = ctx.voice_client
+        if not ctx.interaction:
+            await ctx.message.delete()
+        if not player.queue and not player.playing:
+            await player._do_recommendation()
+        else:
+            await player.skip()
+        embed = discord.Embed(title='⏭️ Skipped', color=EMBED_COLOR)
+        await ctx.send(embed=embed, delete_after=30)
 
     @commands.hybrid_command(aliases=['disconnect', 'stop'])
     async def leave(self, ctx: commands.Context):
@@ -215,12 +243,12 @@ class MusicController(ui.View):
                 del self.player.controller_message
             except discord.NotFound:
                 pass
-
+ 
     async def interaction_check(self, interaction: Interaction) -> bool:
-        if interaction.user == self.ctx.author and interaction.user.voice.channel == self.player.channel:
-            return True
-        await interaction.response.send_message(f'⚠️ {interaction.user.mention} **You aren\'t the author of this embed**', ephemeral=True)
-        return False
+        if interaction.user != self.ctx.author:
+            await interaction.response.send_message(f'⚠️ {interaction.user.mention} **You aren\'t the author of this embed**', ephemeral=True)
+            return False
+        return True
 
     @ui.button(label='Stop', emoji='⏹️', row=2, style=ButtonStyle.danger)
     async def leave_button(self, interaction: discord.Interaction, button: ui.Button):
