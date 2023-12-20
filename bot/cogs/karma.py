@@ -794,7 +794,7 @@ class Karma(commands.Cog):
         total_karma = await self.bot.db.fetchval('SELECT SUM(amount) FROM kasino_bet WHERE kasino_id = $1', kasino_id)
         to_embed = discord.Embed(color=discord.Colour.from_rgb(52, 79, 235))
 
-        winner_option = kasino['option_1'] if winner == 1 else kasino['option_2']
+        winner_option = kasino['option1'] if winner == 1 else kasino['option2']
         if winner in [1, 2]:
             to_embed.title = f':tada: "{winner_option}" was correct! :tada:'
             to_embed.description = f"""Question: {kasino['question']}
@@ -813,13 +813,13 @@ class Karma(commands.Cog):
         await ctx.send(embed=to_embed)
         return
 
-    async def add_kasino(self, ctx: commands.Context, question: str, option_1: str, option_2: str) -> int:
+    async def add_kasino(self, ctx: commands.Context, question: str, option1: str, option2: str) -> int:
         to_embed = discord.Embed(description="Opening kasino, hold on tight...")
         kasino_msg = await ctx.send(embed=to_embed)
 
-        stmt_kasino = '''INSERT INTO kasino (discord_server_id, discord_channel_id, discord_message_id, question, option_1, option_2)
+        stmt_kasino = '''INSERT INTO kasino (discord_server_id, discord_channel_id, discord_message_id, question, option1, option2)
                          VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'''
-        return await self.bot.db.fetchval(stmt_kasino, ctx.guild.id, ctx.channel.id, kasino_msg.id, question, option_1, option_2)
+        return await self.bot.db.fetchval(stmt_kasino, ctx.guild.id, ctx.channel.id, kasino_msg.id, question, option1, option2)
 
     async def remove_kasino(self, kasino_id: int) -> None:
         kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
