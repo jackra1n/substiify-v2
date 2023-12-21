@@ -28,7 +28,7 @@ class Util(commands.Cog):
     @commands.command(name='teams', aliases=['team'])
     async def teams(self, ctx: commands.Context, *, players: str = None):
         """
-        Create two teams from the current members of the voice channel for you to play custom games.
+        Create two teams from the current members of the voice channel or passed names for you to play custom games.
         """
         if ctx.author.voice:
             players_list = [member for member in ctx.author.voice.channel.members if not member.bot]
@@ -120,7 +120,6 @@ class Util(commands.Cog):
     async def reroll(self, ctx: commands.Context, message_id: int):
         """
         Allows you to reroll a giveaway if something went wrong.
-        Needs to be executed in the channel the giveaway was posted in.
         """
         try:
             msg = await ctx.fetch_message(message_id)

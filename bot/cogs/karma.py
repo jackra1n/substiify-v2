@@ -515,6 +515,9 @@ class Karma(commands.Cog):
         op_b="The second option users can bet on."
     )
     async def kasino_open(self, ctx: commands.Context, question: str, op_a: str, op_b: str):
+        """ Opens a karma kasino which allows people to bet on a question with two options.
+            Check "karma" and "votes" commands for more info on karma.
+        """
         if not ctx.interaction:
             await ctx.message.delete()
         async with ctx.typing():
@@ -530,6 +533,7 @@ class Karma(commands.Cog):
         winner="The winning option. 1 or 2. 3 to abort."
     )
     async def kasino_close(self, ctx: commands.Context, kasino_id: int, winner: int):
+        """ Closes a karma kasino and announces the winner. To cancel the kasino, use 3 as the winner."""
         kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
 
         if kasino is None:
@@ -565,6 +569,7 @@ class Karma(commands.Cog):
         kasino_id="The ID of the kasino you want to lock. The ID should be visible in the kasino message."
     )
     async def kasino_lock(self, ctx: commands.Context, kasino_id: int):
+        """ Locks a karma kasino. Users can no longer bet on this kasino."""
         kasino = await self.bot.db.fetchrow('SELECT locked FROM kasino WHERE id = $1', kasino_id)
         if kasino is None:
             return await ctx.author.send(f'Kasino with ID `{kasino_id}` does not exist.')
@@ -582,6 +587,7 @@ class Karma(commands.Cog):
         option="The option you want to bet on. 1 or 2."
     )
     async def kasino_bet(self, ctx: commands.Context, kasino_id: int, amount: str, option: int):
+        """ Bets karma on a kasino. You can only bet on a kasino that is not locked."""
         output_embed = discord.Embed(color=discord.Colour.from_rgb(209, 25, 25))
 
         if option not in [1, 2]:
@@ -645,6 +651,7 @@ class Karma(commands.Cog):
 
     @kasino.command(name='list', aliases=['l'], usage="list")
     async def kasino_list(self, ctx: commands.Context):
+        """ Lists all open kasinos on the server. """
         embed = discord.Embed(title='Open kasinos')
         stmt_kasinos = 'SELECT * FROM kasino WHERE locked = False AND discord_server_id = $1 ORDER BY id ASC;'
         all_kasinos = await self.bot.db.fetch(stmt_kasinos, ctx.guild.id)
@@ -654,11 +661,13 @@ class Karma(commands.Cog):
         await ctx.message.delete()
 
     @kasino.command(name='resend', usage="resend <kasino_id>")
+    @commands.cooldown(1, 30)
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
     @app_commands.describe(
         kasino_id="The ID of the kasino you want to resend."
     )
     async def resend_kasino(self, ctx: commands.Context, kasino_id: int):
+        """ Resends a kasino message if it got lost in the channel. """
         kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
         if kasino is None:
             await ctx.send('Kasino not found.')
