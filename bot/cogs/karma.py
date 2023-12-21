@@ -103,7 +103,8 @@ class Karma(commands.Cog):
             color=0x23b40c
         )
         await ctx.send(embed=embed)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     @votes.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -122,8 +123,9 @@ class Karma(commands.Cog):
         if channel.id in self.vote_channels:
             self.vote_channels.remove(channel.id)
 
-        await ctx.message.delete()
         await ctx.send(embed=discord.Embed(description=f'Votes has been stopped in {channel.mention}!', color=0xf66045))
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     def get_upvote_emote(self):
         return self.bot.get_emoji(values.UPVOTE_EMOTE_ID)
@@ -265,7 +267,8 @@ class Karma(commands.Cog):
 
         embed = discord.Embed(title=f'Emote {emote} added to the list.')
         await ctx.send(embed=embed, delete_after=30)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     @karma_emotes.command(name='remove', aliases=['delete'], usage="remove <emote>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -286,7 +289,8 @@ class Karma(commands.Cog):
 
         embed = discord.Embed(title=f'Emote {emote} removed from the list.')
         await ctx.send(embed=embed, delete_after=30)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     @commands.cooldown(1, 5, commands.BucketType.user)
     @karma.command(name='leaderboard', aliases=['lb', 'leaderbord'], usage="leaderboard")
@@ -488,7 +492,8 @@ class Karma(commands.Cog):
 
         embed = discord.Embed(title=f'Post {post_id} check', description=embed_string)
         await ctx.send(embed=embed, delete_after=60)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     async def create_post_leaderboard(self, posts: list[Record]):
         if not posts:
@@ -552,7 +557,8 @@ class Karma(commands.Cog):
         author_avatar = ctx.author.display_avatar.url
         await self.send_conclusion(ctx, kasino_id, winner, ctx.author, author_avatar)
         await self.remove_kasino(kasino_id)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     @kasino_close.error
     async def kasino_close_error(self, ctx: commands.Context, error):
@@ -578,7 +584,8 @@ class Karma(commands.Cog):
 
         await self.bot.db.execute('UPDATE kasino SET locked = True WHERE id = $1', kasino_id)
         await self.update_kasino_msg(ctx, kasino_id)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     @kasino.command(name='bet', usage="bet <kasino_id> <amount> <option>")
     @app_commands.describe(
@@ -647,7 +654,8 @@ class Karma(commands.Cog):
         await self.update_kasino_msg(ctx, kasino_id)
         await ctx.author.send(embed=output_embed)
         await ctx.send(f"Bet added from {ctx.author}!", delete_after=30)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     @kasino.command(name='list', aliases=['l'], usage="list")
     async def kasino_list(self, ctx: commands.Context):
@@ -658,7 +666,8 @@ class Karma(commands.Cog):
         embed_kasinos = ''.join(f'`{entry["id"]}` - {entry["question"]}\n' for entry in all_kasinos)
         embed.description = embed_kasinos or "No open kasinos found."
         await ctx.send(embed=embed, delete_after=300)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     @kasino.command(name='resend', usage="resend <kasino_id>")
     @commands.cooldown(1, 30)
@@ -816,7 +825,7 @@ class Karma(commands.Cog):
                                        Distributed to the winners: **{total_karma} Karma**'
                                     """
         elif winner == 3:
-            to_embed.title = f':game_die: "{kasino["question"]}" has been cancelled.',
+            to_embed.title = f':game_die: \"{kasino["question"]}\" has been cancelled.',
             to_embed.description = f'Amount bet will be refunded to each user.\nReturned: {total_karma} Karma'
 
         to_embed.set_footer(
