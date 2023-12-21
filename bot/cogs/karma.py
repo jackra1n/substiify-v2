@@ -850,8 +850,8 @@ class Karma(commands.Cog):
         if kasino is None:
             return
         try:
-            kasino_channel = await self.bot.fetch_channel(kasino.discord_channel_id)
-            kasino_msg = await kasino_channel.fetch_message(kasino.discord_message_id)
+            kasino_channel = await self.bot.fetch_channel(kasino['discord_channel_id'])
+            kasino_msg = await kasino_channel.fetch_message(kasino['discord_message_id'])
             await kasino_msg.delete()
         except discord.errors.NotFound:
             pass
