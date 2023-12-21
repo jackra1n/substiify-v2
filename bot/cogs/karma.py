@@ -288,6 +288,7 @@ class Karma(commands.Cog):
         await ctx.send(embed=embed, delete_after=30)
         await ctx.message.delete()
 
+    @commands.cooldown(1, 5, commands.BucketType.user)
     @karma.command(name='leaderboard', aliases=['lb', 'leaderbord'], usage="leaderboard")
     async def karma_leaderboard(self, ctx: commands.Context, global_leaderboard: str = None):
         """
@@ -320,6 +321,7 @@ class Karma(commands.Cog):
 
             await ctx.send(embed=embed)
 
+    @commands.cooldown(1, 15, commands.BucketType.user)
     @karma.command(name='stats', usage="stats")
     async def karma_stats(self, ctx: commands.Context):
         """
@@ -370,6 +372,7 @@ class Karma(commands.Cog):
 
             await ctx.send(embed=embed)
 
+    @commands.cooldown(1, 30, commands.BucketType.user)
     @karma.command(name='graph', usage="graph")
     async def karma_stats_graph(self, ctx: commands.Context):
         """
@@ -409,7 +412,7 @@ class Karma(commands.Cog):
             await ctx.send(file=discord.File(filename))
             os.remove(filename)
 
-
+    @commands.cooldown(1, 10, commands.BucketType.user)
     @commands.hybrid_command(aliases=['plb'], usage="postlb")
     async def postlb(self, ctx: commands.Context):
         """
@@ -512,9 +515,11 @@ class Karma(commands.Cog):
         op_b="The second option users can bet on."
     )
     async def kasino_open(self, ctx: commands.Context, question: str, op_a: str, op_b: str):
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
         async with ctx.typing():
             kasino_id = await self.add_kasino(ctx, question, op_a, op_b)
+            # TODO: Add kasino backup
             # self.create_kasino_backup(kasino.id)
         await self.update_kasino_msg(ctx, kasino_id)
 
