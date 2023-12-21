@@ -826,7 +826,7 @@ class Karma(commands.Cog):
                                     """
         elif winner == 3:
             kasino_question: str = kasino['question']
-            to_embed.title = f'🎲 \"{kasino_question}\" has been cancelled.',
+            to_embed.title = f'🎲 \"{kasino_question}\" has been cancelled.'
             to_embed.description = f'Amount bet will be refunded to each user.\nReturned: {total_karma} Karma'
 
         to_embed.set_footer(
