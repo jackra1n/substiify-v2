@@ -554,8 +554,7 @@ class Karma(commands.Cog):
         else:
             return await ctx.author.send('Winner has to be 1, 2 or 3 (abort)')
 
-        author_avatar = ctx.author.display_avatar.url
-        await self.send_conclusion(ctx, kasino_id, winner, ctx.author, author_avatar)
+        await self.send_conclusion(ctx, kasino_id, winner)
         await self.remove_kasino(kasino_id)
         if not ctx.interaction:
             await ctx.message.delete()
@@ -567,7 +566,8 @@ class Karma(commands.Cog):
             await ctx.send(msg, delete_after=20)
         elif isinstance(error, commands.errors.BadArgument):
             await ctx.send('Bad argument.', delete_after=20)
-        await ctx.message.delete()
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     @kasino.command(name='lock', usage="lock <kasino_id>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -812,7 +812,7 @@ class Karma(commands.Cog):
         cached_message = potential_message[0] if potential_message else None
         return cached_message or await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
 
-    async def send_conclusion(self, ctx: commands.Context, kasino_id: int, winner: int, author, author_avatar: str):
+    async def send_conclusion(self, ctx: commands.Context, kasino_id: int, winner: int):
         kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
         total_karma = await self.bot.db.fetchval('SELECT SUM(amount) FROM kasino_bet WHERE kasino_id = $1', kasino_id)
         to_embed = discord.Embed(color=discord.Colour.from_rgb(52, 79, 235))
@@ -825,12 +825,13 @@ class Karma(commands.Cog):
                                        Distributed to the winners: **{total_karma} Karma**'
                                     """
         elif winner == 3:
-            to_embed.title = f':game_die: \"{kasino["question"]}\" has been cancelled.',
+            kasino_question: str = kasino['question']
+            to_embed.title = f'🎲 \"{kasino_question}\" has been cancelled.',
             to_embed.description = f'Amount bet will be refunded to each user.\nReturned: {total_karma} Karma'
 
         to_embed.set_footer(
-            text=f'as decided by {author}',
-            icon_url=author_avatar
+            text = f'as decided by {ctx.author}',
+            icon_url = ctx.author.display_avatar.url
         )
         to_embed.set_thumbnail(url='https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif')
         await ctx.send(embed=to_embed)
