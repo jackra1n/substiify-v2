@@ -322,7 +322,8 @@ async def create_controller_embed(player: wavelink.Player):
     upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(player.queue[:5])])
     if len(player.queue) > 5:
         upcoming += f'\n`... and {len(player.queue) - 5} more`'
-    embed.add_field(name="Next up ", value=upcoming, inline=False)
+    if upcoming:
+        embed.add_field(name="Next up ", value=upcoming, inline=False)
     return embed
 
 
