@@ -166,10 +166,29 @@ class Karma(commands.Cog):
         user='Which user do you want to donate karma to?',
         amount='How much karma do you want to donate?'
     )
-    async def karma_donate(self, ctx: commands.Context, user: discord.User, amount: int):
+    async def karma_donate(self, ctx: commands.Context, *args):
         """
         Donates karma to another user.
         """
+        if len(args) != 2:
+            msg = f'Got {len(args)} arguments, expected 2.'
+            raise commands.MissingRequiredArgument(msg)
+
+        user = None
+        amount = None
+
+        for arg in args:
+            try:
+                user = await commands.UserConverter().convert(ctx, arg)
+            except commands.BadArgument:
+                try:
+                    amount = int(arg)
+                except ValueError:
+                    continue
+
+        if user is None or amount is None:
+            return await ctx.reply("Could not find a user or amount in the provided arguments.", delete_after=20)
+
         embed = discord.Embed(color=0xf66045)
         if user.bot:
             embed.description = 'You can\'t donate to bots!'
