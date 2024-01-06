@@ -93,9 +93,10 @@ class Feedback(commands.Cog):
 		message_to_user = f'Hello {user.name}!\nYour {self.bot.user.mention} {feedback_type.value} submission has been **{outcome}** {emoji}.'
 		await user.send(content=message_to_user, embed=new_embed)
 
+	@commands.cooldown(2, 100)
 	@app_commands.command(
 		name='feedback',
-		description='Allows you to report a bug or suggest a feature or an improvement to the developer team.',
+		description='Opens a modal window on discord where you can suggest an improvement to the developer team.',
 	)
 	async def feedback(self, interaction: discord.Interaction, feedback_type: FeedbackType):
 		"""
@@ -169,9 +170,7 @@ class FeedbackModal(discord.ui.Modal):
 
 		await message.add_reaction(ACCEPT_EMOJI)
 		await message.add_reaction(DENY_EMOJI)
-		await interaction.response.send_message(
-			f'Thank you for submitting the {self.feedback_type.value}!', delete_after=30
-		)
+		await interaction.response.send_message(f'Thank you for submitting the {self.feedback_type.value}!')
 
 	async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
 		await interaction.response.send_message('Oops! Something went wrong.', ephemeral=True)
