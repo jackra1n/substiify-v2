@@ -48,7 +48,7 @@ class Version():
         self.patch = self._calculate_patch()
 
     def _calculate_patch(self) -> int:
-        return int(subprocess.check_output(['git', 'rev-list', f'{self.last_update}..HEAD', '--count']).decode('utf-8').strip())
+        return int(subprocess.check_output(['/usr/bin/git', 'rev-list', f'{self.last_update}..HEAD', '--count']).decode('utf-8').strip())
 
     def _get_last_commit_sha() -> str:
-        return subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8').strip()
+        return subprocess.check_output(['/usr/bin/git', 'rev-parse', 'HEAD']).decode('utf-8').strip()
