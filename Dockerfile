@@ -1,4 +1,4 @@
-FROM gorialis/discord.py:latest
+FROM gorialis/discord.py:full
 
 WORKDIR /bot
 VOLUME /bot/logs
