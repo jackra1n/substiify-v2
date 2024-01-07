@@ -40,6 +40,10 @@ class Music(commands.Cog):
         return False
 
     @commands.Cog.listener()
+    async def on_wavelink_inactive_player(self, player: wavelink.Player) -> None:
+        await player.disconnect()
+
+    @commands.Cog.listener()
     async def on_wavelink_track_start(self, payload: wavelink.TrackStartEventPayload):
         player: wavelink.Player = payload.player
         await self._update_controller(player)
