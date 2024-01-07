@@ -55,16 +55,6 @@ class Music(commands.Cog):
         except discord.NotFound:
             pass
 
-    @commands.Cog.listener()
-    async def on_wavelink_track_end(self, payload: wavelink.TrackEndEventPayload):
-        player: wavelink.Player = payload.player
-        if player.queue:
-            return
-        try:
-            await self.bot.wait_for('wavelink_track_end', timeout=300)
-        except asyncio.TimeoutError:
-            await player.disconnect()
-
     async def cog_before_invoke(self, ctx: commands.Context):
         """ Command before-invoke handler. """
         guild_check = ctx.guild is not None
