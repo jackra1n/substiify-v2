@@ -44,8 +44,10 @@ class Game():
 
     def _create_thumbnail(self, key_images: str) -> str:
         for image in key_images:
-            if image["type"] == 'OfferImageWide':
+            if "OfferImageWide" in image["type"]:
                 return image["url"]
+        return key_images[0]["url"]
+        
 
 
 class FreeGames(commands.Cog):
@@ -99,7 +101,7 @@ class FreeGames(commands.Cog):
                 embed.add_field(name="Available", value=available_string, inline=False)
                 price_field = f"~~`{game.original_price}`~~ ⟶ `{game.discount_price}`" if game.original_price != "0" else f"`{game.discount_price}`"
                 embed.add_field(name="Price", value=price_field, inline=False)
-                embed.set_image(url=f"{game.cover_image_url}")
+                embed.set_image(url=game.cover_image_url)
 
                 await ctx.send(embed=embed)
             except Exception as ex:
