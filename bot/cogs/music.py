@@ -193,11 +193,18 @@ class Music(commands.Cog):
             return await ctx.send(embed=embed, delete_after=15)
 
         # get server names by id
-        server_names = [f'{player.guild.name}, queued: `{len(player.queue)}`, {"`playing`" if player.playing else "`not playing`"}' for _, player in players.items()]
+        players_string: str = ''
+        for player in players.values():
+            players_string += f'{player.guild.name}, queued: '
+            players_string += f'`{len(player.queue)}`, '
+            players_string += '`playing` ' if player.playing else '`not playing` '
+            players_string += f'radio: `{player.autoplay.name}` '
+            players_string += f'loop: `{player.queue.mode.name}`'
+            players_string += '\n'
 
         embed = discord.Embed(color=EMBED_COLOR)
         embed.title = 'Active players'
-        embed.description = '\n'.join(f'{server_name}' for server_name in server_names)
+        embed.description = players_string
         await ctx.send(embed=embed, delete_after=60)
 
     @commands.hybrid_command()
@@ -315,8 +322,9 @@ async def create_controller_embed(player: wavelink.Player):
     upcoming = '\n'.join([f'`{index + 1}.` {track.title}' for index, track in enumerate(player.queue[:5])])
     if len(player.queue) > 5:
         upcoming += f'\n`... and {len(player.queue) - 5} more`'
-    if upcoming:
-        embed.add_field(name="Next up ", value=upcoming, inline=False)
+    elif not upcoming:
+        upcoming = '`No songs in queue`'
+    embed.add_field(name="Next up ", value=upcoming, inline=False)
     return embed
 
 
