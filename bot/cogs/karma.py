@@ -334,14 +334,14 @@ class Karma(commands.Cog):
                 return await ctx.send(embed=embed)
 
             users_string = ''.join([f"<@{entry['discord_user_id']}>\n" for entry in results])
-            load_users_message = await ctx.send('Loading users...')
-            await load_users_message.edit(content=users_string)
-            await load_users_message.delete()
 
             for index, entry in enumerate(results, start=1):
                 user = self.bot.get_user(entry['discord_user_id']) or await self.bot.fetch_user(entry['discord_user_id'])
                 embed.description += f"`{str(index).rjust(2)}.` | `{entry['amount']}` - {user.mention}\n"
 
+            load_users_message = await ctx.send('Loading users...')
+            await load_users_message.edit(content=users_string)
+            await load_users_message.delete()
             await ctx.send(embed=embed)
 
     @commands.cooldown(1, 15, commands.BucketType.user)
