@@ -153,8 +153,8 @@ class Music(commands.Cog):
         embed = discord.Embed(title='⏭️ Skipped', color=EMBED_COLOR)
         await ctx.send(embed=embed, delete_after=30)
 
-    @commands.hybrid_command(aliases=['disconnect', 'stop'])
-    async def leave(self, ctx: commands.Context):
+    @commands.hybrid_command(aliases=['disconnect', 'leave'])
+    async def stop(self, ctx: commands.Context):
         """
         Disconnects the player from the voice channel and clears its queue.
         """
