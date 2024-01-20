@@ -261,7 +261,7 @@ class Util(commands.Cog):
         await ctx.message.delete()
 
     @commands.cooldown(6, 5)
-    @commands.hybrid_command(aliases=['av'])
+    @commands.hybrid_command(aliases=['av', 'pfp'])
     async def avatar(self, ctx: commands.Context, member: discord.Member | discord.User | None = None):
         """
         Enlarge and view your profile picture or another member
