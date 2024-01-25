@@ -23,10 +23,10 @@ class Game():
         self.epic_store_link: str = self._create_store_link(game_info_json)
 
     def _create_store_link(self, game_info_json: str) -> str:
-        product_string = game_info_json["productSlug"]
-        if product_string is None:
-            product_string = game_info_json["urlSlug"]
-        return f'https://www.epicgames.com/store/en-US/p/{product_string}'
+        page_slug = game_info_json["offerMappings"][0]["pageSlug"]
+        if page_slug is None:
+            page_slug = game_info_json["catalogNs"]["mappings"][0]["pageSlug"]
+        return f'https://www.epicgames.com/store/en-US/p/{page_slug}'
 
     def _create_start_date(self, game_info_json: str) -> datetime:
         return self._parse_date(game_info_json, "startDate")
