@@ -32,12 +32,20 @@ class Karma(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if message.channel.id in self.vote_channels and not message.author.bot:
+        if message.author.bot or message.type == discord.MessageType.thread_created:
+            return
+        if message.channel.id in self.vote_channels:
             try:
                 await message.add_reaction(self.get_upvote_emote())
                 await message.add_reaction(self.get_downvote_emote())
             except discord.NotFound:
                 pass
+
+    def get_upvote_emote(self):
+        return self.bot.get_emoji(values.UPVOTE_EMOTE_ID)
+
+    def get_downvote_emote(self):
+        return self.bot.get_emoji(values.DOWNVOTE_EMOTE_ID)
 
     @commands.hybrid_group(invoke_without_command=True)
     async def votes(self, ctx: commands.Context):
@@ -126,12 +134,6 @@ class Karma(commands.Cog):
         await ctx.send(embed=discord.Embed(description=f'Votes has been stopped in {channel.mention}!', color=0xf66045))
         if not ctx.interaction:
             await ctx.message.delete()
-
-    def get_upvote_emote(self):
-        return self.bot.get_emoji(values.UPVOTE_EMOTE_ID)
-
-    def get_downvote_emote(self):
-        return self.bot.get_emoji(values.DOWNVOTE_EMOTE_ID)
 
     @commands.group(aliases=["k"], usage="karma [user]", invoke_without_command=True,)
     @app_commands.describe(
