@@ -475,8 +475,8 @@ class Karma(commands.Cog):
             embed = discord.Embed(title='That post does not exist.')
             return await ctx.send(embed=embed, delete_after=30)
 
-        server_upvote_emotes = await self._get_karma_upvote_emotes(ctx.guild)
-        server_downvote_emotes = await self._get_karma_downvote_emotes(ctx.guild)
+        server_upvote_emotes = await self._get_karma_upvote_emotes(ctx.guild.id)
+        server_downvote_emotes = await self._get_karma_downvote_emotes(ctx.guild.id)
 
         channel = await self.bot.fetch_channel(post['discord_channel_id'])
         message = await channel.fetch_message(post['discord_message_id'])
