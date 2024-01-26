@@ -501,7 +501,7 @@ class Karma(commands.Cog):
             message.guild.id,
             channel.id,
             message.id,
-            message.created_at,
+            message.created_at.utcnow(),
             upvotes,
             downvotes
         )
