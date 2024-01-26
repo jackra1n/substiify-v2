@@ -492,7 +492,7 @@ class Karma(commands.Cog):
 
         old_upvotes = post['upvotes']
         old_downvotes = post['downvotes']
-        karma_difference = (upvotes - old_upvotes) + (downvotes - old_downvotes)
+        karma_difference = (upvotes - old_upvotes) - (downvotes - old_downvotes)
 
         await self.bot.db.execute(UPDATE_KARMA_QUERY, message.author.id, message.guild.id, karma_difference)
         await self.bot.db.execute(
