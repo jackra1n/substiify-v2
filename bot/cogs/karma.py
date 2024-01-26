@@ -437,23 +437,16 @@ class Karma(commands.Cog):
             await ctx.send(file=discord.File(filename))
             os.remove(filename)
 
-    @commands.cooldown(1, 10, commands.BucketType.user)
+    @commands.cooldown(2, 15, commands.BucketType.user)
     @commands.hybrid_command(aliases=['plb'], usage="postlb")
-    async def postlb(self, ctx: commands.Context):
+    async def postlb(self, ctx: commands.Context, user: discord.User = None):
         """
         Posts the leaderboard of the most upvoted posts.
         """
-        stmt_top_server = "SELECT * FROM post WHERE discord_server_id = $1 ORDER BY upvotes DESC LIMIT 5"
-        stmt_top_monthly = "SELECT * FROM post WHERE discord_server_id = $1 AND created_at > NOW() - INTERVAL '30 days' ORDER BY upvotes DESC LIMIT 5"
-        stmt_top_weekly = "SELECT * FROM post WHERE discord_server_id = $1 AND created_at > NOW() - INTERVAL '7 days' ORDER BY upvotes DESC LIMIT 5"
         async with ctx.typing():
-            posts = await self.bot.db.fetch(stmt_top_server, ctx.guild.id)
-            monthly_posts = await self.bot.db.fetch(stmt_top_monthly, ctx.guild.id)
-            weekly_posts = await self.bot.db.fetch(stmt_top_weekly, ctx.guild.id)
-
-            all_board = await self.create_post_leaderboard(posts)
-            month_board = await self.create_post_leaderboard(monthly_posts)
-            week_board = await self.create_post_leaderboard(weekly_posts)
+            all_board = await self.fetch_and_create_leaderboard(ctx, user)
+            month_board = await self.fetch_and_create_leaderboard(ctx, user, '30 days')
+            week_board = await self.fetch_and_create_leaderboard(ctx, user, '7 days')
 
         embed = discord.Embed(title='Top Messages')
         embed.set_thumbnail(url=ctx.guild.icon)
@@ -461,6 +454,14 @@ class Karma(commands.Cog):
         embed.add_field(name='Top 5 This Month', value=month_board, inline=False)
         embed.add_field(name='Top 5 This Week', value=week_board, inline=False)
         await ctx.send(embed=embed)
+
+    async def fetch_and_create_leaderboard(self, ctx: commands.Context, user: discord.User, interval: str = None):
+        user_query = " AND discord_user_id = $2" if user else ''
+        interval_query = f" AND created_at > NOW() - INTERVAL '{interval}'" if interval else ''
+        stmt = f"SELECT * FROM post WHERE discord_server_id = $1{user_query}{interval_query} ORDER BY upvotes DESC LIMIT 5"
+        params = (ctx.guild.id, user.id) if user else (ctx.guild.id,)
+        posts = await self.bot.db.fetch(stmt, *params)
+        return await self.create_post_leaderboard(posts)
 
     @commands.command(name='checkpost', aliases=['cp'], usage="checkpost <post id>")
     @commands.is_owner()
