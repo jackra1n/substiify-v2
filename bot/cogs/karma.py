@@ -469,7 +469,7 @@ class Karma(commands.Cog):
         """
         Checks if a post exists.
         """
-        stmt_post = "SELECT * FROM post WHERE id = $1"
+        stmt_post = "SELECT * FROM post WHERE discord_message_id = $1"
         post = await self.bot.db.fetchrow(stmt_post, post_id)
         if post is None:
             embed = discord.Embed(title='That post does not exist.')
