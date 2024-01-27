@@ -152,7 +152,10 @@ class Music(commands.Cog):
             for _ in range(amount - 1):
                 await player.queue.delete(0)
             await player.skip()
-        embed = discord.Embed(title='⏭️ Skipped', color=EMBED_COLOR)
+        embed = discord.Embed(title=f'⏭️ Skipped {amount}', color=EMBED_COLOR)
+        if player.current:
+            embed.description = f'Now playing: **[{player.current}]({player.current.uri})**'
+        embed.set_footer(text=f'By: {ctx.author}', icon_url=ctx.author.avatar.url)
         await ctx.send(embed=embed, delete_after=30)
 
     @commands.hybrid_command(aliases=['disconnect', 'leave'])
