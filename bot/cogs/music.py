@@ -141,7 +141,7 @@ class Music(commands.Cog):
         await ctx.send(embed=embed, delete_after=delete_after)
 
     @commands.hybrid_command()
-    async def skip(self, ctx: commands.Context):
+    async def skip(self, ctx: commands.Context, amount: int = 1):
         """ Skips the current song. """
         player: wavelink.Player = ctx.voice_client
         if not ctx.interaction:
@@ -149,6 +149,7 @@ class Music(commands.Cog):
         if not player.queue and not player.playing:
             await player._do_recommendation()
         else:
+            player.queue = player.queue[amount - 1:]
             await player.skip()
         embed = discord.Embed(title='⏭️ Skipped', color=EMBED_COLOR)
         await ctx.send(embed=embed, delete_after=30)
