@@ -149,7 +149,8 @@ class Music(commands.Cog):
         if not player.queue and not player.playing:
             await player._do_recommendation()
         else:
-            player.queue = player.queue[amount - 1:]
+            for _ in range(amount - 1):
+                await player.queue.delete(0)
             await player.skip()
         embed = discord.Embed(title='⏭️ Skipped', color=EMBED_COLOR)
         await ctx.send(embed=embed, delete_after=30)
