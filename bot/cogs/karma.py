@@ -725,9 +725,15 @@ class Karma(commands.Cog):
         await self.process_reaction(payload, add_reaction=False)
 
     async def process_reaction(self, payload: discord.RawReactionActionEvent, add_reaction: bool) -> None:
-        user = await self.check_payload(payload)
-        if user is None:
-            return
+        post = await self._get_post(payload.message_id)
+        if post is None:
+            user = await self.check_payload(payload)
+            if user is None:
+                return
+            await self._insert_user(user)
+            user_id = user.id
+        else:
+            user_id = post['discord_user_id']
 
         upvote_emotes = await self._get_karma_upvote_emotes(payload.guild_id)
         downvote_emotes = await self._get_karma_downvote_emotes(payload.guild_id)
@@ -744,7 +750,6 @@ class Karma(commands.Cog):
             logger.warning(f"Channel {payload.channel_id} not found in cache for karma reaction. Fetching from API.")
             channel = await self.bot.fetch_channel(payload.channel_id)
 
-        await self._insert_user(user)
         await self._insert_server(server)
         await self._insert_channel(channel)
 
@@ -759,8 +764,8 @@ class Karma(commands.Cog):
             karma_amount *= -1
             (upvote, downvote) = (downvote, upvote)
 
-        await self._update_karma(payload, user, karma_amount)
-        await self._update_post_votes(payload, user, upvote, downvote)
+        await self._update_karma(payload, user_id, karma_amount)
+        await self._update_post_votes(payload, user_id, upvote, downvote)
             
     async def _insert_user(self, user: discord.Member):
         stmt = '''
@@ -783,19 +788,23 @@ class Karma(commands.Cog):
         parent_channel_id = channel.parent_id if isinstance(channel, discord.Thread) else None
         await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, parent_channel_id)
 
-    async def _update_karma(self, payload: discord.RawReactionActionEvent, user: discord.Member, amount: int):
+    async def _get_post(self, message_id: int) -> Record:
+        stmt = "SELECT * FROM post WHERE discord_message_id = $1"
+        return await self.bot.db.fetchrow(stmt, message_id)
+
+    async def _update_karma(self, payload: discord.RawReactionActionEvent, user_id: int, amount: int):
         await self.bot.db.execute(
             UPDATE_KARMA_QUERY,
-            user.id,
+            user_id,
             payload.guild_id,
             amount
         )
 
-    async def _update_post_votes(self, payload: discord.RawReactionActionEvent, user: discord.Member, upvote: int, downvote: int):
+    async def _update_post_votes(self, payload: discord.RawReactionActionEvent, user_id: int, upvote: int, downvote: int):
         message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
         await self.bot.db.execute(
             UPDATE_POST_VOTES_QUERY,
-            user.id,
+            user_id,
             payload.guild_id,
             payload.channel_id,
             payload.message_id,
