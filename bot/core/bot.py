@@ -41,7 +41,8 @@ class Substiify(commands.Bot):
         super().__init__(
             command_prefix=commands.when_mentioned_or(config.PREFIX),
             intents=intents,
-            owner_id=276462585690193921
+            owner_id=276462585690193921,
+            max_messages=3000
         )
         self.version = Version()
 

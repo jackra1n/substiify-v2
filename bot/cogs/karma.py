@@ -732,24 +732,35 @@ class Karma(commands.Cog):
         upvote_emotes = await self._get_karma_upvote_emotes(payload.guild_id)
         downvote_emotes = await self._get_karma_downvote_emotes(payload.guild_id)
 
-        if payload.emoji.id in upvote_emotes:
-            karma_modifier = 1 if add_reaction else -1
-            post_votes_modifier = 1 if add_reaction else 0
-        elif payload.emoji.id in downvote_emotes:
-            karma_modifier = -1 if add_reaction else 1
-            post_votes_modifier = -1 if add_reaction else 0
-        else:
+        if payload.emoji.id not in [*upvote_emotes, *downvote_emotes]:
             return
-        
-        server = self.bot.get_guild(payload.guild_id) or await self.bot.fetch_guild(payload.guild_id)
-        channel = self.bot.get_channel(payload.channel_id) or await self.bot.fetch_channel(payload.channel_id)
+
+        server = self.bot.get_guild(payload.guild_id)
+        if server is None:
+            logger.warning(f"Server {payload.guild_id} not found in cache for karma reaction. Fetching from API.")
+            server = await self.bot.fetch_guild(payload.guild_id)
+        channel = self.bot.get_channel(payload.channel_id)
+        if channel is None:
+            logger.warning(f"Channel {payload.channel_id} not found in cache for karma reaction. Fetching from API.")
+            channel = await self.bot.fetch_channel(payload.channel_id)
 
         await self._insert_user(user)
         await self._insert_server(server)
         await self._insert_channel(channel)
 
-        await self._update_karma(payload, user, karma_modifier)
-        await self._update_post_votes(payload, user, post_votes_modifier, 0)
+        is_upvote = payload.emoji.id in upvote_emotes
+
+        karma_amount = 1   # Assume positive karma
+        (upvote, downvote) = (1, 0) # Assume upvote
+        if not add_reaction:
+            karma_amount *= -1
+            upvote *= -1
+        if not is_upvote:
+            karma_amount *= -1
+            (upvote, downvote) = (downvote, upvote)
+
+        await self._update_karma(payload, user, karma_amount)
+        await self._update_post_votes(payload, user, upvote, downvote)
             
     async def _insert_user(self, user: discord.Member):
         stmt = '''
@@ -824,7 +835,10 @@ class Karma(commands.Cog):
             return None
         if message.author.bot:
             return None
-        reaction_user = payload.member or self.bot.get_user(payload.user_id) or await self.bot.fetch_user(payload.user_id)
+        reaction_user = payload.member or self.bot.get_user(payload.user_id)
+        if not reaction_user:
+            logger.warning(f"User {payload.user_id} not found in cache for karma reaction. Fetching from API.")
+            reaction_user = await self.bot.fetch_user(payload.user_id)
         if reaction_user == message.author:
             return None
         return message.author
@@ -832,7 +846,10 @@ class Karma(commands.Cog):
     async def __get_message_from_payload(self, payload: discord.RawReactionActionEvent) -> discord.Message | None:
         potential_message = [message for message in self.bot.cached_messages if message.id == payload.message_id]
         cached_message = potential_message[0] if potential_message else None
-        return cached_message or await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        if not cached_message:
+            logger.warning(f"Message {payload.message_id} not found in cache for karma reaction. Fetching from API.")
+            cached_message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+        return cached_message
 
     async def send_conclusion(self, ctx: commands.Context, kasino_id: int, winner: int):
         kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
