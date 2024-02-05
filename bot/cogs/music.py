@@ -120,21 +120,20 @@ class Music(commands.Cog):
         if not tracks:
             raise NoTracksFound()
 
-        if 'http' not in search or len(tracks) == 1:
-            tracks = tracks[0]
-
         stmt_cleanup = "SELECT music_cleanup FROM discord_server WHERE discord_server_id = $1"
         music_cleanup = await self.bot.db.fetchval(stmt_cleanup, ctx.guild.id)
         delete_after = 60 if music_cleanup else None
 
-        songs_cnt = await player.queue.put_wait(tracks)
         embed = discord.Embed(color=EMBED_COLOR)
+        if isinstance(tracks, wavelink.Playlist):
+            embed.description = f'**[{tracks}]({tracks.url})**' if tracks.url else f'**[{tracks}]({search})**'
+        else:
+            tracks = tracks[0]
+            embed.description = f'**[{tracks}]({tracks.uri})**'
+        
+        songs_cnt = await player.queue.put_wait(tracks)
         embed.title = 'Songs Queued'
         embed.title += f' ({songs_cnt})' if songs_cnt > 1 else ''
-        if isinstance(tracks, wavelink.Playlist):
-            embed.description = f'**[{tracks}]({tracks.url})**' if tracks.url else f'**{tracks}**'
-        else:
-            embed.description = f'**[{tracks}]({tracks.uri})**'
 
         if not player.playing:
             await player.play(player.queue.get())
@@ -149,8 +148,7 @@ class Music(commands.Cog):
         if not player.queue and not player.playing:
             await player._do_recommendation()
         else:
-            for _ in range(amount - 1):
-                await player.queue.delete(0)
+            player.queue._items = player.queue[amount - 1:]
             await player.skip()
         embed = discord.Embed(title=f'⏭️ Skipped {amount}', color=EMBED_COLOR)
         if player.current:
