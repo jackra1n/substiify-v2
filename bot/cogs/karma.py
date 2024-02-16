@@ -229,6 +229,9 @@ class Karma(commands.Cog):
             embed.description = 'You didn\'t specify a user to donate to!'
         elif isinstance(error, commands.BadArgument):
             embed.description=f'Wrong command usage! Command usage is `{ctx.prefix}karma donate <user> <amount>`'
+        else:
+            embed.description = f'An unknown error occured. Please contact <@{self.bot.owner_id}> for help.'
+            logger.error(f'An unknown error occured in karma_donate: {error}')
         await ctx.send(embed=embed)
 
     @karma.group(name='emotes', aliases=['emote'], usage="emotes", invoke_without_command=True)
@@ -725,7 +728,7 @@ class Karma(commands.Cog):
         await self.process_reaction(payload, add_reaction=False)
 
     async def process_reaction(self, payload: discord.RawReactionActionEvent, add_reaction: bool) -> None:
-        post = await self._get_post(payload.message_id)
+        post = await self._get_post_from_db(payload.message_id)
         if post is None:
             user = await self.check_payload(payload)
             if user is None:
@@ -788,7 +791,7 @@ class Karma(commands.Cog):
         parent_channel_id = channel.parent_id if isinstance(channel, discord.Thread) else None
         await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, parent_channel_id)
 
-    async def _get_post(self, message_id: int) -> Record:
+    async def _get_post_from_db(self, message_id: int) -> Record:
         stmt = "SELECT * FROM post WHERE discord_message_id = $1"
         return await self.bot.db.fetchrow(stmt, message_id)
 
@@ -856,7 +859,7 @@ class Karma(commands.Cog):
         potential_message = [message for message in self.bot.cached_messages if message.id == payload.message_id]
         cached_message = potential_message[0] if potential_message else None
         if not cached_message:
-            logger.warning(f"Message {payload.message_id} not found in cache for karma reaction. Fetching from API.")
+            logger.debug(f"Message {payload.message_id} not found in cache for karma reaction. Fetching from API.")
             cached_message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
         return cached_message
 
