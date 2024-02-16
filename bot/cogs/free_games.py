@@ -23,7 +23,10 @@ class Game():
         self.epic_store_link: str = self._create_store_link(game_info_json)
 
     def _create_store_link(self, game_info_json: str) -> str:
-        page_slug = game_info_json["offerMappings"][0]["pageSlug"]
+        offer_mappings = game_info_json["offerMappings"]
+        page_slug = None
+        if offer_mappings:
+            page_slug = game_info_json["offerMappings"][0]["pageSlug"]
         if page_slug is None:
             page_slug = game_info_json["catalogNs"]["mappings"][0]["pageSlug"]
         return f'https://www.epicgames.com/store/en-US/p/{page_slug}'
@@ -59,7 +62,7 @@ class FreeGames(commands.Cog):
 
     @commands.cooldown(3, 30)
     @commands.command()
-    async def epic(self, ctx):
+    async def epic(self, ctx: commands.Context):
         """
         Show all free games from Epic Games that are currently available.
         """
@@ -91,7 +94,7 @@ class FreeGames(commands.Cog):
         if not current_free_games:
             embed = discord.Embed(color=0x000000)
             embed.description = 'Could not find any currently free games'
-            await ctx.send(embed=embed, delete_after=60)
+            await ctx.send(embed=embed)
 
         for game in current_free_games:
             try:
