@@ -188,8 +188,9 @@ class Karma(commands.Cog):
                 except ValueError:
                     continue
 
+        logger.debug(f'Karma transfer params -> User: {user}, amount: {amount}')
         if user is None or amount is None:
-            return await ctx.reply("Could not find a user or amount in the provided arguments.", delete_after=20)
+            return await ctx.reply("Could not find a user or amount in the provided arguments.")
 
         embed = discord.Embed(color=0xf66045)
         if user.bot:
