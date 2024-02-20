@@ -195,7 +195,7 @@ class Karma(commands.Cog):
 
         logger.debug(f'Karma transfer params -> User: {user}, amount: {amount}')
         if user is None or amount is None:
-            logger.error(f'Could not find a user or amount in the provided arguments. args: {args}')
+            logger.error(f'Could not find a user or amount in the provided arguments. args: {args}; user: {user}; amount: {amount}')
             return await ctx.reply("Could not find a user or amount in the provided arguments.")
 
         embed = discord.Embed(color=0xf66045)
