@@ -180,9 +180,14 @@ class Karma(commands.Cog):
         amount = None
 
         for arg in args:
-            try:
-                user = await commands.UserConverter().convert(ctx, arg)
-            except commands.BadArgument:
+            if user is None:
+                try:
+                    user = await commands.UserConverter().convert(ctx, arg)
+                    continue
+                except commands.BadArgument:
+                    pass
+
+            if amount is None:
                 try:
                     amount = int(arg)
                 except ValueError:
