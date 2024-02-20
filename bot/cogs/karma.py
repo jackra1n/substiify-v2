@@ -182,7 +182,7 @@ class Karma(commands.Cog):
         for arg in args:
             if user is None:
                 try:
-                    user = await commands.UserConverter().convert(ctx, arg)
+                    user = await commands.MemberConverter().convert(ctx, arg)
                     continue
                 except commands.BadArgument:
                     pass
