@@ -346,57 +346,6 @@ class Owner(commands.Cog):
             random_karma = random.randint(500, 3000)
             await self.bot.db.execute(stmt_insert_user_karma, user.id, ctx.guild.id, random_karma)
 
-async def check_if_server_exists_and_insert(bot: Substiify, server_id: int) -> bool:
-    server = await bot.db.fetchrow("SELECT * FROM discord_server WHERE discord_server_id = $1", server_id)
-    if server is None:
-        try:
-            bot_server = bot.get_guild(server_id) or await bot.fetch_guild(server_id)
-        except Exception as e:
-            print(f"Error fetching server: {e}")
-            return False
-        if bot_server is None:
-            print(f"Server with id {server_id} does not exist in the database. Skipping...")
-            return False
-        bot.db.execute(
-            "INSERT INTO discord_server (discord_server_id, server_name) VALUES ($1, $2) ON CONFLICT (discord_server_id) DO NOTHING",
-            server_id, bot_server.name
-        )
-    return True
-
-async def check_if_channel_exists_and_insert(bot: Substiify, channel_id: int) -> bool:
-    channel = await bot.db.fetchrow("SELECT * FROM discord_channel WHERE discord_channel_id = $1", channel_id)
-    if channel is None:
-        try:
-            bot_channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
-        except Exception as e:
-            print(f"Error fetching channel: {e}")
-            return False
-        if bot_channel is None:
-            print(f"Channel with id {channel_id} does not exist in the database. Skipping...")
-            return False
-        bot.db.execute(
-            "INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id) VALUES ($1, $2, $3) ON CONFLICT (discord_channel_id) DO NOTHING",
-            channel_id, bot_channel.name, bot_channel.guild.id
-        )
-    return True
-
-async def check_if_user_exists_and_insert(bot: Substiify, user_id: int) -> bool:
-    user = await bot.db.fetchrow("SELECT * FROM discord_user WHERE discord_user_id = $1", user_id)
-    if user is None:
-        try:
-            bot_user = bot.get_user(user_id) or await bot.fetch_user(user_id)
-        except Exception as e:
-            print(f"Error fetching user: {e}")
-            return False
-        if bot_user is None:
-            print(f"User with id {user_id} does not exist in the database. Skipping...")
-            return False
-        bot.db.execute(
-            "INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3) ON CONFLICT (discord_user_id) DO NOTHING",
-            user_id, bot_user.name, bot_user.display_avatar.url
-        )
-    return True
-
 
 def create_command_usage_embed(results):
     commands_used = ""

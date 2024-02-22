@@ -72,8 +72,10 @@ class Database:
         avatar_url = user.display_avatar.url if user.display_avatar else None
         await self.execute(USER_INSERT_QUERY, user.id, user.name, avatar_url)
         await self.execute(SERVER_INSERT_QUERY, server.id, server.name)
-        if pchannel := channel.parent if hasattr(channel, 'parent') else None:
+
+        if pchannel := channel.parent if isinstance(channel, discord.Thread) else None:
             await self.execute(CHANNEL_INSERT_QUERY, pchannel.id, pchannel.name, pchannel.guild.id, None)
+        
         p_chan_id = pchannel.id if pchannel else None
         await self.execute(CHANNEL_INSERT_QUERY, channel.id, channel.name, channel.guild.id, p_chan_id)
 

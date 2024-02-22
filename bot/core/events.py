@@ -43,13 +43,12 @@ class Events(commands.Cog):
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
         await self._insert_server(channel.guild)
-        stmt = 'INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id) VALUES ($1, $2, $3, $4)'
-        await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, channel.category_id)
-        
+        await self._insert_channel(channel)
+
     @commands.Cog.listener()
     async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel):
-        stmt = 'UPDATE discord_channel SET channel_name = $1, parent_discord_channel_id = $2 WHERE discord_channel_id = $3'
-        await self.bot.db.execute(stmt, after.name, after.category_id, after.id)
+        stmt = 'UPDATE discord_channel SET channel_name = $1 WHERE discord_channel_id = $2'
+        await self.bot.db.execute(stmt, after.name, after.id)
 
     async def _insert_server(self, guild: discord.Guild):
         stmt = '''
@@ -57,6 +56,13 @@ class Events(commands.Cog):
             ON CONFLICT (discord_server_id) DO UPDATE SET server_name = $2
         '''
         await self.bot.db.execute(stmt, guild.id, guild.name)
+
+    async def _insert_channel(self, channel: discord.abc.GuildChannel):
+        stmt = '''
+            INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id) VALUES ($1, $2, $3)
+            ON CONFLICT (discord_channel_id) DO UPDATE SET channel_name = $2
+        '''
+        await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id)
 
 
 async def setup(bot: Substiify):
