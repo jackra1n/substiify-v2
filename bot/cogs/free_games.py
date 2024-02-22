@@ -111,5 +111,5 @@ class FreeGames(commands.Cog):
                 logger.error(f'Fail while sending free game: {ex}')
 
 
-async def setup(bot):
+async def setup(bot: Substiify):
     await bot.add_cog(FreeGames(bot))

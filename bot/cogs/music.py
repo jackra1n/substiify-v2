@@ -365,7 +365,7 @@ class NoNodeAccessible(MusicError):
         super().__init__('No playing agent is available at the moment. Please try again later or contact support.')
 
 
-async def setup(bot):
+async def setup(bot: Substiify):
     if all([config.LAVALINK_NODE_URL, config.LAVALINK_PASSWORD]):
         await bot.add_cog(Music(bot))
     else:

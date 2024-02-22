@@ -359,5 +359,5 @@ def create_command_usage_embed(results):
     return embed
 
 
-async def setup(bot):
+async def setup(bot: Substiify):
     await bot.add_cog(Owner(bot))

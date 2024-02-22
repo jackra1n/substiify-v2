@@ -186,5 +186,5 @@ class Fun(commands.Cog):
         await ctx.send(embed=embed)
 
 
-async def setup(bot):
+async def setup(bot: Substiify):
     await bot.add_cog(Fun(bot))

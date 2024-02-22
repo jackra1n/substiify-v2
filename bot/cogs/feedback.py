@@ -177,5 +177,5 @@ class FeedbackModal(discord.ui.Modal):
 		logger.error(type(error), error, error.__traceback__)
 
 
-async def setup(bot):
+async def setup(bot: Substiify):
 	await bot.add_cog(Feedback(bot))

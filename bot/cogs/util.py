@@ -411,5 +411,5 @@ def format_bytes(size_in_bytes: int) -> str:
     return f"{size_in_bytes / (1024 ** power):.2f} {units[power]}"
 
 
-async def setup(bot):
+async def setup(bot: Substiify):
     await bot.add_cog(Util(bot))
