@@ -1,5 +1,6 @@
 import importlib.resources
 import platform
+import re
 import shutil
 
 import discord
@@ -40,3 +41,7 @@ def print_system_info() -> None:
     print(f'{discord_label} {discord_version}'.rjust(rjust_len))
     print(f'{substiify_label} {substiify_version}'.rjust(rjust_len))
     print()
+
+def strip_emotes(string: str) -> str:
+    discord_emote_pattern = re.compile(r"<a?:[a-zA-Z0-9_]+:[0-9]+>")
+    return discord_emote_pattern.sub('', string)
