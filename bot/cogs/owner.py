@@ -196,7 +196,7 @@ class Owner(commands.Cog):
         """
         self.bot.version.set(version_type, value)
         embed = discord.Embed(description=f'{version_type.value} version has been set to {value}')
-        await ctx.send(embed=embed, delete_after=15)
+        await ctx.send(embed=embed, delete_after=30)
 
     @set_version.error
     async def set_version_error(self, ctx: commands.Context, error):

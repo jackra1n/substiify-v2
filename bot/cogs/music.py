@@ -193,7 +193,7 @@ class Music(commands.Cog):
             await ctx.message.delete()
         if not players:
             embed = discord.Embed(color=EMBED_COLOR, title='*⃣ | No active players found.')
-            return await ctx.send(embed=embed, delete_after=15)
+            return await ctx.send(embed=embed, delete_after=30)
 
         # get server names by id
         players_string: str = ''

@@ -57,7 +57,7 @@ class Karma(commands.Cog):
         else:
             embed = discord.Embed(color=0xf66045)
             embed.description = f'Votes are **NOT enabled** in {ctx.channel.mention}!'
-        await ctx.reply(embed=embed, delete_after=30)
+        await ctx.reply(embed=embed)
 
     @votes.command(name='list')
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -71,9 +71,9 @@ class Karma(commands.Cog):
         embed = discord.Embed(color=0x23b40c)
         if not channels_string:
             embed.description = 'No votes channels found.'
-            return await ctx.send(embed=embed, delete_after=20)
+            return await ctx.send(embed=embed)
         embed.description = f'Votes are enabled in the following channels: {channels_string}'
-        await ctx.send(embed=embed, delete_after=20)
+        await ctx.send(embed=embed)
 
     @votes.command()
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -103,8 +103,7 @@ class Karma(commands.Cog):
                 description=f'Votes are **already active** in {ctx.channel.mention}!',
                 color=0x23b40c
             )
-            await ctx.send(embed=embed, delete_after=20)
-            return
+            return await ctx.send(embed=embed)
         embed = discord.Embed(
             description=f'Votes **enabled** in {channel.mention}!',
             color=0x23b40c
@@ -251,7 +250,7 @@ class Karma(commands.Cog):
         stmt = "SELECT * FROM karma_emote WHERE discord_server_id = $1 ORDER BY increase_karma DESC"
         karma_emotes = await self.bot.db.fetch(stmt, ctx.guild.id)
         if not karma_emotes:
-            return await ctx.send(embed=discord.Embed(title='No emotes found.'), delete_after=60)
+            return await ctx.send(embed=discord.Embed(title='No emotes found.'))
         embed_string = ''
         last_action = ''
         for emote in karma_emotes:
@@ -260,7 +259,7 @@ class Karma(commands.Cog):
                 last_action = emote['increase_karma']
             embed_string += f"{self.bot.get_emoji(emote['discord_emote_id'])} "
         embed = discord.Embed(title=f'Karma Emotes - {ctx.guild.name}', description=embed_string)
-        await ctx.send(embed=embed, delete_after=60)
+        await ctx.send(embed=embed)
 
     @karma_emotes.command(name='add', usage="add <emote> <action>")
     @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -279,24 +278,24 @@ class Karma(commands.Cog):
         """
         if emote_action not in [0, 1]:
             embed = discord.Embed(title='Invalid action parameter.')
-            return await ctx.send(embed=embed, delete_after=30)
+            return await ctx.send(embed=embed)
         
         existing_emote = await self._get_karma_emote_by_id(ctx.guild.id, emote)
         if existing_emote is not None:
             embed = discord.Embed(title='That emote is already added.')
-            return await ctx.send(embed=embed, delete_after=30)
+            return await ctx.send(embed=embed)
         
         stmt_emote_count = "SELECT COUNT(*) FROM karma_emote WHERE discord_server_id = $1"
         max_emotes = await self.bot.db.fetchval(stmt_emote_count, ctx.guild.id)
         if max_emotes >= 10:
             embed = discord.Embed(title='You can only have 10 emotes.')
-            return await ctx.send(embed=embed, delete_after=30)
+            return await ctx.send(embed=embed)
         
         stmt_insert_emote = "INSERT INTO karma_emote (discord_server_id, discord_emote_id, increase_karma) VALUES ($1, $2, $3)"
         await self.bot.db.execute(stmt_insert_emote, ctx.guild.id, emote.id, not bool(emote_action))
 
         embed = discord.Embed(title=f'Emote {emote} added to the list.')
-        await ctx.send(embed=embed, delete_after=30)
+        await ctx.send(embed=embed)
         if not ctx.interaction:
             await ctx.message.delete()
 
@@ -312,13 +311,13 @@ class Karma(commands.Cog):
         existing_emote = await self._get_karma_emote_by_id(ctx.guild.id, emote)
         if existing_emote is None:
             embed = discord.Embed(title='That emote is not in the list.')
-            return await ctx.send(embed=embed, delete_after=20)
+            return await ctx.send(embed=embed)
         
         stmt_delete_emote = "DELETE FROM karma_emote WHERE discord_server_id = $1 AND discord_emote_id = $2"
         await self.bot.db.execute(stmt_delete_emote, ctx.guild.id, emote.id)
 
         embed = discord.Embed(title=f'Emote {emote} removed from the list.')
-        await ctx.send(embed=embed, delete_after=30)
+        await ctx.send(embed=embed)
         if not ctx.interaction:
             await ctx.message.delete()
 
@@ -482,7 +481,7 @@ class Karma(commands.Cog):
         post = await self.bot.db.fetchrow(stmt_post, post_id)
         if post is None:
             embed = discord.Embed(title='That post does not exist.')
-            return await ctx.send(embed=embed, delete_after=30)
+            return await ctx.send(embed=embed)
 
         server_upvote_emotes = await self._get_karma_upvote_emotes(ctx.guild.id)
         server_downvote_emotes = await self._get_karma_downvote_emotes(ctx.guild.id)
@@ -579,7 +578,7 @@ class Karma(commands.Cog):
             return await ctx.reply(f'Kasino with ID {kasino_id} is not open.')
 
         if kasino['discord_server_id'] != ctx.guild.id:
-            return await ctx.send(f'Kasino with ID {kasino_id} is not in this server.', delete_after=120)
+            return await ctx.send(f'Kasino with ID {kasino_id} is not in this server.')
 
         if winner in {1, 2}:
             await self.win_kasino(kasino_id, winner)
@@ -599,9 +598,9 @@ class Karma(commands.Cog):
             msg = f'You didn\'t provide a required argument!\nCorrect usage is `{ctx.prefix}kasino close <kasino_id> <winning_option>`'
             msg += '\nUse option `3` to close and abort the kasino (no winner).'
             embed = discord.Embed(description=msg, color=0xf66045)
-            await ctx.send(embed=embed, delete_after=30)
+            await ctx.send(embed=embed)
         elif isinstance(error, commands.errors.BadArgument):
-            await ctx.send('Bad argument.', delete_after=30)
+            await ctx.send(f'Bad argument: {error}')
         if not ctx.interaction:
             await ctx.message.delete()
 

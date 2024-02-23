@@ -186,7 +186,7 @@ class Util(commands.Cog):
         msg = await ctx.fetch_message(message_id)
         new_embed = discord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!")
         await msg.edit(embed=new_embed)
-        await ctx.send('Giveaway has been cancelled', delete_after=15)
+        await ctx.send('Giveaway has been cancelled', delete_after=30)
         await ctx.message.delete()
 
     @tasks.loop(minutes=1)
@@ -293,7 +293,7 @@ class Util(commands.Cog):
                 await ctx.message.delete()
             return
         if amount is None:
-            return await ctx.send('Please specify the amount of messages to delete.', delete_after=15)
+            return await ctx.send('Please specify the amount of messages to delete.', delete_after=30)
 
         if amount >= 100:
             return await ctx.send('Cannot delete more than 100 messages at a time!')
