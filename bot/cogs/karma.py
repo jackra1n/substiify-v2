@@ -803,7 +803,7 @@ class Karma(commands.Cog):
 
         to_embed.set_footer(
             text = f'as decided by {ctx.author}',
-            icon_url = ctx.author.display_avatar.url
+            icon_url = ctx.author.avatar
         )
         to_embed.set_thumbnail(url='https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif')
         await ctx.send(embed=to_embed)

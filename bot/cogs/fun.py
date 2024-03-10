@@ -182,7 +182,7 @@ class Fun(commands.Cog):
             description=f'Question: {question}',
             colour=discord.Colour.orange()
         )
-        embed.set_footer(text=f'Question by {ctx.author}', icon_url=ctx.author.display_avatar.url)
+        embed.set_footer(text=f'Question by {ctx.author}', icon_url=ctx.author.avatar)
         await ctx.send(embed=embed)
 
 
