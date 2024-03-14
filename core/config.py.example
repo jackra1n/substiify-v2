@@ -3,5 +3,5 @@ PREFIX = ""
 
 POSTGRESQL_DSN = "postgresql://[user]:[password]@[host]:[port]/[database_name]"
 
-LAVALINK_NODE_URL = ""
-LAVALINK_PASSWORD = ""
+LAVALINK_NODE_URL = "http://localhost:2333/"
+LAVALINK_PASSWORD = "youshallnotpass"

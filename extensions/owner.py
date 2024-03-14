@@ -3,12 +3,11 @@ import random
 from typing import Literal, Optional
 
 import discord
-from core import config, values
-from core.bot import Substiify
-from core.version import VersionType
 from discord import Activity, ActivityType
 from discord.ext import commands, tasks
 from discord.ext.commands import Greedy
+
+import core
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +16,7 @@ class Owner(commands.Cog):
 
     COG_EMOJI = "👑"
 
-    def __init__(self, bot: Substiify):
+    def __init__(self, bot: core.Substiify):
         self.bot = bot
         self.status_task.start()
         self.message_server = None
@@ -29,7 +28,7 @@ class Owner(commands.Cog):
     async def set_default_status(self):
         if self.bot.is_ready():
             servers = len(self.bot.guilds)
-            activity_name = f"{config.PREFIX}help | {servers} servers"
+            activity_name = f"{core.config.PREFIX}help | {servers} servers"
             activity = Activity(type=ActivityType.listening, name=activity_name)
             await self.bot.change_presence(activity=activity)
 
@@ -188,23 +187,6 @@ class Owner(commands.Cog):
         embed.add_field(name='Current version', value=self.bot.version.get())
         await ctx.send(embed=embed, delete_after=30)
 
-    @commands.is_owner()
-    @version.command(name='set')
-    async def set_version(self, ctx: commands.Context, version_type: VersionType, value: int):
-        """
-        Sets the minor version.
-        """
-        self.bot.version.set(version_type, value)
-        embed = discord.Embed(description=f'{version_type.value} version has been set to {value}')
-        await ctx.send(embed=embed, delete_after=30)
-
-    @set_version.error
-    async def set_version_error(self, ctx: commands.Context, error):
-        if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("Please specify the version type and value", delete_after=30)
-        if isinstance(error, commands.BadArgument):
-            await ctx.send("Version type not recognized. Version types are 'major' or 'minor'", delete_after=30)
-
     @commands.group(name="usage", invoke_without_command=True)
     async def usage(self, ctx: commands.Context):
         """
@@ -248,7 +230,7 @@ class Owner(commands.Cog):
             cmd = command['command_name'].center(longest_cmd)
             user = command['username'].center(longest_user)
             commands_used_string += f"`{user}` used `{cmd}` {discord_tmstmp}\n"
-        embed = discord.Embed(title=f"Last {amount} used commands on: **{ctx.guild.name}**", color=values.PRIMARY_COLOR)
+        embed = discord.Embed(title=f"Last {amount} used commands on: **{ctx.guild.name}**", color=core.constants.PRIMARY_COLOR)
         embed.description = commands_used_string
         await ctx.send(embed=embed, delete_after=60)
         await ctx.message.delete()
@@ -272,7 +254,7 @@ class Owner(commands.Cog):
         for row in commands_used_query:
             commands_used += f"`{row['server_name']}`\n"
             commands_count += f"{row['count']}\n"
-        embed = discord.Embed(title="Top servers used commands", color=values.PRIMARY_COLOR)
+        embed = discord.Embed(title="Top servers used commands", color=core.constants.PRIMARY_COLOR)
         embed.add_field(name="Command", value=commands_used, inline=True)
         embed.add_field(name="Count", value=commands_count, inline=True)
         await ctx.send(embed=embed, delete_after=30)
@@ -353,11 +335,11 @@ def create_command_usage_embed(results):
     for result in results:
         commands_used += f"`{result['command_name']}`\n"
         commands_count += f"{result['cnt']}\n"
-    embed = discord.Embed(color=values.PRIMARY_COLOR)
+    embed = discord.Embed(color=core.constants.PRIMARY_COLOR)
     embed.add_field(name="Command", value=commands_used, inline=True)
     embed.add_field(name="Count", value=commands_count, inline=True)
     return embed
 
 
-async def setup(bot: Substiify):
+async def setup(bot: core.Substiify):
     await bot.add_cog(Owner(bot))

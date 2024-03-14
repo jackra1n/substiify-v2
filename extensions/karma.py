@@ -5,11 +5,11 @@ from datetime import datetime
 import discord
 import plotly.graph_objects as go
 from asyncpg import Record
-from core import values
-from core.bot import Substiify
 from discord import app_commands
 from discord.ext import commands
-from utils import util
+
+import core
+import utils
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class Karma(commands.Cog):
 
     COG_EMOJI = "☯️"
 
-    def __init__(self, bot: Substiify, vote_channels: list[int]):
+    def __init__(self, bot: core.Substiify, vote_channels: list[int]):
         self.bot = bot
         self.vote_channels = vote_channels
 
@@ -41,10 +41,10 @@ class Karma(commands.Cog):
                 pass
 
     def get_upvote_emote(self):
-        return self.bot.get_emoji(values.UPVOTE_EMOTE_ID)
+        return self.bot.get_emoji(core.constants.UPVOTE_EMOTE_ID)
 
     def get_downvote_emote(self):
-        return self.bot.get_emoji(values.DOWNVOTE_EMOTE_ID)
+        return self.bot.get_emoji(core.constants.DOWNVOTE_EMOTE_ID)
 
     @commands.hybrid_group(invoke_without_command=True)
     async def votes(self, ctx: commands.Context):
@@ -749,14 +749,14 @@ class Karma(commands.Cog):
         stmt_upvotes = "SELECT discord_emote_id FROM karma_emote WHERE discord_server_id = $1 AND increase_karma = True"
         emote_records = await self.bot.db.fetch(stmt_upvotes, guild_id)
         server_upvote_emotes = [emote['discord_emote_id'] for emote in emote_records]
-        server_upvote_emotes.append(int(values.UPVOTE_EMOTE_ID))
+        server_upvote_emotes.append(int(core.constants.UPVOTE_EMOTE_ID))
         return server_upvote_emotes
 
     async def _get_karma_downvote_emotes(self, guild_id: int) -> list[int]:
         stmt_downvotes = "SELECT discord_emote_id FROM karma_emote WHERE discord_server_id = $1 AND increase_karma = False"
         emote_records = await self.bot.db.fetch(stmt_downvotes, guild_id)
         server_downvote_emotes = [emote['discord_emote_id'] for emote in emote_records]
-        server_downvote_emotes.append(int(values.DOWNVOTE_EMOTE_ID))
+        server_downvote_emotes.append(int(core.constants.DOWNVOTE_EMOTE_ID))
         return server_downvote_emotes
 
     async def check_payload(self, payload: discord.RawReactionActionEvent) -> discord.Member | None:
@@ -884,7 +884,7 @@ class Karma(commands.Cog):
             user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
             await user.send(embed=output)
 
-async def _update_kasino_msg(bot: Substiify, kasino_id: int) -> None:
+async def _update_kasino_msg(bot: core.Substiify, kasino_id: int) -> None:
     kasino = await bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
     kasino_channel = await bot.fetch_channel(kasino['discord_channel_id'])
     kasino_msg = await kasino_channel.fetch_message(kasino['discord_message_id'])
@@ -940,7 +940,7 @@ class KasinoBetButton(discord.ui.Button):
         super().__init__(label=f'Bet: {option}', emoji=gamba_emoji, style=discord.ButtonStyle.blurple)
 
     async def callback(self, interaction: discord.Interaction):
-        bot: Substiify = interaction.client
+        bot: core.Substiify = interaction.client
         if self.view.kasino['locked']:
             return await interaction.response.send_message(
                 'The kasino is locked! No more bets are taken in. Time to wait and see...', 
@@ -971,7 +971,7 @@ class KasinoLockButton(discord.ui.Button):
         super().__init__(label=label, emoji=emoji, style=style)
 
     async def callback(self, interaction: discord.Interaction):
-        bot: Substiify = interaction.client
+        bot: core.Substiify = interaction.client
         kasino_id = self.view.kasino['id']
         if not interaction.user.guild_permissions.manage_channels and not await bot.is_owner(interaction.user):
             return await interaction.response.send_message('You don\'t have permission to lock the kasino!', ephemeral=True)
@@ -987,7 +987,7 @@ class KasinoLockButton(discord.ui.Button):
 
 class KasinoBetModal(discord.ui.Modal):
     def __init__(self, kasino: Record, bettor_karma: int, user_bet: Record, option: int):
-        title = util.strip_emotes(kasino['question'])
+        title = utils.ux.strip_emotes(kasino['question'])
         if len(title) > 45:
             title = title[:42] + '...'
         super().__init__(title=title)
@@ -1008,7 +1008,7 @@ class KasinoBetModal(discord.ui.Modal):
         self.add_item(self.bet_amount_input)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        bot: Substiify = interaction.client
+        bot: core.Substiify = interaction.client
         kasino_id: int = self.kasino['id']
         amount: int = self.bet_amount_input.value
         bettor_karma: int = await bot.db.fetchval('SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2', interaction.user.id, interaction.guild.id)
@@ -1052,7 +1052,7 @@ class KasinoBetModal(discord.ui.Modal):
         await _update_kasino_msg(bot, kasino_id)
 
 
-async def setup(bot: Substiify):
+async def setup(bot: core.Substiify):
     query = await bot.db.fetch('SELECT * FROM discord_channel WHERE upvote = True')
     upvote_channels = [channel['discord_channel_id'] for channel in query] or []
     await bot.add_cog(Karma(bot, upvote_channels))

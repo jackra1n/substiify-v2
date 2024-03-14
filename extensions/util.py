@@ -3,16 +3,17 @@ import datetime
 import logging
 import math
 import platform
-import subprocess
 from random import SystemRandom, shuffle
 
 import discord
 import psutil
-from core import values
-from core.bot import Substiify
+from utils import ux
 from discord import MessageType, app_commands
 from discord.ext import commands, tasks
 from pytz import timezone
+
+from core import constants
+from core.bot import Substiify
 
 logger = logging.getLogger(__name__)
 
@@ -328,7 +329,7 @@ class Util(commands.Cog):
         embed = discord.Embed(
             title=f'{title} 🏓',
             description=f'⏱️Ping: `{round(self.bot.latency*1000)}`ms',
-            color=values.PRIMARY_COLOR
+            color=constants.PRIMARY_COLOR
         )
         await ctx.message.delete()
         await ctx.send(embed=embed)
@@ -346,7 +347,7 @@ class Util(commands.Cog):
         embed = discord.Embed(
             title="Special thanks for any help to those people",
             description=" ".join(peeople_who_helped),
-            color=values.PRIMARY_COLOR,
+            color=constants.PRIMARY_COLOR,
         )
 
         await ctx.message.delete()
@@ -359,20 +360,19 @@ class Util(commands.Cog):
         """
         content = ''
         bot_uptime = time_up((discord.utils.utcnow() - self.bot.start_time).total_seconds())
-        git_log_cmd = ['git', 'log', '-1', '--date=format:"%Y/%m/%d"', '--format=%ad']
-        last_commit_date = subprocess.check_output(git_log_cmd).decode('utf-8').strip().strip('"')
+        last_commit_hash = ux.get_last_commit_hash()
         cpu_percent = psutil.cpu_percent()
         ram = psutil.virtual_memory()
         ram_used = format_bytes((ram.total - ram.available))
         ram_percent = psutil.virtual_memory().percent
-        bot_version = self.bot.version.get()
         proc = psutil.Process()
 
         with proc.oneshot():
             memory = proc.memory_full_info()
             content = f'**Instance uptime:** `{bot_uptime}`\n' \
-                f'**Version:** `{bot_version}` | **Updated:** `{last_commit_date}`\n' \
-                f'**Python:** `{platform.python_version()}` | **discord.py:** `{discord.__version__}`\n\n' \
+                f'**Version:** `{self.bot.version} [{last_commit_hash}]` \n' \
+                f'**Python:** `{platform.python_version()}`\n' \
+                f'**discord.py:** `{discord.__version__}`\n\n' \
                 f'**CPU:** `{cpu_percent}%`\n' \
                 f'**Process RAM:** `{format_bytes(memory.uss)}`\n' \
                 f'**Total RAM:** `{ram_used} ({ram_percent}%)`\n\n' \
@@ -381,7 +381,7 @@ class Util(commands.Cog):
         embed = discord.Embed(
             title=f'Info about {self.bot.user.display_name}',
             description=content,
-            color=values.PRIMARY_COLOR,
+            color=constants.PRIMARY_COLOR,
             timestamp=datetime.datetime.now(timezone("Europe/Zurich"))
         )
         embed.set_thumbnail(url=self.bot.user.display_avatar.url)

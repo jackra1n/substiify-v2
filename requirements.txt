@@ -3,10 +3,11 @@
 discord.py[voice]
 asyncpg
 pytz
+colorlog
 toml
 psutil
 wavelink
-vacefron.py
 plotly
 kaleido
+vacefron.py
 #jishaku  # for debugging, not needed for normal use

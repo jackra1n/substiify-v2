@@ -137,10 +137,21 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+### JetBrains template
+# Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider
+# Reference: https://intellij-support.jetbrains.com/hc/en-us/articles/206544839
+
+# User-specific stuff
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+
 
 # substiify custom
-bot/core/version.toml
-bot/core/config.py
+core/version.toml
+config.py
 postgres-data
 
 logs/

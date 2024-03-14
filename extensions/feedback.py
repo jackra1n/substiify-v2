@@ -3,9 +3,10 @@ from enum import Enum
 
 import discord
 from asyncpg import Record
-from core.bot import Substiify
 from discord import app_commands
 from discord.ext import commands
+
+from core.bot import Substiify
 
 logger = logging.getLogger(__name__)
 

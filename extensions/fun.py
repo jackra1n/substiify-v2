@@ -4,8 +4,9 @@ import random
 
 import discord
 import vacefron
-from core.bot import Substiify
 from discord.ext import commands
+
+from core.bot import Substiify
 
 logger = logging.getLogger(__name__)
 

@@ -1,8 +1,9 @@
 import logging
 
 import discord
-from core.bot import Substiify
 from discord.ext import commands
+
+import core
 
 EVENTS_CHANNEL_ID = 1131685580300877916
 
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class Events(commands.Cog):
 
-    def __init__(self, bot: Substiify):
+    def __init__(self, bot: core.Substiify):
         self.bot = bot
 
     @commands.Cog.listener()
@@ -65,5 +66,5 @@ class Events(commands.Cog):
         await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id)
 
 
-async def setup(bot: Substiify):
+async def setup(bot: core.Substiify):
     await bot.add_cog(Events(bot))

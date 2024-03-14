@@ -3,10 +3,11 @@ import logging
 
 import discord
 import wavelink
-from core import config
-from core.bot import Substiify
 from discord import ButtonStyle, Interaction, ui
 from discord.ext import commands
+
+from core import config
+from core.bot import Substiify
 
 logger = logging.getLogger(__name__)
 

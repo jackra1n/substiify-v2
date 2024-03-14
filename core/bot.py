@@ -3,68 +3,41 @@ import logging
 
 import discord
 import wavelink
-from core import config
-from core.version import Version
 from discord.ext import commands
-from utils.db import Database
+
+import core
+from database import Database
 
 logger = logging.getLogger(__name__)
 
-INITIAL_EXTENSIONS = [
-    'core.events',
-    'cogs.feedback',
-    'cogs.free_games',
-    'cogs.fun',
-    'cogs.help',
-    'cogs.karma',
-    'cogs.music',
-    'cogs.util',
-    'cogs.owner',
-    'jishaku'
-]
-
-try:
-    import jishaku
-except ModuleNotFoundError:
-    INITIAL_EXTENSIONS.remove('jishaku')
-else:
-    del jishaku
-
 
 class Substiify(commands.Bot):
-
-    db: Database
-    start_time: datetime.datetime
-
-    def __init__(self) -> None:
+    def __init__(self, *, database: Database) -> None:
+        self.db = database
+        self.version = core.__version__
+        self.start_time = datetime.datetime.now(datetime.timezone.utc)
         intents = discord.Intents().all()
         super().__init__(
-            command_prefix=commands.when_mentioned_or(config.PREFIX),
+            command_prefix=commands.when_mentioned_or(core.config.PREFIX),
             intents=intents,
             owner_id=276462585690193921,
             max_messages=3000
         )
-        self.version = Version()
 
     async def setup_hook(self) -> None:
-        self.start_time: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
+        await self.load_extension('core.events')
+        await self.load_extension('extensions')
 
-        node: wavelink.Node = wavelink.Node(uri=config.LAVALINK_NODE_URL, password=config.LAVALINK_PASSWORD)
+        node: wavelink.Node = wavelink.Node(uri=core.config.LAVALINK_NODE_URL, password=core.config.LAVALINK_PASSWORD)
         await wavelink.Pool.connect(client=self, nodes=[node])
 
-        for extension in INITIAL_EXTENSIONS:
-            try:
-                await self.load_extension(extension)
-            except Exception as error:
-                exc = f'{type(error).__name__}: {error}'
-                logger.warning(f'Failed to load extension {extension}\n{exc}')
 
     async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
         logging.info(f"Wavelink Node connected: {payload.node!r} | Resumed: {payload.resumed}")
 
     async def on_ready(self: commands.Bot) -> None:
         servers = len(self.guilds)
-        activity_name = f"{config.PREFIX}help | {servers} servers"
+        activity_name = f"{core.config.PREFIX}help | {servers} servers"
         activity = discord.Activity(type=discord.ActivityType.listening, name=activity_name)
         await self.change_presence(activity=activity)
         logger.info(f'Logged on as {self.user} (ID: {self.user.id})')
