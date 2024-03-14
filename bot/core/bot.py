@@ -93,6 +93,7 @@ class Substiify(commands.Bot):
             return
         if isinstance(error, commands.CommandOnCooldown):
             await ctx.message.add_reaction('⏳')
+            await ctx.send(f'This command is on cooldown. Try again in {error.retry_after:.2f} seconds.', ephemeral=True)
             return
         logger.error(f'[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]')
         if isinstance(error, commands.CheckFailure):

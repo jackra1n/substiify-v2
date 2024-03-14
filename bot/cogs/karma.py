@@ -918,9 +918,9 @@ async def _update_kasino_msg(bot: Substiify, kasino_id: int) -> None:
     await kasino_msg.edit(embed=embed, view=KasinoView(kasino))
 
 def _calculate_odds(bets_a_amount: float, bets_b_amount: float) -> tuple[float, float]:
-    total_bets = bets_a_amount + bets_b_amount
-    a_odds = total_bets / bets_a_amount if bets_a_amount else 1.0
-    b_odds = total_bets / bets_b_amount if bets_b_amount else 1.0
+    total_bets: float = float(bets_a_amount) + float(bets_b_amount)
+    a_odds: float = total_bets / bets_a_amount if bets_a_amount else 1.0
+    b_odds: float = total_bets / bets_b_amount if bets_b_amount else 1.0
     return a_odds, b_odds
 
 
@@ -1009,10 +1009,10 @@ class KasinoBetModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
         bot: Substiify = interaction.client
-        kasino_id = self.kasino['id']
-        amount = self.bet_amount_input.value
-        bettor_karma = self.bettor_karma
-        user_bet = self.user_bet
+        kasino_id: int = self.kasino['id']
+        amount: int = self.bet_amount_input.value
+        bettor_karma: int = bot.db.fetchval('SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2', interaction.user.id, interaction.guild.id)
+        user_bet: Record = self.user_bet
 
         try:
             amount = int(amount)
@@ -1047,9 +1047,9 @@ class KasinoBetModal(discord.ui.Modal):
         output_embed.color = discord.Colour.from_rgb(52, 79, 235)
         output_embed.description = f'Remaining karma: {bettor_karma - amount}'
 
-        await _update_kasino_msg(bot, kasino_id)
         await interaction.response.send_message(embed=output_embed, ephemeral=True)
         logger.info(f"Bet[user: {interaction.user}, amount: {amount}, option: {self.option}, kasino: {kasino_id}]")
+        await _update_kasino_msg(bot, kasino_id)
 
 
 async def setup(bot: Substiify):
