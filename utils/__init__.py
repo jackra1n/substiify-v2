@@ -1,1 +1,1 @@
-from .ux import *
+from . import ux as ux

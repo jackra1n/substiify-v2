@@ -5,10 +5,11 @@ from typing import TYPE_CHECKING, Any, Self
 
 import asyncpg
 import discord
-from database.db_constants import (CHANNEL_INSERT_QUERY, SERVER_INSERT_QUERY,
-                          USER_INSERT_QUERY)
 
 import core
+from database.db_constants import (CHANNEL_INSERT_QUERY, 
+                                   SERVER_INSERT_QUERY,
+                                   USER_INSERT_QUERY)
 
 if TYPE_CHECKING:
     _Pool = asyncpg.Pool[asyncpg.Record]

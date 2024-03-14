@@ -2,8 +2,8 @@ import importlib.resources
 import platform
 import re
 import string
-import sys
 import subprocess
+import sys
 
 import colorlog
 import discord

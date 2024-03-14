@@ -7,13 +7,13 @@ from random import SystemRandom, shuffle
 
 import discord
 import psutil
-from utils import ux
 from discord import MessageType, app_commands
 from discord.ext import commands, tasks
 from pytz import timezone
 
 from core import constants
 from core.bot import Substiify
+from utils import ux
 
 logger = logging.getLogger(__name__)
 
