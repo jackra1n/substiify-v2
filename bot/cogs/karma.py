@@ -1011,7 +1011,7 @@ class KasinoBetModal(discord.ui.Modal):
         bot: Substiify = interaction.client
         kasino_id: int = self.kasino['id']
         amount: int = self.bet_amount_input.value
-        bettor_karma: int = bot.db.fetchval('SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2', interaction.user.id, interaction.guild.id)
+        bettor_karma: int = await bot.db.fetchval('SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2', interaction.user.id, interaction.guild.id)
         user_bet: Record = self.user_bet
 
         try:
