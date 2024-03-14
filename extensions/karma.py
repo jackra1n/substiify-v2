@@ -589,7 +589,9 @@ class Karma(commands.Cog):
 
         await self.send_conclusion(ctx, kasino_id, winner)
         await self.remove_kasino(kasino_id)
-        if not ctx.interaction:
+        if ctx.interaction:
+            await ctx.interaction.response.send_message('Kasino has been closed.', ephemeral=True)
+        else:
             await ctx.message.delete()
 
     @kasino_close.error
@@ -789,8 +791,8 @@ class Karma(commands.Cog):
         total_karma = await self.bot.db.fetchval('SELECT SUM(amount) FROM kasino_bet WHERE kasino_id = $1', kasino_id)
         to_embed = discord.Embed(color=discord.Colour.from_rgb(52, 79, 235))
 
-        winner_option = kasino['option1'] if winner == 1 else kasino['option2']
         if winner in [1, 2]:
+            winner_option = kasino['option1'] if winner == 1 else kasino['option2']
             to_embed.title = f':tada: "{winner_option}" was correct! :tada:'
             to_embed.description = f"""Question: {kasino['question']}
                                        If you\'ve chosen {winner}, you\'ve just won karma!
@@ -868,7 +870,8 @@ class Karma(commands.Cog):
                             f'Question was: {question}\n'
                             f'New karma balance: {user_karma}'
             )
-            await (await self.bot.fetch_user(user_id)).send(embed=output)
+            user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+            await user.send(embed=output)
 
         losers_bets = [kb for kb in kasino_and_bets if kb['option'] != winning_option]
         for bet in losers_bets:

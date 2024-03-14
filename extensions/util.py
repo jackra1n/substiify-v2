@@ -351,7 +351,7 @@ class Util(commands.Cog):
         )
 
         await ctx.message.delete()
-        await ctx.send(embed=embed, delete_after=120)
+        await ctx.send(embed=embed)
 
     @commands.command()
     async def info(self, ctx: commands.Context):

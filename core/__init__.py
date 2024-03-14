@@ -1,6 +1,6 @@
-from .bot import Substiify
-from .config import *
-from .constants import *
+from .bot import Substiify as Substiify
+from . import config as config
+from . import constants as constants
 
 __version__ = "0.96"
 __author__ = "jackra1n"

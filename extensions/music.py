@@ -25,8 +25,8 @@ class Music(commands.Cog):
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.reply('Please provide a search query or URL.')
         if isinstance(error, MusicError):
-            error.is_handled = True
             await ctx.send(error)
+        error.is_handled = True
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before: discord.VoiceState, after):
@@ -139,6 +139,11 @@ class Music(commands.Cog):
         if not player.playing:
             await player.play(player.queue.get())
         await ctx.send(embed=embed, delete_after=delete_after)
+
+    @play.error
+    async def play_error(self, ctx: commands.Context, error):
+        if ctx.interaction and not getattr(error, 'is_handled', False):
+            await ctx.interaction.response.send_message(str(error), ephemeral=True)
 
     @commands.hybrid_command()
     async def skip(self, ctx: commands.Context, amount: int = 1):
