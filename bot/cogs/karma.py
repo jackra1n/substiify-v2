@@ -919,8 +919,8 @@ async def _update_kasino_msg(bot: Substiify, kasino_id: int) -> None:
 
 def _calculate_odds(bets_a_amount: float, bets_b_amount: float) -> tuple[float, float]:
     total_bets: float = float(bets_a_amount) + float(bets_b_amount)
-    a_odds: float = total_bets / bets_a_amount if bets_a_amount else 1.0
-    b_odds: float = total_bets / bets_b_amount if bets_b_amount else 1.0
+    a_odds: float = float(total_bets) / float(bets_a_amount) if bets_a_amount else 1.0
+    b_odds: float = float(total_bets) / float(bets_b_amount) if bets_b_amount else 1.0
     return a_odds, b_odds
 
 
