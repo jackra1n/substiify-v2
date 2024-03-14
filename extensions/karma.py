@@ -912,8 +912,8 @@ async def _update_kasino_msg(bot: core.Substiify, kasino_id: int) -> None:
     embed = discord.Embed(title=title, description=description, color=color)
     embed.set_footer(text=f'On the table: {bets_a_amount + bets_b_amount} Karma | ID: {kasino_id}')
     embed.set_thumbnail(url='https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif')
-    embed.add_field(name=f'**1:** {kasino["option1"]}', value=f'**Odds:** 1:{round(a_odds, 2)}\n**Pool:** {bets_a_amount} Karma')
-    embed.add_field(name=f'**2:** {kasino["option2"]}', value=f'**Odds:** 1:{round(b_odds, 2)}\n**Pool:** {bets_b_amount} Karma')
+    embed.add_field(name=f'**1:** {kasino["option1"]}', value=f'**Odds:** 1:{round(a_odds, 3)}\n**Pool:** {bets_a_amount} Karma')
+    embed.add_field(name=f'**2:** {kasino["option2"]}', value=f'**Odds:** 1:{round(b_odds, 3)}\n**Pool:** {bets_b_amount} Karma')
 
     await kasino_msg.edit(embed=embed, view=KasinoView(kasino))
 
