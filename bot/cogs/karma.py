@@ -973,7 +973,7 @@ class KasinoLockButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         bot: Substiify = interaction.client
         kasino_id = self.view.kasino['id']
-        if not interaction.user.guild_permissions.manage_channels and not await bot.is_owner(interaction.user):
+        if not interaction.user.guild_permissions.manage_channels or not await bot.is_owner(interaction.user):
             return await interaction.response.send_message('You don\'t have permission to lock the kasino!', ephemeral=True)
         if self.view.kasino['locked']:
             return await interaction.response.send_message('The kasino is already locked!', ephemeral=True)
