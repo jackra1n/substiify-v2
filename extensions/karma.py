@@ -218,10 +218,7 @@ class Karma(commands.Cog):
             embed.description = 'You don\'t have enough karma!'
             return await ctx.send(embed=embed)
         
-        stmt_karma = '''
-            INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
-            ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = karma.amount + $3'''
-        await self.bot.db.executemany(stmt_karma, [(user.id, ctx.guild.id, amount), (ctx.author.id, ctx.guild.id, -amount)])
+        await self.bot.db.executemany(UPDATE_KARMA_QUERY, [(user.id, ctx.guild.id, amount), (ctx.author.id, ctx.guild.id, -amount)])
 
         embed = discord.Embed(color=0x23b40c)
         embed.description = f'{ctx.author.mention} has donated {amount} karma to {user.mention}!'
