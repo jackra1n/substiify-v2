@@ -114,8 +114,6 @@ class Music(commands.Cog):
             player.autoplay = wavelink.AutoPlayMode.partial
 
         search = search.strip('<>')
-        if not ctx.interaction:
-            await ctx.message.delete()
 
         tracks: wavelink.Search = await wavelink.Playable.search(search)
         if not tracks:
@@ -129,7 +127,7 @@ class Music(commands.Cog):
         if isinstance(tracks, wavelink.Playlist):
             embed.description = f'**[{tracks}]({tracks.url})**' if tracks.url else f'**[{tracks}]({search})**'
         else:
-            tracks = tracks[0]
+            tracks: wavelink.Playable = tracks[0]
             embed.description = f'**[{tracks}]({tracks.uri})**'
         
         songs_cnt = await player.queue.put_wait(tracks)
@@ -139,11 +137,20 @@ class Music(commands.Cog):
         if not player.playing:
             await player.play(player.queue.get())
         await ctx.send(embed=embed, delete_after=delete_after)
+        if not ctx.interaction:
+            await ctx.message.delete()
 
     @play.error
     async def play_error(self, ctx: commands.Context, error):
-        if ctx.interaction and not getattr(error, 'is_handled', False):
-            await ctx.interaction.response.send_message(str(error), ephemeral=True)
+        if getattr(error, 'is_handled', False):
+            return
+
+        error_str = f"`{str(error)}`\n\nProbably contact <@!{self.bot.owner_id}> for help."
+        embed = discord.Embed(title='An error occurred', description=error_str, color=discord.Color.red())
+        if ctx.interaction:
+            await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await ctx.reply(embed=embed)
 
     @commands.hybrid_command()
     async def skip(self, ctx: commands.Context, amount: int = 1):

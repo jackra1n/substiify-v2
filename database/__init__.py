@@ -7,9 +7,7 @@ import asyncpg
 import discord
 
 import core
-from database.db_constants import (CHANNEL_INSERT_QUERY, 
-                                   SERVER_INSERT_QUERY,
-                                   USER_INSERT_QUERY)
+from .db_constants import CHANNEL_INSERT_QUERY, SERVER_INSERT_QUERY, USER_INSERT_QUERY
 
 if TYPE_CHECKING:
     _Pool = asyncpg.Pool[asyncpg.Record]

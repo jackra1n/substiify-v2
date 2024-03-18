@@ -75,6 +75,11 @@ class Substiify(commands.Bot):
             return
         if isinstance(error, commands.MissingRequiredArgument):
             await ctx.send('A required argument is missing.')
+
+        ERRORS_CHANNEL_ID = 1219407043186659479
+        embed = discord.Embed(title='Error', description=f'```{error}```', color=discord.Color.red())
+        await self.bot.get_channel(ERRORS_CHANNEL_ID).send(embed=embed)
+
         try:
             await ctx.message.add_reaction('❌')
         except discord.errors.NotFound:

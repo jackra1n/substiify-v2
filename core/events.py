@@ -25,7 +25,7 @@ class Events(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
-        await self.bot.get_channel(EVENTS_CHANNEL_ID).send(f'Joined guild `{guild.name}` ({guild.id})')
+        await self.bot.get_channel(EVENTS_CHANNEL_ID).send(f"Joined {guild.owner}'s guild `{guild.name}` ({guild.id})")
         await self._insert_server(guild)
 
     @commands.Cog.listener()
@@ -35,7 +35,7 @@ class Events(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild: discord.Guild):
-        await self.bot.get_channel(EVENTS_CHANNEL_ID).send(f'Left guild `{guild.name}` ({guild.id})')
+        await self.bot.get_channel(EVENTS_CHANNEL_ID).send(f"Left {guild.owner}'s guild `{guild.name}` ({guild.id})")
 
     #
     # CHANNEL EVENTS
