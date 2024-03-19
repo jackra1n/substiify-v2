@@ -100,7 +100,6 @@ class Substiify(commands.Bot):
 		embed = discord.Embed(title=error_msg, description=f"```{error}```", color=discord.Color.red())
 		await self.get_channel(ERRORS_CHANNEL_ID).send(embed=embed)
 
-
 	async def close(self) -> None:
 		await self.db.pool.close()
 		await super().close()

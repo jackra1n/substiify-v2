@@ -1,6 +1,6 @@
 import logging
-import re
 import os
+import re
 from datetime import datetime
 
 import discord
@@ -456,44 +456,47 @@ class Karma(commands.Cog):
 			timestamp = datetime.now().timestamp()
 			filename = f"karma_graph_{timestamp}.png"
 
-			x = [entry[1] for entry in karma_percentiles]
-			y = [entry[0] for entry in karma_percentiles]
-
-			plt.figure(figsize=(10, 7), facecolor='#141415')
-			plt.bar(x, y, color='#6971f8', width=4)
-
-			plt.title('Karma Graph', color='white')
-			plt.xlabel('Percentile of users', color='white')
-			plt.ylabel('Total karma', color='white')
-
-			plt.gca().spines['bottom'].set_color('white')
-			plt.gca().spines['left'].set_color('white')
-			plt.gca().tick_params(axis='x', colors='white')
-			plt.gca().tick_params(axis='y', colors='white')
-
-			plt.gca().set_facecolor('#141415')
-			plt.gca().spines['top'].set_visible(False)
-			plt.gca().spines['right'].set_visible(False)
-			plt.gca().spines['left'].set_visible(False)
-			plt.gca().spines['bottom'].set_visible(False)
-
-			plt.grid(axis='x', visible=False)
-			plt.grid(axis='y', color='#4a4d60')
-
-			def custom_formatter(x, pos):
-				if x >= 1e6:  # Millions
-					return f'{x*1e-6:.0f}M'
-				elif x >= 1e3:  # Thousands
-					return f'{x*1e-3:.0f}K'
-				else:
-					return f'{x:.0f}'
-				
-			plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(custom_formatter))
-			plt.savefig(filename, facecolor='#141415')
-
+			filename = self._generate_graph(filename, karma_percentiles)
 			await ctx.send(file=discord.File(filename, filename=f"{filename}.png"))
-			plt.close()
 			os.remove(filename)
+
+	def _generate_graph(self, filename: str, data: list[tuple[int, int]]) -> str:
+		x = [entry[1] for entry in data]
+		y = [entry[0] for entry in data]
+
+		plt.figure(figsize=(10, 6), facecolor="#141415")
+		plt.bar(x, y, color="#6971f8", width=4)
+
+		plt.title("Karma Graph", color="white", loc="left", fontsize=16)
+		plt.xlabel("Percentile of users", color="white")
+		plt.ylabel("Total karma", color="white")
+
+		plt.gca().spines["bottom"].set_color("white")
+		plt.gca().spines["left"].set_color("white")
+		plt.gca().tick_params(axis="x", colors="white")
+		plt.gca().tick_params(axis="y", colors="white")
+
+		plt.gca().set_facecolor("#141415")
+		plt.gca().spines["top"].set_visible(False)
+		plt.gca().spines["right"].set_visible(False)
+		plt.gca().spines["left"].set_visible(False)
+		plt.gca().spines["bottom"].set_visible(False)
+
+		plt.grid(axis="x", visible=False)
+		plt.grid(axis="y", color="#4a4d60")
+
+		def custom_formatter(x, pos):
+			if x >= 1e6:  # Millions
+				return f"{x*1e-6:.0f}M"
+			elif x >= 1e3:  # Thousands
+				return f"{x*1e-3:.0f}K"
+			else:
+				return f"{x:.0f}"
+
+		plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(custom_formatter))
+		plt.savefig(filename, facecolor="#141415")
+		plt.close()
+		return filename
 
 	@commands.hybrid_group(name="post", aliases=["po"], invoke_without_command=True)
 	async def post(self, ctx: commands.Context):
