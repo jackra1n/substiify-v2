@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from datetime import datetime
 
 import discord
@@ -171,17 +172,10 @@ class Karma(commands.Cog):
 
 		for arg in args:
 			if user is None:
-				try:
-					user = await commands.MemberConverter().convert(ctx, arg)
-					continue
-				except commands.BadArgument:
-					pass
+				user = self._find_guild_user(ctx.guild, arg)
 
-			if amount is None:
-				try:
-					amount = int(arg)
-				except ValueError:
-					continue
+			if amount is None and arg.isdigit():
+				amount = int(arg)
 
 		logger.debug(f"Karma transfer params -> User: {user}, amount: {amount}")
 		if user is None or amount is None:
@@ -219,6 +213,27 @@ class Karma(commands.Cog):
 		embed = discord.Embed(color=0x23B40C)
 		embed.description = f"{ctx.author.mention} has donated {amount} karma to {user.mention}!"
 		await ctx.send(embed=embed)
+
+	def _find_guild_user(self, guild: discord.Guild, arg: str) -> discord.Member | None:
+		members = guild.members
+		match = commands.IDConverter._get_id_match(arg) or re.match(r"<#([0-9]{15,20})>$", arg)
+		if match is None:
+			# not a mention or an id
+			username, _, discriminator = arg.rpartition("#")
+
+			# If # isn't found then "discriminator" actually has the username
+			if not username:
+				discriminator, username = username, discriminator
+
+			if discriminator == "0" or (len(discriminator) == 4 and discriminator.isdigit()):
+				return discord.utils.find(lambda m: m.name == username and m.discriminator == discriminator, members)
+
+			def pred(m: discord.Member) -> bool:
+				return m.name == arg or m.global_name == arg
+
+			return discord.utils.find(pred, members)
+		else:
+			return guild.get_member(int(arg))
 
 	@karma_donate.error
 	async def karma_donate_error(self, ctx: commands.Context, error):
@@ -906,8 +921,8 @@ async def _update_kasino_msg(bot: core.Substiify, kasino_id: int) -> None:
 
 	# FIGURE OUT AMOUNTS AND ODDS
 	stmt_kasino_bets_sum = """SELECT SUM(amount) FROM kasino_bet WHERE kasino_id = $1 AND option = $2"""
-	bets_a_amount = await bot.db.fetchval(stmt_kasino_bets_sum, kasino_id, 1) or 0.0
-	bets_b_amount = await bot.db.fetchval(stmt_kasino_bets_sum, kasino_id, 2) or 0.0
+	bets_a_amount: int = await bot.db.fetchval(stmt_kasino_bets_sum, kasino_id, 1) or 0
+	bets_b_amount: int = await bot.db.fetchval(stmt_kasino_bets_sum, kasino_id, 2) or 0
 	a_odds, b_odds = _calculate_odds(bets_a_amount, bets_b_amount)
 
 	# CREATE MESSAGE
@@ -937,10 +952,10 @@ async def _update_kasino_msg(bot: core.Substiify, kasino_id: int) -> None:
 	await kasino_msg.edit(embed=embed, view=KasinoView(kasino))
 
 
-def _calculate_odds(bets_a_amount: float, bets_b_amount: float) -> tuple[float, float]:
-	total_bets: float = float(bets_a_amount) + float(bets_b_amount)
-	a_odds: float = float(total_bets) / float(bets_a_amount) if bets_a_amount else 1.0
-	b_odds: float = float(total_bets) / float(bets_b_amount) if bets_b_amount else 1.0
+def _calculate_odds(bets_a_amount: int, bets_b_amount: int) -> tuple[float, float]:
+	total_bets: float = float(bets_a_amount + bets_b_amount)
+	a_odds: float = total_bets / float(bets_a_amount) if bets_a_amount else 1.0
+	b_odds: float = total_bets / float(bets_b_amount) if bets_b_amount else 1.0
 	return a_odds, b_odds
 
 

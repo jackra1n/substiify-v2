@@ -87,7 +87,7 @@ class Substiify(commands.Bot):
 
 		ERRORS_CHANNEL_ID = 1219407043186659479
 		embed = discord.Embed(title="Error", description=f"```{error}```", color=discord.Color.red())
-		await self.bot.get_channel(ERRORS_CHANNEL_ID).send(embed=embed)
+		await self.get_channel(ERRORS_CHANNEL_ID).send(embed=embed)
 
 		try:
 			await ctx.message.add_reaction("❌")
