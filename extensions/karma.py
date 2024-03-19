@@ -14,1045 +14,1072 @@ import utils
 logger = logging.getLogger(__name__)
 
 
-UPDATE_KARMA_QUERY = '''INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
-                        ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = karma.amount + $3'''
-UPDATE_POST_VOTES_QUERY = '''INSERT INTO post (discord_user_id, discord_server_id, discord_channel_id, discord_message_id, created_at, upvotes, downvotes)
+UPDATE_KARMA_QUERY = """INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
+                        ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = karma.amount + $3"""
+UPDATE_POST_VOTES_QUERY = """INSERT INTO post (discord_user_id, discord_server_id, discord_channel_id, discord_message_id, created_at, upvotes, downvotes)
                              VALUES ($1, $2, $3, $4, $5, $6, $7)
-                             ON CONFLICT (discord_message_id) DO UPDATE SET upvotes = post.upvotes + $6, downvotes = post.downvotes + $7'''
+                             ON CONFLICT (discord_message_id) DO UPDATE SET upvotes = post.upvotes + $6, downvotes = post.downvotes + $7"""
 
 
 class Karma(commands.Cog):
+	COG_EMOJI = "☯️"
 
-    COG_EMOJI = "☯️"
+	def __init__(self, bot: core.Substiify, vote_channels: list[int]):
+		self.bot = bot
+		self.vote_channels = vote_channels
 
-    def __init__(self, bot: core.Substiify, vote_channels: list[int]):
-        self.bot = bot
-        self.vote_channels = vote_channels
+	@commands.Cog.listener()
+	async def on_message(self, message: discord.Message):
+		if message.author.bot or message.type == discord.MessageType.thread_created:
+			return
+		if message.channel.id in self.vote_channels:
+			try:
+				await message.add_reaction(self.get_upvote_emote())
+				await message.add_reaction(self.get_downvote_emote())
+			except discord.NotFound:
+				pass
 
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        if message.author.bot or message.type == discord.MessageType.thread_created:
-            return
-        if message.channel.id in self.vote_channels:
-            try:
-                await message.add_reaction(self.get_upvote_emote())
-                await message.add_reaction(self.get_downvote_emote())
-            except discord.NotFound:
-                pass
+	def get_upvote_emote(self):
+		return self.bot.get_emoji(core.constants.UPVOTE_EMOTE_ID)
 
-    def get_upvote_emote(self):
-        return self.bot.get_emoji(core.constants.UPVOTE_EMOTE_ID)
+	def get_downvote_emote(self):
+		return self.bot.get_emoji(core.constants.DOWNVOTE_EMOTE_ID)
 
-    def get_downvote_emote(self):
-        return self.bot.get_emoji(core.constants.DOWNVOTE_EMOTE_ID)
+	@commands.hybrid_group(invoke_without_command=True)
+	async def votes(self, ctx: commands.Context):
+		"""
+		Shows if votes are enabled in the current channel
+		"""
+		if ctx.channel.id in self.vote_channels:
+			embed = discord.Embed(color=0x23B40C)
+			embed.description = f"Votes are **ALREADY enabled** in {ctx.channel.mention}!"
+		else:
+			embed = discord.Embed(color=0xF66045)
+			embed.description = f"Votes are **NOT enabled** in {ctx.channel.mention}!"
+		await ctx.reply(embed=embed)
 
-    @commands.hybrid_group(invoke_without_command=True)
-    async def votes(self, ctx: commands.Context):
-        """
-        Shows if votes are enabled in the current channel
-        """
-        if ctx.channel.id in self.vote_channels:
-            embed = discord.Embed(color=0x23b40c)
-            embed.description = f'Votes are **ALREADY enabled** in {ctx.channel.mention}!'
-        else:
-            embed = discord.Embed(color=0xf66045)
-            embed.description = f'Votes are **NOT enabled** in {ctx.channel.mention}!'
-        await ctx.reply(embed=embed)
+	@votes.command(name="list")
+	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+	async def list_votes(self, ctx: commands.Context):
+		"""
+		Lists all the votes channels that are enabled in the server
+		"""
+		stmt = "SELECT * FROM discord_channel WHERE discord_server_id = $1 AND upvote = True"
+		upvote_channels = await self.bot.db.fetch(stmt, ctx.guild.id)
+		channels_string = "\n".join([f"{x['discord_channel_id']} ({x['channel_name']})" for x in upvote_channels])
+		embed = discord.Embed(color=0x23B40C)
+		if not channels_string:
+			embed.description = "No votes channels found."
+			return await ctx.send(embed=embed)
+		embed.description = f"Votes are enabled in the following channels: {channels_string}"
+		await ctx.send(embed=embed)
 
-    @votes.command(name='list')
-    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    async def list_votes(self, ctx: commands.Context):
-        """
-        Lists all the votes channels that are enabled in the server
-        """
-        stmt = 'SELECT * FROM discord_channel WHERE discord_server_id = $1 AND upvote = True'
-        upvote_channels = await self.bot.db.fetch(stmt, ctx.guild.id)
-        channels_string = '\n'.join([f"{x['discord_channel_id']} ({x['channel_name']})" for x in upvote_channels])
-        embed = discord.Embed(color=0x23b40c)
-        if not channels_string:
-            embed.description = 'No votes channels found.'
-            return await ctx.send(embed=embed)
-        embed.description = f'Votes are enabled in the following channels: {channels_string}'
-        await ctx.send(embed=embed)
+	@votes.command()
+	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+	@app_commands.describe(channel="The channel to enable votes in")
+	async def start(self, ctx: commands.Context, channel: discord.abc.GuildChannel = None):
+		"""
+		Enables votes in the current or specified channel. Requires Manage Channels permission.
+		After enabling votes, the bot will add the upvote and downvote reactions to every message in the channel.
+		This is good for something like a meme channel if you want to give upvotes and downvotes to the messages.
 
-    @votes.command()
-    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    @app_commands.describe(
-        channel="The channel to enable votes in"
-    )
-    async def start(self, ctx: commands.Context, channel: discord.abc.GuildChannel = None):
-        """
-        Enables votes in the current or specified channel. Requires Manage Channels permission.
-        After enabling votes, the bot will add the upvote and downvote reactions to every message in the channel.
-        This is good for something like a meme channel if you want to give upvotes and downvotes to the messages.
+		If users click the reactions, user karma will be updated.
+		"""
+		channel = channel or ctx.channel
+		if channel.id not in self.vote_channels:
+			self.vote_channels.append(channel.id)
+		stmt = "SELECT * FROM discord_channel WHERE discord_channel_id = $1 AND upvote = True"
+		votes_enabled = await self.bot.db.fetch(stmt, channel.id)
+		logger.info(f"Votes enabled: {votes_enabled}")
+		if not votes_enabled:
+			stmt = """INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote)
+                      VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO UPDATE SET upvote = $5"""
+			await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, None, True)
+		else:
+			embed = discord.Embed(description=f"Votes are **already active** in {ctx.channel.mention}!", color=0x23B40C)
+			return await ctx.send(embed=embed)
+		embed = discord.Embed(description=f"Votes **enabled** in {channel.mention}!", color=0x23B40C)
+		await ctx.send(embed=embed)
+		if not ctx.interaction:
+			await ctx.message.delete()
 
-        If users click the reactions, user karma will be updated.
-        """
-        channel = channel or ctx.channel
-        if channel.id not in self.vote_channels:
-            self.vote_channels.append(channel.id)
-        stmt = 'SELECT * FROM discord_channel WHERE discord_channel_id = $1 AND upvote = True'
-        votes_enabled = await self.bot.db.fetch(stmt, channel.id)
-        logger.info(f'Votes enabled: {votes_enabled}')
-        if not votes_enabled:
-            stmt = '''INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote)
-                      VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO UPDATE SET upvote = $5'''
-            await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, None, True)
-        else:
-            embed = discord.Embed(
-                description=f'Votes are **already active** in {ctx.channel.mention}!',
-                color=0x23b40c
-            )
-            return await ctx.send(embed=embed)
-        embed = discord.Embed(
-            description=f'Votes **enabled** in {channel.mention}!',
-            color=0x23b40c
-        )
-        await ctx.send(embed=embed)
-        if not ctx.interaction:
-            await ctx.message.delete()
+	@votes.command()
+	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+	@app_commands.describe(channel="The channel to disable votes in")
+	async def stop(self, ctx: commands.Context, channel: discord.TextChannel = None):
+		"""
+		Disables votes in the current channel. Requires Manage Channels permission.
+		"""
+		channel = channel or ctx.channel
+		stmt = """INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote)
+                  VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO UPDATE SET upvote = $5"""
+		await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, None, False)
 
-    @votes.command()
-    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    @app_commands.describe(
-        channel="The channel to disable votes in"
-    )
-    async def stop(self, ctx: commands.Context, channel: discord.TextChannel = None):
-        """
-        Disables votes in the current channel. Requires Manage Channels permission.
-        """
-        channel = channel or ctx.channel
-        stmt = '''INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote)
-                  VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO UPDATE SET upvote = $5'''
-        await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, None, False)
+		if channel.id in self.vote_channels:
+			self.vote_channels.remove(channel.id)
 
-        if channel.id in self.vote_channels:
-            self.vote_channels.remove(channel.id)
+		await ctx.send(embed=discord.Embed(description=f"Votes has been stopped in {channel.mention}!", color=0xF66045))
+		if not ctx.interaction:
+			await ctx.message.delete()
 
-        await ctx.send(embed=discord.Embed(description=f'Votes has been stopped in {channel.mention}!', color=0xf66045))
-        if not ctx.interaction:
-            await ctx.message.delete()
+	@commands.group(
+		aliases=["k"],
+		usage="karma [user]",
+		invoke_without_command=True,
+	)
+	@app_commands.describe(
+		user="Which user do you want to see the karma of? If not specified, it will show your own karma."
+	)
+	async def karma(self, ctx: commands.Context, user: discord.User = None):
+		"""
+		Shows the karma of a user. If you dont specify a user, it will show your own.
+		If you want to know what emote reactions are used for karma, use the subcommand `karma emotes`
+		"""
+		if user is None:
+			user = ctx.author
 
-    @commands.group(aliases=["k"], usage="karma [user]", invoke_without_command=True,)
-    @app_commands.describe(
-        user='Which user do you want to see the karma of? If not specified, it will show your own karma.'
-    )
-    async def karma(self, ctx: commands.Context, user: discord.User = None):
-        """
-        Shows the karma of a user. If you dont specify a user, it will show your own.
-        If you want to know what emote reactions are used for karma, use the subcommand `karma emotes`
-        """
-        if user is None:
-            user = ctx.author
+		if user.bot:
+			return await ctx.reply(embed=discord.Embed(description="Bots don't have karma!", color=0xF66045))
 
-        if user.bot:
-            return await ctx.reply(embed=discord.Embed(description="Bots don't have karma!", color=0xf66045))
+		user_karma = await self._get_user_karma(user.id, ctx.guild.id)
+		user_karma = 0 if user_karma is None else user_karma
 
-        user_karma = await self._get_user_karma(user.id, ctx.guild.id)
-        user_karma = 0 if user_karma is None else user_karma
+		embed = discord.Embed(title=f"Karma - {ctx.guild.name}", description=f"{user.mention} has {user_karma} karma.")
+		await ctx.send(embed=embed)
 
-        embed = discord.Embed(title=f'Karma - {ctx.guild.name}', description=f'{user.mention} has {user_karma} karma.')
-        await ctx.send(embed=embed)
+	@karma.error
+	async def karma_error(self, ctx: commands.Context, error):
+		if isinstance(error, commands.BadArgument):
+			embed = discord.Embed(color=0xF66045, description=error)
+			await ctx.send(embed=embed)
 
-    @karma.error
-    async def karma_error(self, ctx: commands.Context, error):
-        if isinstance(error, commands.BadArgument):
-            embed = discord.Embed(color=0xf66045, description=error)
-            await ctx.send(embed=embed)
+	@commands.cooldown(3, 10)
+	@karma.command(name="donate", aliases=["wiretransfer", "wt"], usage="donate <user> <amount>")
+	@app_commands.describe(
+		user="Which user do you want to donate karma to?", amount="How much karma do you want to donate?"
+	)
+	async def karma_donate(self, ctx: commands.Context, *args):
+		"""
+		Donates karma to another user.
+		"""
+		if len(args) != 2:
+			msg = f"Got {len(args)} arguments, expected 2."
+			raise commands.MissingRequiredArgument(msg)
 
-    @commands.cooldown(3, 10)
-    @karma.command(name="donate", aliases=["wiretransfer", "wt"], usage="donate <user> <amount>")
-    @app_commands.describe(
-        user='Which user do you want to donate karma to?',
-        amount='How much karma do you want to donate?'
-    )
-    async def karma_donate(self, ctx: commands.Context, *args):
-        """
-        Donates karma to another user.
-        """
-        if len(args) != 2:
-            msg = f'Got {len(args)} arguments, expected 2.'
-            raise commands.MissingRequiredArgument(msg)
+		user = None
+		amount = None
 
-        user = None
-        amount = None
+		for arg in args:
+			if user is None:
+				try:
+					user = await commands.MemberConverter().convert(ctx, arg)
+					continue
+				except commands.BadArgument:
+					pass
 
-        for arg in args:
-            if user is None:
-                try:
-                    user = await commands.MemberConverter().convert(ctx, arg)
-                    continue
-                except commands.BadArgument:
-                    pass
+			if amount is None:
+				try:
+					amount = int(arg)
+				except ValueError:
+					continue
 
-            if amount is None:
-                try:
-                    amount = int(arg)
-                except ValueError:
-                    continue
+		logger.debug(f"Karma transfer params -> User: {user}, amount: {amount}")
+		if user is None or amount is None:
+			logger.error(
+				f"Could not find a user or amount in the provided arguments. args: {args}; user: {user}; amount: {amount}"
+			)
+			return await ctx.reply("Could not find a user or amount in the provided arguments.")
 
-        logger.debug(f'Karma transfer params -> User: {user}, amount: {amount}')
-        if user is None or amount is None:
-            logger.error(f'Could not find a user or amount in the provided arguments. args: {args}; user: {user}; amount: {amount}')
-            return await ctx.reply("Could not find a user or amount in the provided arguments.")
+		embed = discord.Embed(color=0xF66045)
+		if user.bot:
+			embed.description = "You can't donate to bots!"
+			return await ctx.send(embed=embed)
 
-        embed = discord.Embed(color=0xf66045)
-        if user.bot:
-            embed.description = 'You can\'t donate to bots!'
-            return await ctx.send(embed=embed)
-        
-        if amount <= 0:
-            embed.description = f'You cannot donate {amount} karma!'
-            return await ctx.send(embed=embed)
-        
-        if user not in ctx.guild.members:
-            embed.description = f'`{user}` is not a member of this server!'
-            return await ctx.send(embed=embed)
-        
-        donator_karma = await self._get_user_karma(ctx.author.id, ctx.guild.id)
-        if donator_karma is None:
-            embed.description = 'You don\'t have any karma!'
-            return await ctx.send(embed=embed)
-        
-        if donator_karma < amount:
-            embed.description = 'You don\'t have enough karma!'
-            return await ctx.send(embed=embed)
-        
-        await self.bot.db.executemany(UPDATE_KARMA_QUERY, [(user.id, ctx.guild.id, amount), (ctx.author.id, ctx.guild.id, -amount)])
+		if amount <= 0:
+			embed.description = f"You cannot donate {amount} karma!"
+			return await ctx.send(embed=embed)
 
-        embed = discord.Embed(color=0x23b40c)
-        embed.description = f'{ctx.author.mention} has donated {amount} karma to {user.mention}!'
-        await ctx.send(embed=embed)
+		if user not in ctx.guild.members:
+			embed.description = f"`{user}` is not a member of this server!"
+			return await ctx.send(embed=embed)
 
-    @karma_donate.error
-    async def karma_donate_error(self, ctx: commands.Context, error):
-        embed = discord.Embed(color=0xf66045)
-        if isinstance(error, commands.MissingRequiredArgument):
-            embed.description = 'You didn\'t specify a user to donate to!'
-        elif isinstance(error, commands.BadArgument):
-            embed.description=f'Wrong command usage! Command usage is `{ctx.prefix}karma donate <user> <amount>`'
-        else:
-            embed.description = f'An unknown error occured. Please contact <@{self.bot.owner_id}> for help.'
-            logger.error(f'An unknown error occured in karma_donate: {error}')
-        await ctx.send(embed=embed)
+		donator_karma = await self._get_user_karma(ctx.author.id, ctx.guild.id)
+		if donator_karma is None:
+			embed.description = "You don't have any karma!"
+			return await ctx.send(embed=embed)
 
-    @karma.group(name='emotes', aliases=['emote'], usage="emotes", invoke_without_command=True)
-    async def karma_emotes(self, ctx: commands.Context):
-        """
-        Shows the karma emotes of the server. Emotes in the `add` category increase karma,
-        while emotes in the `remove` category decrease karma.
-        If you want to add or remove an emote from the karma system,
-        check the subcommand `karma emotes add` or `karma emotes remove`
-        """
-        stmt = "SELECT * FROM karma_emote WHERE discord_server_id = $1 ORDER BY increase_karma DESC"
-        karma_emotes = await self.bot.db.fetch(stmt, ctx.guild.id)
-        if not karma_emotes:
-            return await ctx.send(embed=discord.Embed(title='No emotes found.'))
-        embed_string = ''
-        last_action = ''
-        for emote in karma_emotes:
-            if emote['increase_karma'] != last_action:
-                embed_string += f'\n`{"add" if emote["increase_karma"] is True else "remove"}:` '
-                last_action = emote['increase_karma']
-            embed_string += f"{self.bot.get_emoji(emote['discord_emote_id'])} "
-        embed = discord.Embed(title=f'Karma Emotes - {ctx.guild.name}', description=embed_string)
-        await ctx.send(embed=embed)
+		if donator_karma < amount:
+			embed.description = "You don't have enough karma!"
+			return await ctx.send(embed=embed)
 
-    @karma_emotes.command(name='add', usage="add <emote> <action>")
-    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    @app_commands.describe(
-        emote='Which emote do you want to add?',
-        emote_action='What action should this emote do? (0 for add, 1 for remove karma)'
-    )
-    async def karma_emote_add(self, ctx: commands.Context, emote: discord.Emoji, emote_action: int):
-        """
-        Add an emote to the karma emotes for this server. Takes an emoji and an action (0 for add, 1 for remove karma)
-        The votes from this bots Votes module automatically add karma to the user. No need to add those emotes to the emote list.
+		await self.bot.db.executemany(
+			UPDATE_KARMA_QUERY, [(user.id, ctx.guild.id, amount), (ctx.author.id, ctx.guild.id, -amount)]
+		)
 
-        Example:
-        `<<karma emotes add :upvote: 0` - adds the upvote emote to list as karma increasing emote
-        `<<karma emotes add :downvote: 1` - adds the downvote emote to list as karma decreasing emote
-        """
-        if emote_action not in [0, 1]:
-            embed = discord.Embed(title='Invalid action parameter.')
-            return await ctx.send(embed=embed)
-        
-        existing_emote = await self._get_karma_emote_by_id(ctx.guild.id, emote)
-        if existing_emote is not None:
-            embed = discord.Embed(title='That emote is already added.')
-            return await ctx.send(embed=embed)
-        
-        stmt_emote_count = "SELECT COUNT(*) FROM karma_emote WHERE discord_server_id = $1"
-        max_emotes = await self.bot.db.fetchval(stmt_emote_count, ctx.guild.id)
-        if max_emotes >= 10:
-            embed = discord.Embed(title='You can only have 10 emotes.')
-            return await ctx.send(embed=embed)
-        
-        stmt_insert_emote = "INSERT INTO karma_emote (discord_server_id, discord_emote_id, increase_karma) VALUES ($1, $2, $3)"
-        await self.bot.db.execute(stmt_insert_emote, ctx.guild.id, emote.id, not bool(emote_action))
+		embed = discord.Embed(color=0x23B40C)
+		embed.description = f"{ctx.author.mention} has donated {amount} karma to {user.mention}!"
+		await ctx.send(embed=embed)
 
-        embed = discord.Embed(title=f'Emote {emote} added to the list.')
-        await ctx.send(embed=embed)
-        if not ctx.interaction:
-            await ctx.message.delete()
+	@karma_donate.error
+	async def karma_donate_error(self, ctx: commands.Context, error):
+		embed = discord.Embed(color=0xF66045)
+		if isinstance(error, commands.MissingRequiredArgument):
+			embed.description = "You didn't specify a user to donate to!"
+		elif isinstance(error, commands.BadArgument):
+			embed.description = f"Wrong command usage! Command usage is `{ctx.prefix}karma donate <user> <amount>`"
+		else:
+			embed.description = f"An unknown error occured. Please contact <@{self.bot.owner_id}> for help."
+			logger.error(f"An unknown error occured in karma_donate: {error}")
+		await ctx.send(embed=embed)
 
-    @karma_emotes.command(name='remove', aliases=['delete'], usage="remove <emote>")
-    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    @app_commands.describe(
-        emote='Which emote do you want to remove?'
-    )
-    async def karma_emote_remove(self, ctx: commands.Context, emote: discord.Emoji):
-        """
-        Remove an emote from the karma emotes for this server.
-        """
-        existing_emote = await self._get_karma_emote_by_id(ctx.guild.id, emote)
-        if existing_emote is None:
-            embed = discord.Embed(title='That emote is not in the list.')
-            return await ctx.send(embed=embed)
-        
-        stmt_delete_emote = "DELETE FROM karma_emote WHERE discord_server_id = $1 AND discord_emote_id = $2"
-        await self.bot.db.execute(stmt_delete_emote, ctx.guild.id, emote.id)
+	@karma.group(name="emotes", aliases=["emote"], usage="emotes", invoke_without_command=True)
+	async def karma_emotes(self, ctx: commands.Context):
+		"""
+		Shows the karma emotes of the server. Emotes in the `add` category increase karma,
+		while emotes in the `remove` category decrease karma.
+		If you want to add or remove an emote from the karma system,
+		check the subcommand `karma emotes add` or `karma emotes remove`
+		"""
+		stmt = "SELECT * FROM karma_emote WHERE discord_server_id = $1 ORDER BY increase_karma DESC"
+		karma_emotes = await self.bot.db.fetch(stmt, ctx.guild.id)
+		if not karma_emotes:
+			return await ctx.send(embed=discord.Embed(title="No emotes found."))
+		embed_string = ""
+		last_action = ""
+		for emote in karma_emotes:
+			if emote["increase_karma"] != last_action:
+				embed_string += f'\n`{"add" if emote["increase_karma"] is True else "remove"}:` '
+				last_action = emote["increase_karma"]
+			embed_string += f"{self.bot.get_emoji(emote['discord_emote_id'])} "
+		embed = discord.Embed(title=f"Karma Emotes - {ctx.guild.name}", description=embed_string)
+		await ctx.send(embed=embed)
 
-        embed = discord.Embed(title=f'Emote {emote} removed from the list.')
-        await ctx.send(embed=embed)
-        if not ctx.interaction:
-            await ctx.message.delete()
+	@karma_emotes.command(name="add", usage="add <emote> <action>")
+	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+	@app_commands.describe(
+		emote="Which emote do you want to add?",
+		emote_action="What action should this emote do? (0 for add, 1 for remove karma)",
+	)
+	async def karma_emote_add(self, ctx: commands.Context, emote: discord.Emoji, emote_action: int):
+		"""
+		Add an emote to the karma emotes for this server. Takes an emoji and an action (0 for add, 1 for remove karma)
+		The votes from this bots Votes module automatically add karma to the user. No need to add those emotes to the emote list.
 
-    @commands.cooldown(1, 5, commands.BucketType.user)
-    @karma.command(name='leaderboard', aliases=['lb', 'leaderbord'], usage="leaderboard")
-    async def karma_leaderboard(self, ctx: commands.Context, global_leaderboard: str = None):
-        """
-        Shows users with the most karma on the server.
-        """
-        async with ctx.typing():
-            embed = discord.Embed(title='Karma Leaderboard')
+		Example:
+		`<<karma emotes add :upvote: 0` - adds the upvote emote to list as karma increasing emote
+		`<<karma emotes add :downvote: 1` - adds the downvote emote to list as karma decreasing emote
+		"""
+		if emote_action not in [0, 1]:
+			embed = discord.Embed(title="Invalid action parameter.")
+			return await ctx.send(embed=embed)
 
-            if global_leaderboard is None:
-                stmt_karma_leaderboard = "SELECT discord_user_id, amount FROM karma WHERE discord_server_id = $1 ORDER BY amount DESC LIMIT 15"
-                results = await self.bot.db.fetch(stmt_karma_leaderboard, ctx.guild.id)
+		existing_emote = await self._get_karma_emote_by_id(ctx.guild.id, emote)
+		if existing_emote is not None:
+			embed = discord.Embed(title="That emote is already added.")
+			return await ctx.send(embed=embed)
 
-            elif global_leaderboard == 'global':
-                stmt_karma_leaderboard = "SELECT discord_user_id, amount FROM karma ORDER BY amount DESC LIMIT 15"
-                results = await self.bot.db.fetch(stmt_karma_leaderboard)
+		stmt_emote_count = "SELECT COUNT(*) FROM karma_emote WHERE discord_server_id = $1"
+		max_emotes = await self.bot.db.fetchval(stmt_emote_count, ctx.guild.id)
+		if max_emotes >= 10:
+			embed = discord.Embed(title="You can only have 10 emotes.")
+			return await ctx.send(embed=embed)
 
-            embed.description = ''
-            if not results:
-                embed.description = 'No users have karma.'
-                return await ctx.send(embed=embed)
+		stmt_insert_emote = (
+			"INSERT INTO karma_emote (discord_server_id, discord_emote_id, increase_karma) VALUES ($1, $2, $3)"
+		)
+		await self.bot.db.execute(stmt_insert_emote, ctx.guild.id, emote.id, not bool(emote_action))
 
-            users_string = ''.join([f"<@{entry['discord_user_id']}>\n" for entry in results])
+		embed = discord.Embed(title=f"Emote {emote} added to the list.")
+		await ctx.send(embed=embed)
+		if not ctx.interaction:
+			await ctx.message.delete()
 
-            for index, entry in enumerate(results, start=1):
-                user = self.bot.get_user(entry['discord_user_id']) or await self.bot.fetch_user(entry['discord_user_id'])
-                embed.description += f"`{str(index).rjust(2)}.` | `{entry['amount']}` - {user.mention}\n"
+	@karma_emotes.command(name="remove", aliases=["delete"], usage="remove <emote>")
+	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+	@app_commands.describe(emote="Which emote do you want to remove?")
+	async def karma_emote_remove(self, ctx: commands.Context, emote: discord.Emoji):
+		"""
+		Remove an emote from the karma emotes for this server.
+		"""
+		existing_emote = await self._get_karma_emote_by_id(ctx.guild.id, emote)
+		if existing_emote is None:
+			embed = discord.Embed(title="That emote is not in the list.")
+			return await ctx.send(embed=embed)
 
-            load_users_message = await ctx.send('Loading users...')
-            await load_users_message.edit(content=users_string)
-            await load_users_message.delete()
-            await ctx.send(embed=embed)
+		stmt_delete_emote = "DELETE FROM karma_emote WHERE discord_server_id = $1 AND discord_emote_id = $2"
+		await self.bot.db.execute(stmt_delete_emote, ctx.guild.id, emote.id)
 
-    @commands.cooldown(1, 15, commands.BucketType.user)
-    @karma.command(name='stats', usage="stats")
-    async def karma_stats(self, ctx: commands.Context):
-        """
-        Shows karma stats for the server.
-        Some stats incluce total karma, karma amount in top percentile and more.
-        """
-        async with ctx.typing():
-            embed = discord.Embed(title='Karma Stats')
+		embed = discord.Embed(title=f"Emote {emote} removed from the list.")
+		await ctx.send(embed=embed)
+		if not ctx.interaction:
+			await ctx.message.delete()
 
-            karma_info = await self.bot.db.fetchrow("SELECT SUM(amount), COUNT(*) FROM karma WHERE discord_server_id = $1", ctx.guild.id)
-            total_karma = karma_info['sum']
-            karma_users = karma_info['count']
+	@commands.cooldown(1, 5, commands.BucketType.user)
+	@karma.command(name="leaderboard", aliases=["lb", "leaderbord"], usage="leaderboard")
+	async def karma_leaderboard(self, ctx: commands.Context, global_leaderboard: str = None):
+		"""
+		Shows users with the most karma on the server.
+		"""
+		async with ctx.typing():
+			embed = discord.Embed(title="Karma Leaderboard")
 
-            if total_karma is None:
-                embed.description = 'No users have karma.'
-                return await ctx.send(embed=embed)
+			if global_leaderboard is None:
+				stmt_karma_leaderboard = "SELECT discord_user_id, amount FROM karma WHERE discord_server_id = $1 ORDER BY amount DESC LIMIT 15"
+				results = await self.bot.db.fetch(stmt_karma_leaderboard, ctx.guild.id)
 
-            avg_karma = total_karma / max(karma_users, 1)
-            embed.add_field(name='Total Server Karma', value=f'`{total_karma:n} (of {karma_users} users)`', inline=False)
-            embed.add_field(name='Average Karma per user', value=f'`{avg_karma:.2f}`', inline=False)
+			elif global_leaderboard == "global":
+				stmt_karma_leaderboard = "SELECT discord_user_id, amount FROM karma ORDER BY amount DESC LIMIT 15"
+				results = await self.bot.db.fetch(stmt_karma_leaderboard)
 
-            # Top percentile calculation
-            stmt_top_percentile = '''
+			embed.description = ""
+			if not results:
+				embed.description = "No users have karma."
+				return await ctx.send(embed=embed)
+
+			users_string = "".join([f"<@{entry['discord_user_id']}>\n" for entry in results])
+
+			for index, entry in enumerate(results, start=1):
+				user = self.bot.get_user(entry["discord_user_id"]) or await self.bot.fetch_user(
+					entry["discord_user_id"]
+				)
+				embed.description += f"`{str(index).rjust(2)}.` | `{entry['amount']}` - {user.mention}\n"
+
+			load_users_message = await ctx.send("Loading users...")
+			await load_users_message.edit(content=users_string)
+			await load_users_message.delete()
+			await ctx.send(embed=embed)
+
+	@commands.cooldown(1, 15, commands.BucketType.user)
+	@karma.command(name="stats", usage="stats")
+	async def karma_stats(self, ctx: commands.Context):
+		"""
+		Shows karma stats for the server.
+		Some stats incluce total karma, karma amount in top percentile and more.
+		"""
+		async with ctx.typing():
+			embed = discord.Embed(title="Karma Stats")
+
+			karma_info = await self.bot.db.fetchrow(
+				"SELECT SUM(amount), COUNT(*) FROM karma WHERE discord_server_id = $1", ctx.guild.id
+			)
+			total_karma = karma_info["sum"]
+			karma_users = karma_info["count"]
+
+			if total_karma is None:
+				embed.description = "No users have karma."
+				return await ctx.send(embed=embed)
+
+			avg_karma = total_karma / max(karma_users, 1)
+			embed.add_field(
+				name="Total Server Karma", value=f"`{total_karma:n} (of {karma_users} users)`", inline=False
+			)
+			embed.add_field(name="Average Karma per user", value=f"`{avg_karma:.2f}`", inline=False)
+
+			# Top percentile calculation
+			stmt_top_percentile = """
                 SELECT amount
                 FROM karma
                 WHERE discord_server_id = $1
                 ORDER BY amount DESC
-                LIMIT (SELECT CEIL($2 * CAST(COUNT(*) AS float)) FROM karma)'''
+                LIMIT (SELECT CEIL($2 * CAST(COUNT(*) AS float)) FROM karma)"""
 
-            percentiles = [(0.1, '10'), (0.01, '1')]
-            for percentile, label in percentiles:
-                top_percentile = await self.bot.db.fetch(stmt_top_percentile, ctx.guild.id, percentile)
-                top_percentile = sum(entry['amount'] for entry in top_percentile)
-                percantege = (top_percentile / total_karma) * 100
-                embed.add_field(name=f'Top {label}% users karma', value=f'`{top_percentile:n} ({percantege:.2f}% of total)`', inline=False)
+			percentiles = [(0.1, "10"), (0.01, "1")]
+			for percentile, label in percentiles:
+				top_percentile = await self.bot.db.fetch(stmt_top_percentile, ctx.guild.id, percentile)
+				top_percentile = sum(entry["amount"] for entry in top_percentile)
+				percantege = (top_percentile / total_karma) * 100
+				embed.add_field(
+					name=f"Top {label}% users karma",
+					value=f"`{top_percentile:n} ({percantege:.2f}% of total)`",
+					inline=False,
+				)
 
-            stmt_avg_upvote_ratio = '''
+			stmt_avg_upvote_ratio = """
                 SELECT AVG(upvotes / downvotes) as average, COUNT(*) as post_count
                 FROM post
                 WHERE discord_server_id = $1 
                     AND upvotes >= 1
-                    AND downvotes >= 1'''
+                    AND downvotes >= 1"""
 
-            avg_post_query = await self.bot.db.fetchrow(stmt_avg_upvote_ratio, ctx.guild.id)
-            avg_ratio = avg_post_query['average'] or 0
-            post_count = avg_post_query['post_count'] or 0
-            embed.add_field(name='Average upvote ratio per post', value=f'`{avg_ratio:.1f} ({post_count} posts)`', inline=False)
+			avg_post_query = await self.bot.db.fetchrow(stmt_avg_upvote_ratio, ctx.guild.id)
+			avg_ratio = avg_post_query["average"] or 0
+			post_count = avg_post_query["post_count"] or 0
+			embed.add_field(
+				name="Average upvote ratio per post", value=f"`{avg_ratio:.1f} ({post_count} posts)`", inline=False
+			)
 
-            await ctx.send(embed=embed)
+			await ctx.send(embed=embed)
 
-    @commands.cooldown(1, 30, commands.BucketType.user)
-    @karma.command(name='graph', usage="graph")
-    async def karma_stats_graph(self, ctx: commands.Context):
-        """
-        Shows a graph of the amount of karma form every ten percent of users.
-        """
-        async with ctx.typing():
-            stmt_karma = '''
+	@commands.cooldown(1, 30, commands.BucketType.user)
+	@karma.command(name="graph", usage="graph")
+	async def karma_stats_graph(self, ctx: commands.Context):
+		"""
+		Shows a graph of the amount of karma form every ten percent of users.
+		"""
+		async with ctx.typing():
+			stmt_karma = """
                 SELECT amount
                 FROM karma
                 WHERE discord_server_id = $1
                 ORDER BY amount ASC
-            '''
+            """
 
-            karma = await self.bot.db.fetch(stmt_karma, ctx.guild.id)
-            users_count = len(karma)
-            if users_count == 0:
-                embed = discord.Embed(title='Karma graph', description='No users have karma.')
-                return await ctx.send(embed=embed)
+			karma = await self.bot.db.fetch(stmt_karma, ctx.guild.id)
+			users_count = len(karma)
+			if users_count == 0:
+				embed = discord.Embed(title="Karma graph", description="No users have karma.")
+				return await ctx.send(embed=embed)
 
-            karma_percentiles = []
-            for i in range(0, 101, 5):
-                karma_percentile_list = karma[:int(users_count * (i / 100))]
-                total_percentile_karma = sum(entry['amount'] for entry in karma_percentile_list)
-                karma_percentiles.append((total_percentile_karma, i))
+			karma_percentiles = []
+			for i in range(0, 101, 5):
+				karma_percentile_list = karma[: int(users_count * (i / 100))]
+				total_percentile_karma = sum(entry["amount"] for entry in karma_percentile_list)
+				karma_percentiles.append((total_percentile_karma, i))
 
-            x = [entry[1] for entry in karma_percentiles]
-            y = [entry[0] for entry in karma_percentiles]
+			x = [entry[1] for entry in karma_percentiles]
+			y = [entry[0] for entry in karma_percentiles]
 
-            timestamp = datetime.now().timestamp()
-            filename = f'karma_graph_{timestamp}.png'
+			timestamp = datetime.now().timestamp()
+			filename = f"karma_graph_{timestamp}.png"
 
-            fig = go.Figure(data=go.Bar(x=x, y=y))
-            fig.update_layout(title='Karma Graph', xaxis_title='Percentile of users', yaxis_title='Total karma')
-            fig.update_layout(template='plotly_dark')
-            fig.write_image(filename)
+			fig = go.Figure(data=go.Bar(x=x, y=y))
+			fig.update_layout(title="Karma Graph", xaxis_title="Percentile of users", yaxis_title="Total karma")
+			fig.update_layout(template="plotly_dark")
+			fig.write_image(filename)
 
-            await ctx.send(file=discord.File(filename))
-            os.remove(filename)
+			await ctx.send(file=discord.File(filename))
+			os.remove(filename)
 
-    @commands.cooldown(2, 15, commands.BucketType.user)
-    @commands.hybrid_command(aliases=['plb'], usage="postlb")
-    async def postlb(self, ctx: commands.Context, user: discord.User = None):
-        """
-        Posts the leaderboard of the most upvoted posts.
-        """
-        async with ctx.typing():
-            all_board = await self.fetch_and_create_leaderboard(ctx, user)
-            month_board = await self.fetch_and_create_leaderboard(ctx, user, '30 days')
-            week_board = await self.fetch_and_create_leaderboard(ctx, user, '7 days')
+	@commands.cooldown(2, 15, commands.BucketType.user)
+	@commands.hybrid_command(aliases=["plb"], usage="postlb")
+	async def postlb(self, ctx: commands.Context, user: discord.User = None):
+		"""
+		Posts the leaderboard of the most upvoted posts.
+		"""
+		async with ctx.typing():
+			all_board = await self.fetch_and_create_leaderboard(ctx, user)
+			month_board = await self.fetch_and_create_leaderboard(ctx, user, "30 days")
+			week_board = await self.fetch_and_create_leaderboard(ctx, user, "7 days")
 
-        embed = discord.Embed(title='Top Messages')
-        embed.set_thumbnail(url=ctx.guild.icon)
-        embed.add_field(name='Top 5 All Time', value=all_board, inline=False)
-        embed.add_field(name='Top 5 This Month', value=month_board, inline=False)
-        embed.add_field(name='Top 5 This Week', value=week_board, inline=False)
-        await ctx.send(embed=embed)
+		embed = discord.Embed(title="Top Messages")
+		embed.set_thumbnail(url=ctx.guild.icon)
+		embed.add_field(name="Top 5 All Time", value=all_board, inline=False)
+		embed.add_field(name="Top 5 This Month", value=month_board, inline=False)
+		embed.add_field(name="Top 5 This Week", value=week_board, inline=False)
+		await ctx.send(embed=embed)
 
-    async def fetch_and_create_leaderboard(self, ctx: commands.Context, user: discord.User, interval: str = None):
-        user_query = " AND discord_user_id = $2" if user else ''
-        interval_query = f" AND created_at > NOW() - INTERVAL '{interval}'" if interval else ''
-        stmt = f"SELECT * FROM post WHERE discord_server_id = $1{user_query}{interval_query} ORDER BY upvotes DESC LIMIT 5"
-        params = (ctx.guild.id, user.id) if user else (ctx.guild.id,)
-        posts = await self.bot.db.fetch(stmt, *params)
-        return await self.create_post_leaderboard(posts)
+	async def fetch_and_create_leaderboard(self, ctx: commands.Context, user: discord.User, interval: str = None):
+		user_query = " AND discord_user_id = $2" if user else ""
+		interval_query = f" AND created_at > NOW() - INTERVAL '{interval}'" if interval else ""
+		stmt = (
+			f"SELECT * FROM post WHERE discord_server_id = $1{user_query}{interval_query} ORDER BY upvotes DESC LIMIT 5"
+		)
+		params = (ctx.guild.id, user.id) if user else (ctx.guild.id,)
+		posts = await self.bot.db.fetch(stmt, *params)
+		return await self.create_post_leaderboard(posts)
 
-    @commands.command(name='checkpost', aliases=['cp'], usage="checkpost <post id>")
-    @commands.is_owner()
-    async def check_post(self, ctx: commands.Context, post_id: int):
-        """
-        Checks if a post exists.
-        """
-        stmt_post = "SELECT * FROM post WHERE discord_message_id = $1"
-        post = await self.bot.db.fetchrow(stmt_post, post_id)
-        if post is None:
-            embed = discord.Embed(title='That post does not exist.')
-            return await ctx.send(embed=embed)
+	@commands.command(name="checkpost", aliases=["cp"], usage="checkpost <post id>")
+	@commands.is_owner()
+	async def check_post(self, ctx: commands.Context, post_id: int):
+		"""
+		Checks if a post exists.
+		"""
+		stmt_post = "SELECT * FROM post WHERE discord_message_id = $1"
+		post = await self.bot.db.fetchrow(stmt_post, post_id)
+		if post is None:
+			embed = discord.Embed(title="That post does not exist.")
+			return await ctx.send(embed=embed)
 
-        server_upvote_emotes = await self._get_karma_upvote_emotes(ctx.guild.id)
-        server_downvote_emotes = await self._get_karma_downvote_emotes(ctx.guild.id)
+		server_upvote_emotes = await self._get_karma_upvote_emotes(ctx.guild.id)
+		server_downvote_emotes = await self._get_karma_downvote_emotes(ctx.guild.id)
 
-        channel = await self.bot.fetch_channel(post['discord_channel_id'])
-        message = await channel.fetch_message(post['discord_message_id'])
+		channel = await self.bot.fetch_channel(post["discord_channel_id"])
+		message = await channel.fetch_message(post["discord_message_id"])
 
-        upvotes = 0
-        downvotes = 0
-        for reaction in message.reactions:
-            if isinstance(reaction.emoji, (discord.Emoji, discord.PartialEmoji)):
-                if reaction.emoji.id in server_upvote_emotes:
-                    upvotes += reaction.count - 1
-                elif reaction.emoji.id in server_downvote_emotes:
-                    downvotes += reaction.count - 1
+		upvotes = 0
+		downvotes = 0
+		for reaction in message.reactions:
+			if isinstance(reaction.emoji, (discord.Emoji, discord.PartialEmoji)):
+				if reaction.emoji.id in server_upvote_emotes:
+					upvotes += reaction.count - 1
+				elif reaction.emoji.id in server_downvote_emotes:
+					downvotes += reaction.count - 1
 
-        old_upvotes = post['upvotes']
-        old_downvotes = post['downvotes']
-        karma_difference = (upvotes - old_upvotes) - (downvotes - old_downvotes)
+		old_upvotes = post["upvotes"]
+		old_downvotes = post["downvotes"]
+		karma_difference = (upvotes - old_upvotes) - (downvotes - old_downvotes)
 
-        await self.bot.db.execute(UPDATE_KARMA_QUERY, message.author.id, message.guild.id, karma_difference)
-        await self.bot.db.execute(
-            UPDATE_POST_VOTES_QUERY,
-            message.author.id,
-            message.guild.id,
-            channel.id,
-            message.id,
-            message.created_at.utcnow(),
-            upvotes,
-            downvotes
-        )
+		await self.bot.db.execute(UPDATE_KARMA_QUERY, message.author.id, message.guild.id, karma_difference)
+		await self.bot.db.execute(
+			UPDATE_POST_VOTES_QUERY,
+			message.author.id,
+			message.guild.id,
+			channel.id,
+			message.id,
+			message.created_at.utcnow(),
+			upvotes,
+			downvotes,
+		)
 
-        embed_string = f"""
+		embed_string = f"""
             Old post upvotes: {old_upvotes}, Old post downvotes: {old_downvotes}\n
             Rechecked post upvotes: {upvotes}, Rechecked post downvotes: {downvotes}\n
             Karma difference: {karma_difference}
         """
 
-        embed = discord.Embed(title=f'Post {post_id} check', description=embed_string)
-        await ctx.send(embed=embed, delete_after=60)
-        if not ctx.interaction:
-            await ctx.message.delete()
+		embed = discord.Embed(title=f"Post {post_id} check", description=embed_string)
+		await ctx.send(embed=embed, delete_after=60)
+		if not ctx.interaction:
+			await ctx.message.delete()
 
-    async def create_post_leaderboard(self, posts: list[Record]):
-        if not posts:
-            return 'No posts found.'
-        leaderboard = ''
-        for index, post in enumerate(posts, start=1):
-            jump_url = self.create_message_url(post['discord_server_id'], post['discord_channel_id'], post['discord_message_id'])
-            username = self.bot.get_user(post['discord_user_id']) or await self.bot.fetch_user(post['discord_user_id'])
-            leaderboard += f"**{index}.** [{username} ({post['upvotes']})]({jump_url})\n"
-        return leaderboard
+	async def create_post_leaderboard(self, posts: list[Record]):
+		if not posts:
+			return "No posts found."
+		leaderboard = ""
+		for index, post in enumerate(posts, start=1):
+			jump_url = self.create_message_url(
+				post["discord_server_id"], post["discord_channel_id"], post["discord_message_id"]
+			)
+			username = self.bot.get_user(post["discord_user_id"]) or await self.bot.fetch_user(post["discord_user_id"])
+			leaderboard += f"**{index}.** [{username} ({post['upvotes']})]({jump_url})\n"
+		return leaderboard
 
-    def create_message_url(self, server_id, channel_id, message_id):
-        return f'https://discordapp.com/channels/{server_id}/{channel_id}/{message_id}'
+	def create_message_url(self, server_id, channel_id, message_id):
+		return f"https://discordapp.com/channels/{server_id}/{channel_id}/{message_id}"
 
-    @commands.hybrid_group(name='kasino', aliases=['kas'], invoke_without_command=True)
-    async def kasino(self, ctx: commands.Context):
-        await ctx.send_help(ctx.command)
+	@commands.hybrid_group(name="kasino", aliases=["kas"], invoke_without_command=True)
+	async def kasino(self, ctx: commands.Context):
+		await ctx.send_help(ctx.command)
 
-    @kasino.command(name='open', aliases=['o'], usage="open \"<question>\" \"<option1>\" \"<option2>\"")
-    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    @app_commands.describe(
-        question="The qestion users will bet on.",
-        op_a="The first option users can bet on.",
-        op_b="The second option users can bet on."
-    )
-    async def kasino_open(self, ctx: commands.Context, question: str, op_a: str, op_b: str):
-        """ Opens a karma kasino which allows people to bet on a question with two options.
-            Check "karma" and "votes" commands for more info on karma.
-        """
-        async with ctx.typing():
-            to_embed = discord.Embed(description="Opening kasino, hold on tight...")
-            kasino_msg = await ctx.send(embed=to_embed)
-            stmt_kasino = '''INSERT INTO kasino (discord_server_id, discord_channel_id, discord_message_id, question, option1, option2)
-                         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id'''
-            kasino_id = await self.bot.db.fetchval(stmt_kasino, ctx.guild.id, ctx.channel.id, kasino_msg.id, question, op_a, op_b)
-            # TODO: Add kasino backup
-        await _update_kasino_msg(ctx.bot, kasino_id)
-        if not ctx.interaction:
-            await ctx.message.delete()
+	@kasino.command(name="open", aliases=["o"], usage='open "<question>" "<option1>" "<option2>"')
+	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+	@app_commands.describe(
+		question="The qestion users will bet on.",
+		op_a="The first option users can bet on.",
+		op_b="The second option users can bet on.",
+	)
+	async def kasino_open(self, ctx: commands.Context, question: str, op_a: str, op_b: str):
+		"""Opens a karma kasino which allows people to bet on a question with two options.
+		Check "karma" and "votes" commands for more info on karma.
+		"""
+		async with ctx.typing():
+			to_embed = discord.Embed(description="Opening kasino, hold on tight...")
+			kasino_msg = await ctx.send(embed=to_embed)
+			stmt_kasino = """INSERT INTO kasino (discord_server_id, discord_channel_id, discord_message_id, question, option1, option2)
+                         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"""
+			kasino_id = await self.bot.db.fetchval(
+				stmt_kasino, ctx.guild.id, ctx.channel.id, kasino_msg.id, question, op_a, op_b
+			)
+			# TODO: Add kasino backup
+		await _update_kasino_msg(ctx.bot, kasino_id)
+		if not ctx.interaction:
+			await ctx.message.delete()
 
-    @kasino.command(name='close', usage="close <kasino_id> <winning_option>")
-    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    @app_commands.describe(
-        kasino_id="The ID of the kasino you want to close. The ID should be visible in the kasino message.",
-        winner="The winning option. 1 or 2. 3 to abort."
-    )
-    async def kasino_close(self, ctx: commands.Context, kasino_id: int, winner: int):
-        """ Closes a karma kasino and announces the winner. To cancel the kasino, use 3 as the winner."""
-        kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
+	@kasino.command(name="close", usage="close <kasino_id> <winning_option>")
+	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+	@app_commands.describe(
+		kasino_id="The ID of the kasino you want to close. The ID should be visible in the kasino message.",
+		winner="The winning option. 1 or 2. 3 to abort.",
+	)
+	async def kasino_close(self, ctx: commands.Context, kasino_id: int, winner: int):
+		"""Closes a karma kasino and announces the winner. To cancel the kasino, use 3 as the winner."""
+		kasino = await self.bot.db.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
 
-        if kasino is None:
-            return await ctx.reply(f'Kasino with ID {kasino_id} is not open.')
+		if kasino is None:
+			return await ctx.reply(f"Kasino with ID {kasino_id} is not open.")
 
-        if kasino['discord_server_id'] != ctx.guild.id:
-            return await ctx.send(f'Kasino with ID {kasino_id} is not in this server.')
+		if kasino["discord_server_id"] != ctx.guild.id:
+			return await ctx.send(f"Kasino with ID {kasino_id} is not in this server.")
 
-        if winner in {1, 2}:
-            await self.win_kasino(kasino_id, winner)
-        elif winner == 3:
-            await self.abort_kasino(kasino_id)
-        else:
-            return await ctx.author.send('Winner has to be 1, 2 or 3 (abort)')
+		if winner in {1, 2}:
+			await self.win_kasino(kasino_id, winner)
+		elif winner == 3:
+			await self.abort_kasino(kasino_id)
+		else:
+			return await ctx.author.send("Winner has to be 1, 2 or 3 (abort)")
 
-        await self.send_conclusion(ctx, kasino_id, winner)
-        await self.remove_kasino(kasino_id)
-        if ctx.interaction:
-            await ctx.interaction.response.send_message('Kasino has been closed.', ephemeral=True)
-        else:
-            await ctx.message.delete()
+		await self.send_conclusion(ctx, kasino_id, winner)
+		await self.remove_kasino(kasino_id)
+		if ctx.interaction:
+			await ctx.interaction.response.send_message("Kasino has been closed.", ephemeral=True)
+		else:
+			await ctx.message.delete()
 
-    @kasino_close.error
-    async def kasino_close_error(self, ctx: commands.Context, error):
-        if isinstance(error, commands.errors.MissingRequiredArgument):
-            msg = f'You didn\'t provide a required argument!\nCorrect usage is `{ctx.prefix}kasino close <kasino_id> <winning_option>`'
-            msg += '\nUse option `3` to close and abort the kasino (no winner).'
-            embed = discord.Embed(description=msg, color=0xf66045)
-            await ctx.send(embed=embed)
-        elif isinstance(error, commands.errors.BadArgument):
-            await ctx.send(f'Bad argument: {error}')
-        if not ctx.interaction:
-            await ctx.message.delete()
+	@kasino_close.error
+	async def kasino_close_error(self, ctx: commands.Context, error):
+		if isinstance(error, commands.errors.MissingRequiredArgument):
+			msg = f"You didn't provide a required argument!\nCorrect usage is `{ctx.prefix}kasino close <kasino_id> <winning_option>`"
+			msg += "\nUse option `3` to close and abort the kasino (no winner)."
+			embed = discord.Embed(description=msg, color=0xF66045)
+			await ctx.send(embed=embed)
+		elif isinstance(error, commands.errors.BadArgument):
+			await ctx.send(f"Bad argument: {error}")
+		if not ctx.interaction:
+			await ctx.message.delete()
 
-    @kasino.command(name='list', aliases=['l'], usage="list")
-    async def kasino_list(self, ctx: commands.Context):
-        """ Lists all open kasinos on the server. """
-        embed = discord.Embed(title='Open kasinos')
-        stmt_kasinos = 'SELECT * FROM kasino WHERE locked = False AND discord_server_id = $1 ORDER BY id ASC;'
-        all_kasinos = await self.bot.db.fetch(stmt_kasinos, ctx.guild.id)
-        embed_kasinos = ''.join(f'`{entry["id"]}` - {entry["question"]}\n' for entry in all_kasinos)
-        embed.description = embed_kasinos or "No open kasinos found."
-        await ctx.send(embed=embed, delete_after=300)
-        if not ctx.interaction:
-            await ctx.message.delete()
+	@kasino.command(name="list", aliases=["l"], usage="list")
+	async def kasino_list(self, ctx: commands.Context):
+		"""Lists all open kasinos on the server."""
+		embed = discord.Embed(title="Open kasinos")
+		stmt_kasinos = "SELECT * FROM kasino WHERE locked = False AND discord_server_id = $1 ORDER BY id ASC;"
+		all_kasinos = await self.bot.db.fetch(stmt_kasinos, ctx.guild.id)
+		embed_kasinos = "".join(f'`{entry["id"]}` - {entry["question"]}\n' for entry in all_kasinos)
+		embed.description = embed_kasinos or "No open kasinos found."
+		await ctx.send(embed=embed, delete_after=300)
+		if not ctx.interaction:
+			await ctx.message.delete()
 
-    @kasino.command(name='resend', usage="resend <kasino_id>")
-    @commands.cooldown(1, 30)
-    @commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
-    @app_commands.describe(kasino_id="The ID of the kasino you want to resend.")
-    async def resend_kasino(self, ctx: commands.Context, kasino_id: int):
-        """ Resends a kasino message if it got lost in the channel. """
-        kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
-        if kasino is None:
-            await ctx.send('Kasino not found.')
-            return
-        k_channel_id = kasino['discord_channel_id']
-        k_message_id = kasino['discord_message_id']
-        async with ctx.typing():
-            k_channel = await self.bot.fetch_channel(k_channel_id)
-            try:
-                kasino_msg = await k_channel.fetch_message(k_message_id)
-                await kasino_msg.delete()
-            except discord.NotFound:
-                pass
-            new_kasino_msg = await ctx.send(embed=discord.Embed(description='Loading...'))
-            stmt_update_kasino = 'UPDATE kasino SET discord_channel_id = $1, discord_message_id = $2 WHERE id = $3;'
-            await self.bot.db.execute(stmt_update_kasino, ctx.channel.id, new_kasino_msg.id, kasino_id)
-            await _update_kasino_msg(ctx.bot, kasino_id)
+	@kasino.command(name="resend", usage="resend <kasino_id>")
+	@commands.cooldown(1, 30)
+	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
+	@app_commands.describe(kasino_id="The ID of the kasino you want to resend.")
+	async def resend_kasino(self, ctx: commands.Context, kasino_id: int):
+		"""Resends a kasino message if it got lost in the channel."""
+		kasino = await self.bot.db.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
+		if kasino is None:
+			await ctx.send("Kasino not found.")
+			return
+		k_channel_id = kasino["discord_channel_id"]
+		k_message_id = kasino["discord_message_id"]
+		async with ctx.typing():
+			k_channel = await self.bot.fetch_channel(k_channel_id)
+			try:
+				kasino_msg = await k_channel.fetch_message(k_message_id)
+				await kasino_msg.delete()
+			except discord.NotFound:
+				pass
+			new_kasino_msg = await ctx.send(embed=discord.Embed(description="Loading..."))
+			stmt_update_kasino = "UPDATE kasino SET discord_channel_id = $1, discord_message_id = $2 WHERE id = $3;"
+			await self.bot.db.execute(stmt_update_kasino, ctx.channel.id, new_kasino_msg.id, kasino_id)
+			await _update_kasino_msg(ctx.bot, kasino_id)
 
-    @commands.Cog.listener()
-    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
-        await self.process_reaction(payload, add_reaction=True)
+	@commands.Cog.listener()
+	async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+		await self.process_reaction(payload, add_reaction=True)
 
-    @commands.Cog.listener()
-    async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
-        await self.process_reaction(payload, add_reaction=False)
+	@commands.Cog.listener()
+	async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
+		await self.process_reaction(payload, add_reaction=False)
 
-    async def process_reaction(self, payload: discord.RawReactionActionEvent, add_reaction: bool) -> None:
-        post = await self._get_post_from_db(payload.message_id)
-        if post is None:
-            user = await self.check_payload(payload)
-            if user is None:
-                return
-            await self._insert_user(user)
-            user_id = user.id
-        else:
-            user_id = post['discord_user_id']
+	async def process_reaction(self, payload: discord.RawReactionActionEvent, add_reaction: bool) -> None:
+		post = await self._get_post_from_db(payload.message_id)
+		if post is None:
+			user = await self.check_payload(payload)
+			if user is None:
+				return
+			await self._insert_user(user)
+			user_id = user.id
+		else:
+			user_id = post["discord_user_id"]
 
-        upvote_emotes = await self._get_karma_upvote_emotes(payload.guild_id)
-        downvote_emotes = await self._get_karma_downvote_emotes(payload.guild_id)
+		upvote_emotes = await self._get_karma_upvote_emotes(payload.guild_id)
+		downvote_emotes = await self._get_karma_downvote_emotes(payload.guild_id)
 
-        if payload.emoji.id not in [*upvote_emotes, *downvote_emotes]:
-            return
+		if payload.emoji.id not in [*upvote_emotes, *downvote_emotes]:
+			return
 
-        server = self.bot.get_guild(payload.guild_id)
-        if server is None:
-            logger.warning(f"Server {payload.guild_id} not found in cache for karma reaction. Fetching from API.")
-            server = await self.bot.fetch_guild(payload.guild_id)
-        channel = self.bot.get_channel(payload.channel_id)
-        if channel is None:
-            logger.warning(f"Channel {payload.channel_id} not found in cache for karma reaction. Fetching from API.")
-            channel = await self.bot.fetch_channel(payload.channel_id)
+		server = self.bot.get_guild(payload.guild_id)
+		if server is None:
+			logger.warning(f"Server {payload.guild_id} not found in cache for karma reaction. Fetching from API.")
+			server = await self.bot.fetch_guild(payload.guild_id)
+		channel = self.bot.get_channel(payload.channel_id)
+		if channel is None:
+			logger.warning(f"Channel {payload.channel_id} not found in cache for karma reaction. Fetching from API.")
+			channel = await self.bot.fetch_channel(payload.channel_id)
 
-        await self._insert_server(server)
-        await self._insert_channel(channel)
+		await self._insert_server(server)
+		await self._insert_channel(channel)
 
-        is_upvote = payload.emoji.id in upvote_emotes
+		is_upvote = payload.emoji.id in upvote_emotes
 
-        karma_amount = 1   # Assume positive karma
-        (upvote, downvote) = (1, 0) # Assume upvote
-        if not add_reaction:
-            karma_amount *= -1
-            upvote *= -1
-        if not is_upvote:
-            karma_amount *= -1
-            (upvote, downvote) = (downvote, upvote)
+		karma_amount = 1  # Assume positive karma
+		(upvote, downvote) = (1, 0)  # Assume upvote
+		if not add_reaction:
+			karma_amount *= -1
+			upvote *= -1
+		if not is_upvote:
+			karma_amount *= -1
+			(upvote, downvote) = (downvote, upvote)
 
-        await self._update_karma(payload, user_id, karma_amount)
-        await self._update_post_votes(payload, user_id, upvote, downvote)
-            
-    async def _insert_user(self, user: discord.Member):
-        stmt = '''
+		await self._update_karma(payload, user_id, karma_amount)
+		await self._update_post_votes(payload, user_id, upvote, downvote)
+
+	async def _insert_user(self, user: discord.Member):
+		stmt = """
             INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
-            ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3;'''
-        await self.bot.db.execute(stmt, user.id, user.display_name, user.display_avatar.url)
+            ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3;"""
+		await self.bot.db.execute(stmt, user.id, user.display_name, user.display_avatar.url)
 
-    async def _insert_server(self, server: discord.Guild):
-        stmt = '''
+	async def _insert_server(self, server: discord.Guild):
+		stmt = """
             INSERT INTO discord_server (discord_server_id, server_name) VALUES ($1, $2)
-            ON CONFLICT (discord_server_id) DO UPDATE SET server_name = $2;'''
-        await self.bot.db.execute(stmt, server.id, server.name)
+            ON CONFLICT (discord_server_id) DO UPDATE SET server_name = $2;"""
+		await self.bot.db.execute(stmt, server.id, server.name)
 
-    async def _insert_channel(self, channel: discord.abc.GuildChannel):
-        if isinstance(channel, discord.Thread) and channel.parent:
-            await self._insert_channel(channel.parent)
-        stmt = '''
+	async def _insert_channel(self, channel: discord.abc.GuildChannel):
+		if isinstance(channel, discord.Thread) and channel.parent:
+			await self._insert_channel(channel.parent)
+		stmt = """
             INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id)
-            VALUES ($1, $2, $3, $4) ON CONFLICT (discord_channel_id) DO UPDATE SET channel_name = $2;'''
-        parent_channel_id = channel.parent_id if isinstance(channel, discord.Thread) else None
-        await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, parent_channel_id)
+            VALUES ($1, $2, $3, $4) ON CONFLICT (discord_channel_id) DO UPDATE SET channel_name = $2;"""
+		parent_channel_id = channel.parent_id if isinstance(channel, discord.Thread) else None
+		await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, parent_channel_id)
 
-    async def _get_post_from_db(self, message_id: int) -> Record:
-        stmt = "SELECT * FROM post WHERE discord_message_id = $1"
-        return await self.bot.db.fetchrow(stmt, message_id)
+	async def _get_post_from_db(self, message_id: int) -> Record:
+		stmt = "SELECT * FROM post WHERE discord_message_id = $1"
+		return await self.bot.db.fetchrow(stmt, message_id)
 
-    async def _update_karma(self, payload: discord.RawReactionActionEvent, user_id: int, amount: int):
-        await self.bot.db.execute(
-            UPDATE_KARMA_QUERY,
-            user_id,
-            payload.guild_id,
-            amount
-        )
+	async def _update_karma(self, payload: discord.RawReactionActionEvent, user_id: int, amount: int):
+		await self.bot.db.execute(UPDATE_KARMA_QUERY, user_id, payload.guild_id, amount)
 
-    async def _update_post_votes(self, payload: discord.RawReactionActionEvent, user_id: int, upvote: int, downvote: int):
-        message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
-        await self.bot.db.execute(
-            UPDATE_POST_VOTES_QUERY,
-            user_id,
-            payload.guild_id,
-            payload.channel_id,
-            payload.message_id,
-            message.created_at.utcnow(),
-            upvote,
-            downvote
-        )
+	async def _update_post_votes(
+		self, payload: discord.RawReactionActionEvent, user_id: int, upvote: int, downvote: int
+	):
+		message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+		await self.bot.db.execute(
+			UPDATE_POST_VOTES_QUERY,
+			user_id,
+			payload.guild_id,
+			payload.channel_id,
+			payload.message_id,
+			message.created_at.utcnow(),
+			upvote,
+			downvote,
+		)
 
-    async def _get_user_karma(self, user_id: int, guild_id: int) -> int:
-        stmt = "SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2"
-        return await self.bot.db.fetchval(stmt, user_id, guild_id)
-    
-    async def _get_karma_emote_by_id(self, server_id: int, emote: discord.Emoji) -> Record:
-        stmt = "SELECT * FROM karma_emote WHERE discord_server_id = $1 AND discord_emote_id = $2"
-        return await self.bot.db.fetchrow(stmt, server_id, emote.id)
-    
-    async def _get_karma_upvote_emotes(self, guild_id: int) -> list[int]:
-        stmt_upvotes = "SELECT discord_emote_id FROM karma_emote WHERE discord_server_id = $1 AND increase_karma = True"
-        emote_records = await self.bot.db.fetch(stmt_upvotes, guild_id)
-        server_upvote_emotes = [emote['discord_emote_id'] for emote in emote_records]
-        server_upvote_emotes.append(int(core.constants.UPVOTE_EMOTE_ID))
-        return server_upvote_emotes
+	async def _get_user_karma(self, user_id: int, guild_id: int) -> int:
+		stmt = "SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2"
+		return await self.bot.db.fetchval(stmt, user_id, guild_id)
 
-    async def _get_karma_downvote_emotes(self, guild_id: int) -> list[int]:
-        stmt_downvotes = "SELECT discord_emote_id FROM karma_emote WHERE discord_server_id = $1 AND increase_karma = False"
-        emote_records = await self.bot.db.fetch(stmt_downvotes, guild_id)
-        server_downvote_emotes = [emote['discord_emote_id'] for emote in emote_records]
-        server_downvote_emotes.append(int(core.constants.DOWNVOTE_EMOTE_ID))
-        return server_downvote_emotes
+	async def _get_karma_emote_by_id(self, server_id: int, emote: discord.Emoji) -> Record:
+		stmt = "SELECT * FROM karma_emote WHERE discord_server_id = $1 AND discord_emote_id = $2"
+		return await self.bot.db.fetchrow(stmt, server_id, emote.id)
 
-    async def check_payload(self, payload: discord.RawReactionActionEvent) -> discord.Member | None:
-        if payload.event_type == 'REACTION_ADD' and payload.member.bot:
-            return None
-        try:
-            message = await self.__get_message_from_payload(payload)
-        except discord.errors.NotFound:
-            return None
-        if message.author.bot:
-            return None
-        reaction_user = payload.member or self.bot.get_user(payload.user_id)
-        if not reaction_user:
-            logger.warning(f"User {payload.user_id} not found in cache for karma reaction. Fetching from API.")
-            reaction_user = await self.bot.fetch_user(payload.user_id)
-        if reaction_user == message.author:
-            return None
-        return message.author
+	async def _get_karma_upvote_emotes(self, guild_id: int) -> list[int]:
+		stmt_upvotes = "SELECT discord_emote_id FROM karma_emote WHERE discord_server_id = $1 AND increase_karma = True"
+		emote_records = await self.bot.db.fetch(stmt_upvotes, guild_id)
+		server_upvote_emotes = [emote["discord_emote_id"] for emote in emote_records]
+		server_upvote_emotes.append(int(core.constants.UPVOTE_EMOTE_ID))
+		return server_upvote_emotes
 
-    async def __get_message_from_payload(self, payload: discord.RawReactionActionEvent) -> discord.Message | None:
-        potential_message = [message for message in self.bot.cached_messages if message.id == payload.message_id]
-        cached_message = potential_message[0] if potential_message else None
-        if not cached_message:
-            logger.debug(f"Message {payload.message_id} not found in cache for karma reaction. Fetching from API.")
-            cached_message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
-        return cached_message
+	async def _get_karma_downvote_emotes(self, guild_id: int) -> list[int]:
+		stmt_downvotes = (
+			"SELECT discord_emote_id FROM karma_emote WHERE discord_server_id = $1 AND increase_karma = False"
+		)
+		emote_records = await self.bot.db.fetch(stmt_downvotes, guild_id)
+		server_downvote_emotes = [emote["discord_emote_id"] for emote in emote_records]
+		server_downvote_emotes.append(int(core.constants.DOWNVOTE_EMOTE_ID))
+		return server_downvote_emotes
 
-    async def send_conclusion(self, ctx: commands.Context, kasino_id: int, winner: int):
-        kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
-        total_karma = await self.bot.db.fetchval('SELECT SUM(amount) FROM kasino_bet WHERE kasino_id = $1', kasino_id)
-        to_embed = discord.Embed(color=discord.Colour.from_rgb(52, 79, 235))
+	async def check_payload(self, payload: discord.RawReactionActionEvent) -> discord.Member | None:
+		if payload.event_type == "REACTION_ADD" and payload.member.bot:
+			return None
+		try:
+			message = await self.__get_message_from_payload(payload)
+		except discord.errors.NotFound:
+			return None
+		if message.author.bot:
+			return None
+		reaction_user = payload.member or self.bot.get_user(payload.user_id)
+		if not reaction_user:
+			logger.warning(f"User {payload.user_id} not found in cache for karma reaction. Fetching from API.")
+			reaction_user = await self.bot.fetch_user(payload.user_id)
+		if reaction_user == message.author:
+			return None
+		return message.author
 
-        if winner in [1, 2]:
-            winner_option = kasino['option1'] if winner == 1 else kasino['option2']
-            to_embed.title = f':tada: "{winner_option}" was correct! :tada:'
-            to_embed.description = f"""Question: {kasino['question']}
+	async def __get_message_from_payload(self, payload: discord.RawReactionActionEvent) -> discord.Message | None:
+		potential_message = [message for message in self.bot.cached_messages if message.id == payload.message_id]
+		cached_message = potential_message[0] if potential_message else None
+		if not cached_message:
+			logger.debug(f"Message {payload.message_id} not found in cache for karma reaction. Fetching from API.")
+			cached_message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+		return cached_message
+
+	async def send_conclusion(self, ctx: commands.Context, kasino_id: int, winner: int):
+		kasino = await self.bot.db.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
+		total_karma = await self.bot.db.fetchval("SELECT SUM(amount) FROM kasino_bet WHERE kasino_id = $1", kasino_id)
+		to_embed = discord.Embed(color=discord.Colour.from_rgb(52, 79, 235))
+
+		if winner in [1, 2]:
+			winner_option = kasino["option1"] if winner == 1 else kasino["option2"]
+			to_embed.title = f':tada: "{winner_option}" was correct! :tada:'
+			to_embed.description = f"""Question: {kasino['question']}
                                        If you\'ve chosen {winner}, you\'ve just won karma!
                                        Distributed to the winners: **{total_karma} Karma**'
                                     """
-        elif winner == 3:
-            kasino_question: str = kasino['question']
-            to_embed.title = f'🎲 \"{kasino_question}\" has been cancelled.'
-            to_embed.description = f'Amount bet will be refunded to each user.\nReturned: {total_karma} Karma'
+		elif winner == 3:
+			kasino_question: str = kasino["question"]
+			to_embed.title = f'🎲 "{kasino_question}" has been cancelled.'
+			to_embed.description = f"Amount bet will be refunded to each user.\nReturned: {total_karma} Karma"
 
-        to_embed.set_footer(
-            text = f'as decided by {ctx.author}',
-            icon_url = ctx.author.avatar
-        )
-        to_embed.set_thumbnail(url='https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif')
-        await ctx.send(embed=to_embed)
-        return
+		to_embed.set_footer(text=f"as decided by {ctx.author}", icon_url=ctx.author.avatar)
+		to_embed.set_thumbnail(url="https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif")
+		await ctx.send(embed=to_embed)
+		return
 
-    async def remove_kasino(self, kasino_id: int) -> None:
-        kasino = await self.bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
-        if kasino is None:
-            return
-        try:
-            kasino_channel = await self.bot.fetch_channel(kasino['discord_channel_id'])
-            kasino_msg = await kasino_channel.fetch_message(kasino['discord_message_id'])
-            await kasino_msg.delete()
-        except discord.errors.NotFound:
-            pass
-        await self.bot.db.execute('DELETE FROM kasino WHERE id = $1', kasino_id)
+	async def remove_kasino(self, kasino_id: int) -> None:
+		kasino = await self.bot.db.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
+		if kasino is None:
+			return
+		try:
+			kasino_channel = await self.bot.fetch_channel(kasino["discord_channel_id"])
+			kasino_msg = await kasino_channel.fetch_message(kasino["discord_message_id"])
+			await kasino_msg.delete()
+		except discord.errors.NotFound:
+			pass
+		await self.bot.db.execute("DELETE FROM kasino WHERE id = $1", kasino_id)
 
-    async def abort_kasino(self, kasino_id: int) -> None:
-        stmt_kasino_and_bets = '''SELECT * FROM kasino JOIN kasino_bet ON kasino.id = kasino_bet.kasino_id
-                                  WHERE kasino.id = $1'''
-        kasino_and_bets = await self.bot.db.fetch(stmt_kasino_and_bets, kasino_id)
-        stmt_update_user_karma = '''UPDATE karma SET amount = amount + $1
-                                    WHERE discord_user_id = $2 AND discord_server_id = $3'''
-        for bet in kasino_and_bets:
-            await self.bot.db.execute(stmt_update_user_karma, bet['amount'], bet['discord_user_id'], bet['discord_server_id'])
-            user_karma = await self._get_user_karma(bet['discord_user_id'], bet['discord_server_id'])
-            output = discord.Embed(
-                title=f'**You\'ve been refunded {bet["amount"]} karma.**',
-                color=discord.Colour.from_rgb(52, 79, 235),
-                description=f'Question was: {bet["question"]}\n'
-                            f'Remaining karma: {user_karma}'
-            )
-            user = self.bot.get_user(bet['discord_user_id']) or await self.bot.fetch_user(bet['discord_user_id'])
-            await user.send(embed=output)
+	async def abort_kasino(self, kasino_id: int) -> None:
+		stmt_kasino_and_bets = """SELECT * FROM kasino JOIN kasino_bet ON kasino.id = kasino_bet.kasino_id
+                                  WHERE kasino.id = $1"""
+		kasino_and_bets = await self.bot.db.fetch(stmt_kasino_and_bets, kasino_id)
+		stmt_update_user_karma = """UPDATE karma SET amount = amount + $1
+                                    WHERE discord_user_id = $2 AND discord_server_id = $3"""
+		for bet in kasino_and_bets:
+			await self.bot.db.execute(
+				stmt_update_user_karma, bet["amount"], bet["discord_user_id"], bet["discord_server_id"]
+			)
+			user_karma = await self._get_user_karma(bet["discord_user_id"], bet["discord_server_id"])
+			output = discord.Embed(
+				title=f'**You\'ve been refunded {bet["amount"]} karma.**',
+				color=discord.Colour.from_rgb(52, 79, 235),
+				description=f'Question was: {bet["question"]}\n' f'Remaining karma: {user_karma}',
+			)
+			user = self.bot.get_user(bet["discord_user_id"]) or await self.bot.fetch_user(bet["discord_user_id"])
+			await user.send(embed=output)
 
-    async def win_kasino(self, kasino_id: int, winning_option: int):
-        stmt_kasino_and_bets = '''SELECT * FROM kasino JOIN kasino_bet ON kasino.id = kasino_bet.kasino_id
-                                  WHERE kasino.id = $1'''
-        kasino_and_bets = await self.bot.db.fetch(stmt_kasino_and_bets, kasino_id)
-        total_kasino_karma = sum(kb['amount'] for kb in kasino_and_bets)
-        winners_bets = [kb for kb in kasino_and_bets if kb['option'] == winning_option]
-        total_winner_karma = sum(kb['amount'] for kb in winners_bets)
-        server_id = kasino_and_bets[0]['discord_server_id']
-        question = kasino_and_bets[0]['question']
+	async def win_kasino(self, kasino_id: int, winning_option: int):
+		stmt_kasino_and_bets = """SELECT * FROM kasino JOIN kasino_bet ON kasino.id = kasino_bet.kasino_id
+                                  WHERE kasino.id = $1"""
+		kasino_and_bets = await self.bot.db.fetch(stmt_kasino_and_bets, kasino_id)
+		total_kasino_karma = sum(kb["amount"] for kb in kasino_and_bets)
+		winners_bets = [kb for kb in kasino_and_bets if kb["option"] == winning_option]
+		total_winner_karma = sum(kb["amount"] for kb in winners_bets)
+		server_id = kasino_and_bets[0]["discord_server_id"]
+		question = kasino_and_bets[0]["question"]
 
-        if total_winner_karma is None:
-            total_winner_karma = 0
+		if total_winner_karma is None:
+			total_winner_karma = 0
 
-        for bet in winners_bets:
-            win_ratio = bet['amount'] / total_winner_karma
-            win_amount = round(win_ratio * total_kasino_karma)
-            user_id = bet['discord_user_id']
+		for bet in winners_bets:
+			win_ratio = bet["amount"] / total_winner_karma
+			win_amount = round(win_ratio * total_kasino_karma)
+			user_id = bet["discord_user_id"]
 
-            stmt_update_user_karma = '''UPDATE karma SET amount = amount + $1
-                                        WHERE discord_user_id = $2 AND discord_server_id = $3'''
-            await self.bot.db.execute(stmt_update_user_karma, win_amount, user_id, server_id)
-            user_karma = await self._get_user_karma(user_id, server_id)
-            output = discord.Embed(
-                title=f':tada: **You\'ve won {win_amount} karma!** :tada:',
-                color=discord.Colour.from_rgb(66, 186, 50),
-                description=f'(Of which {bet["amount"]} you put down on the table)\n'
-                            f'Question was: {question}\n'
-                            f'New karma balance: {user_karma}'
-            )
-            user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
-            await user.send(embed=output)
+			stmt_update_user_karma = """UPDATE karma SET amount = amount + $1
+                                        WHERE discord_user_id = $2 AND discord_server_id = $3"""
+			await self.bot.db.execute(stmt_update_user_karma, win_amount, user_id, server_id)
+			user_karma = await self._get_user_karma(user_id, server_id)
+			output = discord.Embed(
+				title=f":tada: **You've won {win_amount} karma!** :tada:",
+				color=discord.Colour.from_rgb(66, 186, 50),
+				description=f'(Of which {bet["amount"]} you put down on the table)\n'
+				f'Question was: {question}\n'
+				f'New karma balance: {user_karma}',
+			)
+			user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+			await user.send(embed=output)
 
-        losers_bets = [kb for kb in kasino_and_bets if kb['option'] != winning_option]
-        for bet in losers_bets:
-            user_id = bet['discord_user_id']
-            user_karma = await self._get_user_karma(user_id, server_id)
-            icon = ':chart_with_downwards_trend:'
-            output = discord.Embed(
-                title = f'{icon} **You\'ve unfortunately lost {bet["amount"]} karma...** {icon}',
-                color = discord.Colour.from_rgb(209, 25, 25),
-                description = f'Question was: {question}\n'
-                              f'New karma balance: {user_karma}'
-            )
-            user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
-            await user.send(embed=output)
+		losers_bets = [kb for kb in kasino_and_bets if kb["option"] != winning_option]
+		for bet in losers_bets:
+			user_id = bet["discord_user_id"]
+			user_karma = await self._get_user_karma(user_id, server_id)
+			icon = ":chart_with_downwards_trend:"
+			output = discord.Embed(
+				title=f'{icon} **You\'ve unfortunately lost {bet["amount"]} karma...** {icon}',
+				color=discord.Colour.from_rgb(209, 25, 25),
+				description=f"Question was: {question}\n" f"New karma balance: {user_karma}",
+			)
+			user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+			await user.send(embed=output)
+
 
 async def _update_kasino_msg(bot: core.Substiify, kasino_id: int) -> None:
-    kasino = await bot.db.fetchrow('SELECT * FROM kasino WHERE id = $1', kasino_id)
-    kasino_channel = await bot.fetch_channel(kasino['discord_channel_id'])
-    kasino_msg = await kasino_channel.fetch_message(kasino['discord_message_id'])
+	kasino = await bot.db.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
+	kasino_channel = await bot.fetch_channel(kasino["discord_channel_id"])
+	kasino_msg = await kasino_channel.fetch_message(kasino["discord_message_id"])
 
-    # FIGURE OUT AMOUNTS AND ODDS
-    stmt_kasino_bets_sum = '''SELECT SUM(amount) FROM kasino_bet WHERE kasino_id = $1 AND option = $2'''
-    bets_a_amount = await bot.db.fetchval(stmt_kasino_bets_sum, kasino_id, 1) or 0.0
-    bets_b_amount = await bot.db.fetchval(stmt_kasino_bets_sum, kasino_id, 2) or 0.0
-    a_odds, b_odds = _calculate_odds(bets_a_amount, bets_b_amount)
+	# FIGURE OUT AMOUNTS AND ODDS
+	stmt_kasino_bets_sum = """SELECT SUM(amount) FROM kasino_bet WHERE kasino_id = $1 AND option = $2"""
+	bets_a_amount = await bot.db.fetchval(stmt_kasino_bets_sum, kasino_id, 1) or 0.0
+	bets_b_amount = await bot.db.fetchval(stmt_kasino_bets_sum, kasino_id, 2) or 0.0
+	a_odds, b_odds = _calculate_odds(bets_a_amount, bets_b_amount)
 
-    # CREATE MESSAGE
-    description = "The kasino has been opened! Place your bets! :game_die:" 
-    if kasino['locked'] :
-        description = 'The kasino is locked! No more bets are taken in. Time to wait and see...'
+	# CREATE MESSAGE
+	description = "The kasino has been opened! Place your bets! :game_die:"
+	if kasino["locked"]:
+		description = "The kasino is locked! No more bets are taken in. Time to wait and see..."
 
-    participants = await bot.db.fetchval('SELECT COUNT(*) FROM kasino_bet WHERE kasino_id = $1', kasino_id)
-    description += f'\n**Participants:** `{participants}`'
+	participants = await bot.db.fetchval("SELECT COUNT(*) FROM kasino_bet WHERE kasino_id = $1", kasino_id)
+	description += f"\n**Participants:** `{participants}`"
 
-    title = f":game_die: {kasino['question']}"
-    color = discord.Colour.from_rgb(52, 79, 235)
-    if kasino['locked']:
-        title = f'[LOCKED] {title}'
-        color = discord.Colour.from_rgb(209, 25, 25)
+	title = f":game_die: {kasino['question']}"
+	color = discord.Colour.from_rgb(52, 79, 235)
+	if kasino["locked"]:
+		title = f"[LOCKED] {title}"
+		color = discord.Colour.from_rgb(209, 25, 25)
 
-    embed = discord.Embed(title=title, description=description, color=color)
-    embed.set_footer(text=f'On the table: {bets_a_amount + bets_b_amount} Karma | ID: {kasino_id}')
-    embed.set_thumbnail(url='https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif')
-    embed.add_field(name=f'**1:** {kasino["option1"]}', value=f'**Odds:** 1:{round(a_odds, 3)}\n**Pool:** {bets_a_amount} Karma')
-    embed.add_field(name=f'**2:** {kasino["option2"]}', value=f'**Odds:** 1:{round(b_odds, 3)}\n**Pool:** {bets_b_amount} Karma')
+	embed = discord.Embed(title=title, description=description, color=color)
+	embed.set_footer(text=f"On the table: {bets_a_amount + bets_b_amount} Karma | ID: {kasino_id}")
+	embed.set_thumbnail(url="https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif")
+	embed.add_field(
+		name=f'**1:** {kasino["option1"]}', value=f"**Odds:** 1:{round(a_odds, 3)}\n**Pool:** {bets_a_amount} Karma"
+	)
+	embed.add_field(
+		name=f'**2:** {kasino["option2"]}', value=f"**Odds:** 1:{round(b_odds, 3)}\n**Pool:** {bets_b_amount} Karma"
+	)
 
-    await kasino_msg.edit(embed=embed, view=KasinoView(kasino))
+	await kasino_msg.edit(embed=embed, view=KasinoView(kasino))
+
 
 def _calculate_odds(bets_a_amount: float, bets_b_amount: float) -> tuple[float, float]:
-    total_bets: float = float(bets_a_amount) + float(bets_b_amount)
-    a_odds: float = float(total_bets) / float(bets_a_amount) if bets_a_amount else 1.0
-    b_odds: float = float(total_bets) / float(bets_b_amount) if bets_b_amount else 1.0
-    return a_odds, b_odds
+	total_bets: float = float(bets_a_amount) + float(bets_b_amount)
+	a_odds: float = float(total_bets) / float(bets_a_amount) if bets_a_amount else 1.0
+	b_odds: float = float(total_bets) / float(bets_b_amount) if bets_b_amount else 1.0
+	return a_odds, b_odds
 
 
 class KasinoView(discord.ui.View):
-    def __init__(self, kasino: Record):
-        super().__init__(timeout=None)
-        self.kasino = kasino
-        if not kasino['locked']:
-            self.add_item(KasinoBetButton(1))
-            self.add_item(KasinoBetButton(2))
-        self.add_item(KasinoLockButton(kasino))
+	def __init__(self, kasino: Record):
+		super().__init__(timeout=None)
+		self.kasino = kasino
+		if not kasino["locked"]:
+			self.add_item(KasinoBetButton(1))
+			self.add_item(KasinoBetButton(2))
+		self.add_item(KasinoLockButton(kasino))
+
 
 class KasinoBetButton(discord.ui.Button):
-    def __init__(self, option: int):
-        gamba_emoji = discord.PartialEmoji.from_str('karmabet:817354842699857920')
-        self.option = option
-        super().__init__(label=f'Bet: {option}', emoji=gamba_emoji, style=discord.ButtonStyle.blurple)
+	def __init__(self, option: int):
+		gamba_emoji = discord.PartialEmoji.from_str("karmabet:817354842699857920")
+		self.option = option
+		super().__init__(label=f"Bet: {option}", emoji=gamba_emoji, style=discord.ButtonStyle.blurple)
 
-    async def callback(self, interaction: discord.Interaction):
-        bot: core.Substiify = interaction.client
-        if self.view.kasino['locked']:
-            return await interaction.response.send_message(
-                'The kasino is locked! No more bets are taken in. Time to wait and see...', 
-                ephemeral=True
-            )
+	async def callback(self, interaction: discord.Interaction):
+		bot: core.Substiify = interaction.client
+		if self.view.kasino["locked"]:
+			return await interaction.response.send_message(
+				"The kasino is locked! No more bets are taken in. Time to wait and see...", ephemeral=True
+			)
 
-        user_karma_query = 'SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2'
-        bettor_karma = await bot.db.fetchval(user_karma_query, interaction.user.id, interaction.guild.id)
-        if bettor_karma is None:
-            return await interaction.response.send_message('You don\'t have any karma!', ephemeral=True)
+		user_karma_query = "SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2"
+		bettor_karma = await bot.db.fetchval(user_karma_query, interaction.user.id, interaction.guild.id)
+		if bettor_karma is None:
+			return await interaction.response.send_message("You don't have any karma!", ephemeral=True)
 
-        stmt_bet = 'SELECT * FROM kasino_bet WHERE kasino_id = $1 AND discord_user_id = $2;'
-        user_bet = await bot.db.fetchrow(stmt_bet, self.view.kasino['id'], interaction.user.id)
-        if user_bet and user_bet['option'] != self.option:
-            return await interaction.response.send_message('You can\'t change your choice on the bet. No chickening out!', ephemeral=True)
+		stmt_bet = "SELECT * FROM kasino_bet WHERE kasino_id = $1 AND discord_user_id = $2;"
+		user_bet = await bot.db.fetchrow(stmt_bet, self.view.kasino["id"], interaction.user.id)
+		if user_bet and user_bet["option"] != self.option:
+			return await interaction.response.send_message(
+				"You can't change your choice on the bet. No chickening out!", ephemeral=True
+			)
 
-        modal = KasinoBetModal(self.view.kasino, bettor_karma, user_bet, self.option)
-        await interaction.response.send_modal(modal)
+		modal = KasinoBetModal(self.view.kasino, bettor_karma, user_bet, self.option)
+		await interaction.response.send_modal(modal)
+
 
 class KasinoLockButton(discord.ui.Button):
-    def __init__(self, kasino: Record):
-        locked = kasino['locked']
-        lock_settings = {
-            True: ('Locked', "🔒", discord.ButtonStyle.red),
-            False: ('Lock', "🔐", discord.ButtonStyle.grey)
-        }
-        label, emoji, style = lock_settings[locked]
-        super().__init__(label=label, emoji=emoji, style=style)
+	def __init__(self, kasino: Record):
+		locked = kasino["locked"]
+		lock_settings = {
+			True: ("Locked", "🔒", discord.ButtonStyle.red),
+			False: ("Lock", "🔐", discord.ButtonStyle.grey),
+		}
+		label, emoji, style = lock_settings[locked]
+		super().__init__(label=label, emoji=emoji, style=style)
 
-    async def callback(self, interaction: discord.Interaction):
-        bot: core.Substiify = interaction.client
-        kasino_id = self.view.kasino['id']
-        if not interaction.user.guild_permissions.manage_channels and not await bot.is_owner(interaction.user):
-            return await interaction.response.send_message('You don\'t have permission to lock the kasino!', ephemeral=True)
-        if self.view.kasino['locked']:
-            return await interaction.response.send_message('The kasino is already locked!', ephemeral=True)
-        await bot.db.execute('UPDATE kasino SET locked = True WHERE id = $1', kasino_id)
-        await _update_kasino_msg(bot, kasino_id)
-        self.emoji = "🔒"
-        self.label = "Locked"
-        self.style = discord.ButtonStyle.red
-        await interaction.message.edit(view=self.view)
-        await interaction.response.send_message('Kasino locked!', ephemeral=True)
+	async def callback(self, interaction: discord.Interaction):
+		bot: core.Substiify = interaction.client
+		kasino_id = self.view.kasino["id"]
+		if not interaction.user.guild_permissions.manage_channels and not await bot.is_owner(interaction.user):
+			return await interaction.response.send_message(
+				"You don't have permission to lock the kasino!", ephemeral=True
+			)
+		if self.view.kasino["locked"]:
+			return await interaction.response.send_message("The kasino is already locked!", ephemeral=True)
+		await bot.db.execute("UPDATE kasino SET locked = True WHERE id = $1", kasino_id)
+		await _update_kasino_msg(bot, kasino_id)
+		self.emoji = "🔒"
+		self.label = "Locked"
+		self.style = discord.ButtonStyle.red
+		await interaction.message.edit(view=self.view)
+		await interaction.response.send_message("Kasino locked!", ephemeral=True)
+
 
 class KasinoBetModal(discord.ui.Modal):
-    def __init__(self, kasino: Record, bettor_karma: int, user_bet: Record, option: int):
-        title = utils.ux.strip_emotes(kasino['question'])
-        if len(title) > 45:
-            title = title[:42] + '...'
-        super().__init__(title=title)
-        self.option = option
-        self.kasino = kasino
-        self.bettor_karma = bettor_karma
-        self.user_bet = user_bet
-        option_str = kasino[f'option{option}'] 
-        label_str = f'Bet for option: {option_str}'
-        if len(label_str) > 45:
-            label_str = label_str[:42] + '...'
-        self.bet_amount_input = discord.ui.TextInput(
-            label=label_str,
-            style=discord.TextStyle.short,
-            placeholder=f"Your karma: {bettor_karma}",
-            required=True
-        )
-        self.add_item(self.bet_amount_input)
+	def __init__(self, kasino: Record, bettor_karma: int, user_bet: Record, option: int):
+		title = utils.ux.strip_emotes(kasino["question"])
+		if len(title) > 45:
+			title = title[:42] + "..."
+		super().__init__(title=title)
+		self.option = option
+		self.kasino = kasino
+		self.bettor_karma = bettor_karma
+		self.user_bet = user_bet
+		option_str = kasino[f"option{option}"]
+		label_str = f"Bet for option: {option_str}"
+		if len(label_str) > 45:
+			label_str = label_str[:42] + "..."
+		self.bet_amount_input = discord.ui.TextInput(
+			label=label_str, style=discord.TextStyle.short, placeholder=f"Your karma: {bettor_karma}", required=True
+		)
+		self.add_item(self.bet_amount_input)
 
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        bot: core.Substiify = interaction.client
-        kasino_id: int = self.kasino['id']
-        amount: int = self.bet_amount_input.value
-        bettor_karma: int = await bot.db.fetchval('SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2', interaction.user.id, interaction.guild.id)
-        user_bet: Record = self.user_bet
+	async def on_submit(self, interaction: discord.Interaction) -> None:
+		bot: core.Substiify = interaction.client
+		kasino_id: int = self.kasino["id"]
+		amount: int = self.bet_amount_input.value
+		bettor_karma: int = await bot.db.fetchval(
+			"SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2",
+			interaction.user.id,
+			interaction.guild.id,
+		)
+		user_bet: Record = self.user_bet
 
-        try:
-            amount = int(amount)
-        except ValueError:
-            return await interaction.response.send_message('Invalid amount', ephemeral=True)
-        if amount < 1:
-            return await interaction.response.send_message('You tried to bet < 1 karma! Silly you!', ephemeral=True)
+		try:
+			amount = int(amount)
+		except ValueError:
+			return await interaction.response.send_message("Invalid amount", ephemeral=True)
+		if amount < 1:
+			return await interaction.response.send_message("You tried to bet < 1 karma! Silly you!", ephemeral=True)
 
-        if self.kasino['locked']:
-            return await interaction.response.send_message('The kasino is locked! No more bets are taken in. Time to wait and see...', ephemeral=True)
+		if self.kasino["locked"]:
+			return await interaction.response.send_message(
+				"The kasino is locked! No more bets are taken in. Time to wait and see...", ephemeral=True
+			)
 
-        if bettor_karma < amount:
-            return await interaction.response.send_message('You don\'t have enough karma!', ephemeral=True)
+		if bettor_karma < amount:
+			return await interaction.response.send_message("You don't have enough karma!", ephemeral=True)
 
-        total_bet = amount
-        output = 'added'
+		total_bet = amount
+		output = "added"
 
-        if user_bet is not None:
-            total_bet = user_bet['amount'] + amount
-            output = 'increased'
+		if user_bet is not None:
+			total_bet = user_bet["amount"] + amount
+			output = "increased"
 
-        stmt_bet = '''INSERT INTO kasino_bet (kasino_id, discord_user_id, amount, option) VALUES ($1, $2, $3, $4)
-                      ON CONFLICT (kasino_id, discord_user_id) DO UPDATE SET amount = kasino_bet.amount + $3;'''
-        stmt_update_user_karma = 'UPDATE karma SET amount = karma.amount - $1 WHERE discord_user_id = $2 AND discord_server_id = $3;'
-        async with bot.db.pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute(stmt_bet, kasino_id, interaction.user.id, amount, self.option)
-                await conn.execute(stmt_update_user_karma, amount, interaction.user.id, interaction.guild.id)
+		stmt_bet = """INSERT INTO kasino_bet (kasino_id, discord_user_id, amount, option) VALUES ($1, $2, $3, $4)
+                      ON CONFLICT (kasino_id, discord_user_id) DO UPDATE SET amount = kasino_bet.amount + $3;"""
+		stmt_update_user_karma = (
+			"UPDATE karma SET amount = karma.amount - $1 WHERE discord_user_id = $2 AND discord_server_id = $3;"
+		)
+		async with bot.db.pool.acquire() as conn:
+			async with conn.transaction():
+				await conn.execute(stmt_bet, kasino_id, interaction.user.id, amount, self.option)
+				await conn.execute(stmt_update_user_karma, amount, interaction.user.id, interaction.guild.id)
 
-        output_embed = discord.Embed(color=discord.Colour.from_rgb(209, 25, 25))
-        output_embed.title = f'**Successfully {output} bet on option {self.option}, on kasino with ID {kasino_id} for {amount} karma! Total bet is now: {total_bet} Karma**'
-        output_embed.color = discord.Colour.from_rgb(52, 79, 235)
-        output_embed.description = f'Remaining karma: {bettor_karma - amount}'
+		output_embed = discord.Embed(color=discord.Colour.from_rgb(209, 25, 25))
+		output_embed.title = f"**Successfully {output} bet on option {self.option}, on kasino with ID {kasino_id} for {amount} karma! Total bet is now: {total_bet} Karma**"
+		output_embed.color = discord.Colour.from_rgb(52, 79, 235)
+		output_embed.description = f"Remaining karma: {bettor_karma - amount}"
 
-        await interaction.response.send_message(embed=output_embed, ephemeral=True)
-        logger.info(f"Bet[user: {interaction.user}, amount: {amount}, option: {self.option}, kasino: {kasino_id}]")
-        await _update_kasino_msg(bot, kasino_id)
+		await interaction.response.send_message(embed=output_embed, ephemeral=True)
+		logger.info(f"Bet[user: {interaction.user}, amount: {amount}, option: {self.option}, kasino: {kasino_id}]")
+		await _update_kasino_msg(bot, kasino_id)
 
 
 async def setup(bot: core.Substiify):
-    query = await bot.db.fetch('SELECT * FROM discord_channel WHERE upvote = True')
-    upvote_channels = [channel['discord_channel_id'] for channel in query] or []
-    await bot.add_cog(Karma(bot, upvote_channels))
+	query = await bot.db.fetch("SELECT * FROM discord_channel WHERE upvote = True")
+	upvote_channels = [channel["discord_channel_id"] for channel in query] or []
+	await bot.add_cog(Karma(bot, upvote_channels))

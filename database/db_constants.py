@@ -1,4 +1,3 @@
-
 USER_INSERT_QUERY = """INSERT INTO discord_user
                        (discord_user_id, username, avatar)
                        VALUES ($1, $2, $3)
@@ -24,5 +23,3 @@ CHANNEL_INSERT_QUERY = """INSERT INTO discord_channel
                           channel_name = EXCLUDED.channel_name,
                           parent_discord_channel_id = EXCLUDED.parent_discord_channel_id
                        """
-
-
