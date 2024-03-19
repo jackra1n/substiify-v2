@@ -39,7 +39,8 @@ class Substiify(commands.Bot):
 		activity_name = f"{core.config.PREFIX}help | {servers} servers"
 		activity = discord.Activity(type=discord.ActivityType.listening, name=activity_name)
 		await self.change_presence(activity=activity)
-		logger.info(f"Logged on as {self.user} (ID: {self.user.id})")
+		colored_name = f"\x1b[96m{self.user}\x1b[0m"
+		logger.info(f"Logged on as {colored_name} (ID: {self.user.id})")
 
 	async def on_command_completion(self, ctx: commands.Context) -> None:
 		logger.info(f"[{ctx.command.qualified_name}] executed for -> [{ctx.author}]")
