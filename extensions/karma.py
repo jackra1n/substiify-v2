@@ -429,7 +429,7 @@ class Karma(commands.Cog):
 
 	@commands.cooldown(1, 30, commands.BucketType.user)
 	@karma.command(name="graph", usage="graph")
-	async def karma_stats_graph(self, ctx: commands.Context):
+	async def karma_graph(self, ctx: commands.Context):
 		"""
 		Shows a graph of the amount of karma form every ten percent of users.
 		"""
