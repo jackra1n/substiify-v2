@@ -465,7 +465,7 @@ class Karma(commands.Cog):
 			await ctx.send(file=discord.File(filename))
 			os.remove(filename)
 
-	@commands.hybrid_group(name="post", aliases=["ps"], invoke_without_command=True)
+	@commands.hybrid_group(name="post", aliases=["po"], invoke_without_command=True)
 	async def post(self, ctx: commands.Context):
 		await ctx.send_help(ctx.command)
 
