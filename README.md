@@ -25,3 +25,5 @@ Run docker
 ```bash
 docker-compose up -d
 ```
+
+Increment the version in `pyproject.toml` and `core/__init__.py`.

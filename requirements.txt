@@ -4,9 +4,8 @@ discord.py[voice]
 asyncpg
 pytz
 toml
+colorlog
 psutil
 wavelink
-vacefron.py
-plotly
-kaleido
+matplotlib
 #jishaku  # for debugging, not needed for normal use

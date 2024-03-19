@@ -1,3 +1,19 @@
+[project]
+name = "substiify"
+version = "0.96"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "discord.py>=2.3.0",
+    "aiohttp>=3.7.4,<4",
+    "asyncpg>=0.29.0",
+    "wavelink>=3.2",
+    "pytz",
+    "toml",
+    "psutil",
+    "matplotlib"
+]
+
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
 exclude = [
@@ -28,8 +44,8 @@ exclude = [
 line-length = 120
 indent-width = 4
 
-# Assume Python 3.11
-target-version = "py311"
+# Assume Python 3.12
+target-version = "py312"
 
 [tool.ruff.lint]
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
@@ -45,7 +61,7 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [tool.ruff.format]
 # Like Black, use double quotes for strings.
-quote-style = "single"
+quote-style = "double"
 
 # Like Black, indent with spaces, rather than tabs.
 indent-style = "tab"
