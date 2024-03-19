@@ -169,16 +169,6 @@ class Owner(commands.Cog):
 		embed.add_field(name="Name", value=channels, inline=True)
 		await ctx.send(embed=embed, delete_after=120)
 
-	@commands.is_owner()
-	@commands.group(invoke_without_command=True)
-	async def version(self, ctx: commands.Context):
-		"""
-		Sets the bot's version.
-		"""
-		embed = discord.Embed(color=discord.Colour.green())
-		embed.add_field(name="Current version", value=self.bot.version.get())
-		await ctx.send(embed=embed, delete_after=30)
-
 	@commands.group(name="usage", invoke_without_command=True)
 	async def usage(self, ctx: commands.Context):
 		"""

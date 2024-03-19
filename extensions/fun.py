@@ -1,5 +1,6 @@
 import logging
 import random
+from random import shuffle
 
 import discord
 from discord.ext import commands
@@ -14,6 +15,32 @@ class Fun(commands.Cog):
 
 	def __init__(self, bot: Substiify):
 		self.bot = bot
+
+	@commands.command(name="teams", aliases=["team"])
+	async def teams(self, ctx: commands.Context, *, players: str = None):
+		"""
+		Create two teams from the current members of the voice channel or passed names for you to play custom games.
+		"""
+		if ctx.author.voice:
+			players_list = [member for member in ctx.author.voice.channel.members if not member.bot]
+		elif players:
+			players_list = players.split(",") if "," in players else players.split(" ")
+		else:
+			return await ctx.send("You must be in a voice channel or provide a list of players.")
+
+		if len(players_list) < 4:
+			return await ctx.send("You must have at least 4 members to use this command.")
+
+		shuffle(players_list)
+		team_1 = players_list[: len(players_list) // 2]
+		team_2 = players_list[len(players_list) // 2 :]
+
+		embed = discord.Embed(title="Teams", color=0x00FFFF)
+		embed.add_field(name="Team 1", value="\n".join([f"{member} " for member in team_1]))
+		embed.add_field(name="Team 2", value="\n".join([f"{member} " for member in team_2]))
+		if ctx.author.voice and players:
+			embed.set_footer(text="Did you know that if you are in a voice channel you can just type `<<teams`?")
+		await ctx.send(embed=embed)
 
 	@commands.cooldown(6, 5)
 	@commands.command(name="8ball", aliases=["eightball"], usage="8ball <question>")
