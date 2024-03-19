@@ -1,10 +1,10 @@
 import logging
-import io
 import re
+import os
 from datetime import datetime
 
 import discord
-import plotly.graph_objects as go
+import matplotlib.pyplot as plt
 from asyncpg import Record
 from discord import app_commands
 from discord.ext import commands
@@ -453,19 +453,47 @@ class Karma(commands.Cog):
 				total_percentile_karma = sum(entry["amount"] for entry in karma_percentile_list)
 				karma_percentiles.append((total_percentile_karma, i))
 
-			x = [entry[1] for entry in karma_percentiles]
-			y = [entry[0] for entry in karma_percentiles]
-
 			timestamp = datetime.now().timestamp()
 			filename = f"karma_graph_{timestamp}.png"
 
-			fig = go.Figure(data=go.Bar(x=x, y=y))
-			fig.update_layout(title="Karma Graph", xaxis_title="Percentile of users", yaxis_title="Total karma")
-			fig.update_layout(template="plotly_dark")
-			image_bytes = fig.to_image(format="png")
-			image_file = io.BytesIO(image_bytes)
+			x = [entry[1] for entry in karma_percentiles]
+			y = [entry[0] for entry in karma_percentiles]
 
-			await ctx.send(file=discord.File(image_file, filename=f"{filename}.png"))
+			plt.figure(figsize=(10, 7), facecolor='#141415')
+			plt.bar(x, y, color='#6971f8', width=4)
+
+			plt.title('Karma Graph', color='white')
+			plt.xlabel('Percentile of users', color='white')
+			plt.ylabel('Total karma', color='white')
+
+			plt.gca().spines['bottom'].set_color('white')
+			plt.gca().spines['left'].set_color('white')
+			plt.gca().tick_params(axis='x', colors='white')
+			plt.gca().tick_params(axis='y', colors='white')
+
+			plt.gca().set_facecolor('#141415')
+			plt.gca().spines['top'].set_visible(False)
+			plt.gca().spines['right'].set_visible(False)
+			plt.gca().spines['left'].set_visible(False)
+			plt.gca().spines['bottom'].set_visible(False)
+
+			plt.grid(axis='x', visible=False)
+			plt.grid(axis='y', color='#4a4d60')
+
+			def custom_formatter(x, pos):
+				if x >= 1e6:  # Millions
+					return f'{x*1e-6:.0f}M'
+				elif x >= 1e3:  # Thousands
+					return f'{x*1e-3:.0f}K'
+				else:
+					return f'{x:.0f}'
+				
+			plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(custom_formatter))
+			plt.savefig(filename, facecolor='#141415')
+
+			await ctx.send(file=discord.File(filename, filename=f"{filename}.png"))
+			plt.close()
+			os.remove(filename)
 
 	@commands.hybrid_group(name="post", aliases=["po"], invoke_without_command=True)
 	async def post(self, ctx: commands.Context):

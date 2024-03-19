@@ -7,6 +7,5 @@ toml
 colorlog
 psutil
 wavelink
-plotly
-kaleido
+matplotlib
 #jishaku  # for debugging, not needed for normal use
