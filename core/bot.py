@@ -66,6 +66,8 @@ class Substiify(commands.Bot):
 			pass
 
 	async def on_command_error(self, ctx: commands.Context, error) -> None:
+		if hasattr(error, "is_handled"):
+			return
 		if isinstance(error, commands.CommandNotFound):
 			return
 		if not ctx.command:
@@ -80,10 +82,15 @@ class Substiify(commands.Bot):
 		logger.error(f"[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]")
 		if isinstance(error, commands.CheckFailure):
 			await ctx.send("You do not have permission to use this command.")
-		if hasattr(error, "is_handled"):
 			return
 		if isinstance(error, commands.MissingRequiredArgument):
 			await ctx.send("A required argument is missing.")
+			return
+
+		try:
+			await ctx.message.add_reaction("❌")
+		except discord.errors.NotFound:
+			pass
 
 		ERRORS_CHANNEL_ID = 1219407043186659479
 		if ctx.guild:
@@ -93,10 +100,6 @@ class Substiify(commands.Bot):
 		embed = discord.Embed(title=error_msg, description=f"```{error}```", color=discord.Color.red())
 		await self.get_channel(ERRORS_CHANNEL_ID).send(embed=embed)
 
-		try:
-			await ctx.message.add_reaction("❌")
-		except discord.errors.NotFound:
-			pass
 
 	async def close(self) -> None:
 		await self.db.pool.close()
