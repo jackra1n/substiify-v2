@@ -450,9 +450,13 @@ class Karma(commands.Cog):
 			await ctx.send(file=discord.File(filename))
 			os.remove(filename)
 
+	@commands.hybrid_group(name="post", aliases=["ps"], invoke_without_command=True)
+	async def post(self, ctx: commands.Context):
+		await ctx.send_help(ctx.command)
+
 	@commands.cooldown(2, 15, commands.BucketType.user)
-	@commands.hybrid_command(aliases=["plb"], usage="postlb")
-	async def postlb(self, ctx: commands.Context, user: discord.User = None):
+	@post.command(name="leaderboard", aliases=["lb"], usage="lb [user]")
+	async def post_leaderboard(self, ctx: commands.Context, user: discord.User = None):
 		"""
 		Posts the leaderboard of the most upvoted posts.
 		"""
@@ -478,9 +482,9 @@ class Karma(commands.Cog):
 		posts = await self.bot.db.fetch(stmt, *params)
 		return await self.create_post_leaderboard(posts)
 
-	@commands.command(name="checkpost", aliases=["cp"], usage="checkpost <post id>")
+	@post.command(name="check", aliases=["c"], usage="check <post id>")
 	@commands.is_owner()
-	async def check_post(self, ctx: commands.Context, post_id: int):
+	async def post_check(self, ctx: commands.Context, post_id: int):
 		"""
 		Checks if a post exists.
 		"""
