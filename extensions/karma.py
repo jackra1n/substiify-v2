@@ -11,6 +11,7 @@ from discord.ext import commands
 
 import core
 import utils
+from database import db_constants as dbc
 
 logger = logging.getLogger(__name__)
 
@@ -467,9 +468,9 @@ class Karma(commands.Cog):
 		plt.figure(figsize=(10, 6), facecolor="#141415")
 		plt.bar(x, y, color="#6971f8", width=4)
 
-		plt.title("Karma Graph", color="white", loc="left", fontsize=16)
-		plt.xlabel("Percentile of users", color="white")
-		plt.ylabel("Total karma", color="white")
+		plt.title("Karma Graph", color="white", loc="left", fontsize=20)
+		plt.xlabel("Percentile of users", color="white", fontsize=16)
+		plt.ylabel("Total karma", color="white", fontsize=16)
 
 		plt.gca().spines["bottom"].set_color("white")
 		plt.gca().spines["left"].set_color("white")
@@ -528,7 +529,7 @@ class Karma(commands.Cog):
 		)
 		params = (ctx.guild.id, user.id) if user else (ctx.guild.id,)
 		posts = await self.bot.db.fetch(stmt, *params)
-		return await self.create_post_leaderboard(posts)
+		return await self._create_post_leaderboard(posts)
 
 	@post.command(name="check", aliases=["c"], usage="check <post id>")
 	@commands.is_owner()
@@ -584,19 +585,19 @@ class Karma(commands.Cog):
 		if not ctx.interaction:
 			await ctx.message.delete()
 
-	async def create_post_leaderboard(self, posts: list[Record]):
+	async def _create_post_leaderboard(self, posts: list[Record]):
 		if not posts:
 			return "No posts found."
 		leaderboard = ""
 		for index, post in enumerate(posts, start=1):
-			jump_url = self.create_message_url(
+			jump_url = self._create_message_url(
 				post["discord_server_id"], post["discord_channel_id"], post["discord_message_id"]
 			)
 			username = self.bot.get_user(post["discord_user_id"]) or await self.bot.fetch_user(post["discord_user_id"])
 			leaderboard += f"**{index}.** [{username} ({post['upvotes']})]({jump_url})\n"
 		return leaderboard
 
-	def create_message_url(self, server_id, channel_id, message_id):
+	def _create_message_url(self, server_id, channel_id, message_id):
 		return f"https://discordapp.com/channels/{server_id}/{channel_id}/{message_id}"
 
 	@commands.hybrid_group(name="kasino", aliases=["kas"], invoke_without_command=True)
@@ -719,7 +720,7 @@ class Karma(commands.Cog):
 			user = await self.check_payload(payload)
 			if user is None:
 				return
-			await self._insert_user(user)
+			await self.bot.db.execute(dbc.USER_INSERT_QUERY, user.id, user.display_name, user.display_avatar.url)
 			user_id = user.id
 		else:
 			user_id = post["discord_user_id"]
@@ -755,12 +756,6 @@ class Karma(commands.Cog):
 
 		await self._update_karma(payload, user_id, karma_amount)
 		await self._update_post_votes(payload, user_id, upvote, downvote)
-
-	async def _insert_user(self, user: discord.Member):
-		stmt = """
-            INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
-            ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3;"""
-		await self.bot.db.execute(stmt, user.id, user.display_name, user.display_avatar.url)
 
 	async def _insert_server(self, server: discord.Guild):
 		stmt = """
@@ -947,7 +942,7 @@ class Karma(commands.Cog):
 			await user.send(embed=output)
 
 
-async def _update_kasino_msg(bot: core.Substiify, kasino_id: int) -> None:
+async def _update_kasino_msg(bot: core.Substiify, kasino_id: int) -> discord.Message:
 	kasino = await bot.db.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
 	kasino_channel = await bot.fetch_channel(kasino["discord_channel_id"])
 	kasino_msg = await kasino_channel.fetch_message(kasino["discord_message_id"])
@@ -983,6 +978,7 @@ async def _update_kasino_msg(bot: core.Substiify, kasino_id: int) -> None:
 	)
 
 	await kasino_msg.edit(embed=embed, view=KasinoView(kasino))
+	return kasino_msg
 
 
 def _calculate_odds(bets_a_amount: int, bets_b_amount: int) -> tuple[float, float]:
@@ -1034,11 +1030,11 @@ class KasinoBetButton(discord.ui.Button):
 class KasinoLockButton(discord.ui.Button):
 	def __init__(self, kasino: Record):
 		locked = kasino["locked"]
-		lock_settings = {
-			True: ("Locked", "🔒", discord.ButtonStyle.red),
-			False: ("Lock", "🔐", discord.ButtonStyle.grey),
+		self.lock_settings = {
+			True: ("Unlock", "🔐", discord.ButtonStyle.red),
+			False: ("Lock", "🔒", discord.ButtonStyle.grey),
 		}
-		label, emoji, style = lock_settings[locked]
+		label, emoji, style = self.lock_settings[locked]
 		super().__init__(label=label, emoji=emoji, style=style)
 
 	async def callback(self, interaction: discord.Interaction):
@@ -1048,15 +1044,24 @@ class KasinoLockButton(discord.ui.Button):
 			return await interaction.response.send_message(
 				"You don't have permission to lock the kasino!", ephemeral=True
 			)
-		if self.view.kasino["locked"]:
-			return await interaction.response.send_message("The kasino is already locked!", ephemeral=True)
-		await bot.db.execute("UPDATE kasino SET locked = True WHERE id = $1", kasino_id)
-		await _update_kasino_msg(bot, kasino_id)
-		self.emoji = "🔒"
-		self.label = "Locked"
-		self.style = discord.ButtonStyle.red
-		await interaction.message.edit(view=self.view)
-		await interaction.response.send_message("Kasino locked!", ephemeral=True)
+		is_locked = await bot.db.fetchval("SELECT locked FROM kasino WHERE id = $1", kasino_id)
+		if is_locked:
+			label_str = f"""Are you sure you want to unlock kasino ID: `{kasino_id}`?
+							To make it fair, all people who bet will get a message so they can increase their bets!
+							
+							To confirm, press the button below."""
+			embed = discord.Embed(
+				title="Unlock kasino", description=label_str, color=discord.Colour.from_rgb(52, 79, 235)
+			)
+			await interaction.response.send_message(
+				embed=embed, view=KasinoConfirmUnlockView(kasino_id), ephemeral=True
+			)
+		else:
+			await bot.db.execute("UPDATE kasino SET locked = True WHERE id = $1", kasino_id)
+			await _update_kasino_msg(bot, kasino_id)
+			self.label, self.emoji, self.style = self.lock_settings[True]
+			await interaction.message.edit(view=self.view)
+			await interaction.response.send_message("Kasino locked!", ephemeral=True)
 
 
 class KasinoBetModal(discord.ui.Modal):
@@ -1129,6 +1134,36 @@ class KasinoBetModal(discord.ui.Modal):
 		await interaction.response.send_message(embed=output_embed, ephemeral=True)
 		logger.info(f"Bet[user: {interaction.user}, amount: {amount}, option: {self.option}, kasino: {kasino_id}]")
 		await _update_kasino_msg(bot, kasino_id)
+
+class KasinoConfirmUnlockView(discord.ui.View):
+
+	def __init__(self, kasino_id: int):
+		super().__init__(timeout=None)
+		self.kasino_id = kasino_id
+
+	@discord.ui.button(label="Unlock", style=discord.ButtonStyle.blurple)
+	async def unlock(self, interaction: discord.Interaction, button: discord.ui.Button):
+		bot: core.Substiify = interaction.client
+		if not interaction.user.guild_permissions.manage_channels and not await bot.is_owner(interaction.user):
+			return await interaction.response.send_message(
+				"You don't have permission to unlock the kasino!", ephemeral=True
+			)
+		await bot.db.execute("UPDATE kasino SET locked = False WHERE id = $1", self.kasino_id)
+		kasino_msg = await _update_kasino_msg(bot, self.kasino_id)
+		kasino_members = await bot.db.fetch(
+			"SELECT discord_user_id FROM kasino_bet WHERE kasino_id = $1", self.kasino_id
+		)
+		embed = discord.Embed(
+			title=f"🎲 Kasino ({self.kasino_id}) unlocked!",
+			description=f"All participants have been notified and can now increase their bets.\n[Jump to kasino]({kasino_msg.jump_url})",
+			color=discord.Colour.from_rgb(52, 79, 235)
+		)
+		embed.set_footer(text=f"Unlocked by {interaction.user}", icon_url=interaction.user.avatar)
+
+		for member in kasino_members:
+			user = bot.get_user(member["discord_user_id"]) or await bot.fetch_user(member["discord_user_id"])
+			await user.send(embed=embed)
+		await interaction.response.send_message("Kasino unlocked! All kasino members messaged.", ephemeral=True)		
 
 
 class NotEnoughArguments(commands.UserInputError):
