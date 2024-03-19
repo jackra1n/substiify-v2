@@ -1,5 +1,5 @@
 import logging
-import os
+import io
 import re
 from datetime import datetime
 
@@ -165,7 +165,7 @@ class Karma(commands.Cog):
 		"""
 		if len(args) != 2:
 			msg = f"Got {len(args)} arguments, expected 2."
-			raise commands.MissingRequiredArgument(msg)
+			raise NotEnoughArguments(msg)
 
 		user = None
 		amount = None
@@ -238,14 +238,16 @@ class Karma(commands.Cog):
 	@karma_donate.error
 	async def karma_donate_error(self, ctx: commands.Context, error):
 		embed = discord.Embed(color=0xF66045)
-		if isinstance(error, commands.MissingRequiredArgument):
-			embed.description = "You didn't specify a user to donate to!"
+		print(type(error))
+		if isinstance(error, NotEnoughArguments):
+			embed.description = "You didn't specify an `amount` or a `user` to donate to!"
 		elif isinstance(error, commands.BadArgument):
 			embed.description = f"Wrong command usage! Command usage is `{ctx.prefix}karma donate <user> <amount>`"
 		else:
 			embed.description = f"An unknown error occured. Please contact <@{self.bot.owner_id}> for help."
 			logger.error(f"An unknown error occured in karma_donate: {error}")
 		await ctx.send(embed=embed)
+		error.is_handled = True
 
 	@karma.group(name="emotes", aliases=["emote"], usage="emotes", invoke_without_command=True)
 	async def karma_emotes(self, ctx: commands.Context):
@@ -460,10 +462,10 @@ class Karma(commands.Cog):
 			fig = go.Figure(data=go.Bar(x=x, y=y))
 			fig.update_layout(title="Karma Graph", xaxis_title="Percentile of users", yaxis_title="Total karma")
 			fig.update_layout(template="plotly_dark")
-			fig.write_image(filename)
+			image_bytes = fig.to_image(format="png")
+			image_file = io.BytesIO(image_bytes)
 
-			await ctx.send(file=discord.File(filename))
-			os.remove(filename)
+			await ctx.send(file=discord.File(image_file, filename=f"{filename}.png"))
 
 	@commands.hybrid_group(name="post", aliases=["po"], invoke_without_command=True)
 	async def post(self, ctx: commands.Context):
@@ -1096,6 +1098,10 @@ class KasinoBetModal(discord.ui.Modal):
 		await interaction.response.send_message(embed=output_embed, ephemeral=True)
 		logger.info(f"Bet[user: {interaction.user}, amount: {amount}, option: {self.option}, kasino: {kasino_id}]")
 		await _update_kasino_msg(bot, kasino_id)
+
+
+class NotEnoughArguments(commands.UserInputError):
+	pass
 
 
 async def setup(bot: core.Substiify):

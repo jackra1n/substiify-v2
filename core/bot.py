@@ -86,7 +86,11 @@ class Substiify(commands.Bot):
 			await ctx.send("A required argument is missing.")
 
 		ERRORS_CHANNEL_ID = 1219407043186659479
-		embed = discord.Embed(title="Error", description=f"```{error}```", color=discord.Color.red())
+		if ctx.guild:
+			error_msg = f"Error in {ctx.guild.name} ({ctx.guild.id}) by {ctx.author} -> {ctx.command.qualified_name}"
+		else:
+			error_msg = f"Error in DMs by {ctx.author} -> {ctx.command.qualified_name}"
+		embed = discord.Embed(title=error_msg, description=f"```{error}```", color=discord.Color.red())
 		await self.get_channel(ERRORS_CHANNEL_ID).send(embed=embed)
 
 		try:
