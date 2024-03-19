@@ -8,6 +8,7 @@ from discord.ext import commands, tasks
 from discord.ext.commands import Greedy
 
 import core
+from database import db_constants as dbc
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +179,7 @@ class Owner(commands.Cog):
 		commands_used = await self.bot.db.fetch(stmt_usage, ctx.guild.id)
 		embed = create_command_usage_embed(commands_used)
 		embed.title = f"Top 10 used commands on: **{ctx.guild.name}**"
-		await ctx.send(embed=embed, delete_after=180)
+		await ctx.send(embed=embed)
 		await ctx.message.delete()
 
 	@usage.command(name="all")
@@ -192,7 +193,7 @@ class Owner(commands.Cog):
 		commands_used = await self.bot.db.fetch(stmt_usage)
 		embed = create_command_usage_embed(commands_used)
 		embed.title = "Top 10 total used commands"
-		await ctx.send(embed=embed, delete_after=180)
+		await ctx.send(embed=embed)
 		await ctx.message.delete()
 
 	@usage.command(name="last")
@@ -218,7 +219,7 @@ class Owner(commands.Cog):
 			title=f"Last {amount} used commands on: **{ctx.guild.name}**", color=core.constants.PRIMARY_COLOR
 		)
 		embed.description = commands_used_string
-		await ctx.send(embed=embed, delete_after=60)
+		await ctx.send(embed=embed)
 		await ctx.message.delete()
 
 	def get_longest_property_length(self, record_list: list, prprty: str) -> len:
@@ -243,7 +244,7 @@ class Owner(commands.Cog):
 		embed = discord.Embed(title="Top servers used commands", color=core.constants.PRIMARY_COLOR)
 		embed.add_field(name="Command", value=commands_used, inline=True)
 		embed.add_field(name="Count", value=commands_count, inline=True)
-		await ctx.send(embed=embed, delete_after=30)
+		await ctx.send(embed=embed)
 		await ctx.message.delete()
 
 	@commands.is_owner()
@@ -284,16 +285,16 @@ class Owner(commands.Cog):
 			user_id = post["discord_user_id"]
 			discord_user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
 			print(f"fetched user: {discord_user}...")
-			stmt = """INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
-                      ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3"""
-			await self.bot.db.execute(stmt, discord_user.id, discord_user.name, discord_user.display_avatar.url)
+			await self.bot.db.execute(
+				dbc.USER_INSERT_QUERY, discord_user.id, discord_user.name, discord_user.display_avatar.url
+			)
 
 		for command in await self.bot.db.fetch("SELECT discord_user_id FROM command_history GROUP BY discord_user_id"):
 			user_id = command["discord_user_id"]
 			discord_user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
-			stmt = """INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
-                      ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3"""
-			await self.bot.db.execute(stmt, discord_user.id, discord_user.name, discord_user.display_avatar.url)
+			await self.bot.db.execute(
+				dbc.USER_INSERT_QUERY, discord_user.id, discord_user.name, discord_user.display_avatar.url
+			)
 
 		await ctx.send("Database populated", delete_after=30)
 
@@ -306,9 +307,7 @@ class Owner(commands.Cog):
 		# fetch all users from the server
 		async for user in ctx.guild.fetch_members(limit=None):
 			print(f"inserting user: {user}...")
-			stmt_insert_user = """INSERT INTO discord_user (discord_user_id, username, avatar) VALUES ($1, $2, $3)
-                                  ON CONFLICT (discord_user_id) DO UPDATE SET username = $2, avatar = $3"""
-			await self.bot.db.execute(stmt_insert_user, user.id, user.name, user.display_avatar.url)
+			await self.bot.db.execute(dbc.USER_INSERT_QUERY, user.id, user.name, user.display_avatar.url)
 			stmt_insert_user_karma = """INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
                                         ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = $3"""
 			random_karma = random.randint(500, 3000)
@@ -320,7 +319,7 @@ def create_command_usage_embed(results):
 	commands_count = ""
 	for result in results:
 		commands_used += f"`{result['command_name']}`\n"
-		commands_count += f"{result['cnt']}\n"
+		commands_count += f"`{result['cnt']}`\n"
 	embed = discord.Embed(color=core.constants.PRIMARY_COLOR)
 	embed.add_field(name="Command", value=commands_used, inline=True)
 	embed.add_field(name="Count", value=commands_count, inline=True)

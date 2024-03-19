@@ -181,7 +181,7 @@ class Music(commands.Cog):
 		embed = discord.Embed(title="⏹️ Disconnected", color=EMBED_COLOR)
 		await ctx.send(embed=embed, delete_after=30)
 
-	@commands.hybrid_command(aliases=["con", "queue", "q"])
+	@commands.hybrid_command(aliases=["con", "now", "queue", "q"])
 	async def controller(self, ctx: commands.Context):
 		"""
 		Shows the music controller.
