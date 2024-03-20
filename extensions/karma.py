@@ -239,7 +239,6 @@ class Karma(commands.Cog):
 	@karma_donate.error
 	async def karma_donate_error(self, ctx: commands.Context, error):
 		embed = discord.Embed(color=0xF66045)
-		print(type(error))
 		if isinstance(error, NotEnoughArguments):
 			embed.description = "You didn't specify an `amount` or a `user` to donate to!"
 		elif isinstance(error, commands.BadArgument):
@@ -1148,6 +1147,9 @@ class KasinoConfirmUnlockView(discord.ui.View):
 			return await interaction.response.send_message(
 				"You don't have permission to unlock the kasino!", ephemeral=True
 			)
+		is_locked = await bot.db.fetchval("SELECT locked FROM kasino WHERE id = $1", self.kasino_id)
+		if not is_locked:
+			return await interaction.response.send_message("Kasino is already unlocked!", ephemeral=True)
 		await bot.db.execute("UPDATE kasino SET locked = False WHERE id = $1", self.kasino_id)
 		kasino_msg = await _update_kasino_msg(bot, self.kasino_id)
 		kasino_members = await bot.db.fetch(
