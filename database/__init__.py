@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from functools import wraps
 from typing import TYPE_CHECKING, Any, Self
 
 import asyncpg
@@ -19,6 +20,15 @@ __all__ = ("Database",)
 
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+
+def transaction(database_action):
+	@wraps(database_action)
+	async def wrapper(self, *args, **kwargs):
+		async with self.pool.acquire() as connection:
+			async with connection.transaction():
+				return await database_action(self, *args, **kwargs, connection=connection)
+	return wrapper
 
 
 class Database:
@@ -50,36 +60,25 @@ class Database:
 
 		logger.info("Successfully initialised the Database.")
 
-	def _transaction(call):
-		def decorator(func):
-			async def wrapper(self, query, *args, **kwargs):
-				async with self.pool.acquire() as connection:
-					async with connection.transaction():
-						return await getattr(connection, call)(query, *args, **kwargs)
+	@transaction
+	async def execute(self, query, *args, connection = None, **kwargs) -> str:
+		return await connection.execute(query, *args, **kwargs)
 
-			return wrapper
+	@transaction
+	async def executemany(self, query, *args, connection = None, **kwargs) -> None:
+		return await connection.executemany(query, *args, **kwargs)
 
-		return decorator
+	@transaction
+	async def fetch(self, query, *args, connection = None, **kwargs) -> list:
+		return await connection.fetch(query, *args, **kwargs)
 
-	@_transaction("execute")
-	async def execute(self, query, *args, **kwargs) -> str:
-		pass
+	@transaction
+	async def fetchrow(self, query, *args, connection = None, **kwargs) -> asyncpg.Record | None:
+		return await connection.fetchrow(query, *args, **kwargs)
 
-	@_transaction("executemany")
-	async def executemany(self, query, *args, **kwargs) -> None:
-		pass
-
-	@_transaction("fetch")
-	async def fetch(self, query, *args, **kwargs) -> list:
-		pass
-
-	@_transaction("fetchrow")
-	async def fetchrow(self, query, *args, **kwargs) -> asyncpg.Record | None:
-		pass
-
-	@_transaction("fetchval")
-	async def fetchval(self, query, *args, **kwargs):
-		pass
+	@transaction
+	async def fetchval(self, query, *args, connection = None, **kwargs):
+		return await connection.fetchval(query, *args, **kwargs)
 
 	async def _insert_foundation(
 		db: asyncpg.Connection, user: discord.Member, server: discord.Guild, channel: discord.abc.Messageable
