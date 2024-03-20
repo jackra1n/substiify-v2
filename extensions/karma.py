@@ -654,8 +654,6 @@ class Karma(commands.Cog):
 		await self.remove_kasino(kasino_id)
 		if ctx.interaction:
 			await ctx.interaction.response.send_message("Kasino has been closed.", ephemeral=True)
-		else:
-			await ctx.message.delete()
 
 	@kasino_close.error
 	async def kasino_close_error(self, ctx: commands.Context, error):
@@ -851,7 +849,7 @@ class Karma(commands.Cog):
 			winner_option = kasino["option1"] if winner == 1 else kasino["option2"]
 			to_embed.title = f':tada: "{winner_option}" was correct! :tada:'
 			to_embed.description = f"""Question: {kasino['question']}
-                                       If you\'ve chosen {winner}, you\'ve just won karma!
+                                       If you have chosen {winner}, you just won karma!
                                        Distributed to the winners: **{total_karma} Karma**'
                                     """
 		elif winner == 3:
@@ -862,6 +860,9 @@ class Karma(commands.Cog):
 		to_embed.set_footer(text=f"as decided by {ctx.author}", icon_url=ctx.author.avatar)
 		to_embed.set_thumbnail(url="https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif")
 		await ctx.send(embed=to_embed)
+		logger.info(
+			f"Kasino closed [ID: {kasino_id}, winner: {winner}, server: {ctx.guild.id}, total_karma: {total_karma}]."
+		)
 		return
 
 	async def remove_kasino(self, kasino_id: int) -> None:
@@ -888,9 +889,9 @@ class Karma(commands.Cog):
 			)
 			user_karma = await self._get_user_karma(bet["discord_user_id"], bet["discord_server_id"])
 			output = discord.Embed(
-				title=f'**You\'ve been refunded {bet["amount"]} karma.**',
+				title=f"**You have been refunded {bet['amount']} karma.**",
 				color=discord.Colour.from_rgb(52, 79, 235),
-				description=f'Question was: {bet["question"]}\n' f'Remaining karma: {user_karma}',
+				description=f"Question was: {bet['question']}\n' f'Remaining karma: {user_karma}",
 			)
 			user = self.bot.get_user(bet["discord_user_id"]) or await self.bot.fetch_user(bet["discord_user_id"])
 			await user.send(embed=output)
@@ -908,6 +909,21 @@ class Karma(commands.Cog):
 		if total_winner_karma is None:
 			total_winner_karma = 0
 
+		async def send_message(self: Karma, user_id: int, bet, win_amount: int) -> None:
+			user_karma = await self._get_user_karma(user_id, server_id)
+			title = f":chart_with_downwards_trend: **You have unfortunately lost {bet['amount']} karma...** :chart_with_downwards_trend:"
+			color = discord.Colour.from_rgb(209, 25, 25)
+			description = None
+			if win_amount > 0:
+				title = f":tada: **You have won {win_amount} karma!** :tada:"
+				color = discord.Colour.from_rgb(66, 186, 50)
+				description = f'Of which `{bet["amount"]}` you put down on the table'
+			embed = discord.Embed(title=title, color=color, description=description)
+			embed.add_field(name="Question was:", value=question, inline=False)
+			embed.add_field(name="New karma balance:", value=user_karma, inline=False)
+			user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+			await user.send(embed=embed)
+
 		for bet in winners_bets:
 			win_ratio = bet["amount"] / total_winner_karma
 			win_amount = round(win_ratio * total_kasino_karma)
@@ -916,29 +932,12 @@ class Karma(commands.Cog):
 			stmt_update_user_karma = """UPDATE karma SET amount = amount + $1
                                         WHERE discord_user_id = $2 AND discord_server_id = $3"""
 			await self.bot.db.execute(stmt_update_user_karma, win_amount, user_id, server_id)
-			user_karma = await self._get_user_karma(user_id, server_id)
-			output = discord.Embed(
-				title=f":tada: **You've won {win_amount} karma!** :tada:",
-				color=discord.Colour.from_rgb(66, 186, 50),
-				description=f'(Of which {bet["amount"]} you put down on the table)\n'
-				f'Question was: {question}\n'
-				f'New karma balance: {user_karma}',
-			)
-			user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
-			await user.send(embed=output)
+			await send_message(self, user_id, bet, win_amount)
 
 		losers_bets = [kb for kb in kasino_and_bets if kb["option"] != winning_option]
 		for bet in losers_bets:
 			user_id = bet["discord_user_id"]
-			user_karma = await self._get_user_karma(user_id, server_id)
-			icon = ":chart_with_downwards_trend:"
-			output = discord.Embed(
-				title=f'{icon} **You\'ve unfortunately lost {bet["amount"]} karma...** {icon}',
-				color=discord.Colour.from_rgb(209, 25, 25),
-				description=f"Question was: {question}\n" f"New karma balance: {user_karma}",
-			)
-			user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
-			await user.send(embed=output)
+			await send_message(self, user_id, bet, 0)
 
 
 async def _update_kasino_msg(bot: core.Substiify, kasino_id: int) -> discord.Message:
@@ -1046,9 +1045,9 @@ class KasinoLockButton(discord.ui.Button):
 		is_locked = await bot.db.fetchval("SELECT locked FROM kasino WHERE id = $1", kasino_id)
 		if is_locked:
 			label_str = f"""Are you sure you want to unlock kasino ID: `{kasino_id}`?
-							To make it fair, all people who bet will get a message so they can increase their bets!
+					To make it fair, all people who bet will get a message so they can increase their bets!
 							
-							To confirm, press the button below."""
+					To confirm, press the button below."""
 			embed = discord.Embed(
 				title="Unlock kasino", description=label_str, color=discord.Colour.from_rgb(52, 79, 235)
 			)
@@ -1134,8 +1133,8 @@ class KasinoBetModal(discord.ui.Modal):
 		logger.info(f"Bet[user: {interaction.user}, amount: {amount}, option: {self.option}, kasino: {kasino_id}]")
 		await _update_kasino_msg(bot, kasino_id)
 
-class KasinoConfirmUnlockView(discord.ui.View):
 
+class KasinoConfirmUnlockView(discord.ui.View):
 	def __init__(self, kasino_id: int):
 		super().__init__(timeout=None)
 		self.kasino_id = kasino_id
@@ -1147,7 +1146,8 @@ class KasinoConfirmUnlockView(discord.ui.View):
 			return await interaction.response.send_message(
 				"You don't have permission to unlock the kasino!", ephemeral=True
 			)
-		is_locked = await bot.db.fetchval("SELECT locked FROM kasino WHERE id = $1", self.kasino_id)
+		kasino = await bot.db.fetchrow("SELECT * FROM kasino WHERE id = $1", self.kasino_id)
+		is_locked = kasino["locked"]
 		if not is_locked:
 			return await interaction.response.send_message("Kasino is already unlocked!", ephemeral=True)
 		await bot.db.execute("UPDATE kasino SET locked = False WHERE id = $1", self.kasino_id)
@@ -1156,16 +1156,16 @@ class KasinoConfirmUnlockView(discord.ui.View):
 			"SELECT discord_user_id FROM kasino_bet WHERE kasino_id = $1", self.kasino_id
 		)
 		embed = discord.Embed(
-			title=f"🎲 Kasino ({self.kasino_id}) unlocked!",
-			description=f"All participants have been notified and can now increase their bets.\n[Jump to kasino]({kasino_msg.jump_url})",
-			color=discord.Colour.from_rgb(52, 79, 235)
+			title=f"🎲 Kasino `[ID: {self.kasino_id}]` unlocked!",
+			description=f"{kasino['question']}\n[Jump to kasino]({kasino_msg.jump_url})",
+			color=discord.Colour.from_rgb(52, 79, 235),
 		)
 		embed.set_footer(text=f"Unlocked by {interaction.user}", icon_url=interaction.user.avatar)
 
 		for member in kasino_members:
 			user = bot.get_user(member["discord_user_id"]) or await bot.fetch_user(member["discord_user_id"])
 			await user.send(embed=embed)
-		await interaction.response.send_message("Kasino unlocked! All kasino members messaged.", ephemeral=True)		
+		await interaction.response.send_message("Kasino unlocked! All kasino members messaged.", ephemeral=True)
 
 
 class NotEnoughArguments(commands.UserInputError):
