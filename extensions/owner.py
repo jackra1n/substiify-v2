@@ -42,7 +42,7 @@ class Owner(commands.Cog):
 		"""
 		Shuts down the bot. Made this in case something goes wrong.
 		"""
-		embed = discord.Embed(description="Shutting down...", color=0xF66045)
+		embed = discord.Embed(description="Shutting down...", color=discord.Colour.red())
 		await ctx.send(embed=embed)
 		await self.bot.close()
 

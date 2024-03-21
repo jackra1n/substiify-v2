@@ -93,13 +93,13 @@ class FreeGames(commands.Cog):
 				logger.error(f"Error while creating 'Game' object: {ex}")
 
 		if not current_free_games:
-			embed = discord.Embed(color=0x000000)
+			embed = discord.Embed(color=discord.Colour.dark_embed())
 			embed.description = "Could not find any currently free games"
 			await ctx.send(embed=embed)
 
 		for game in current_free_games:
 			try:
-				embed = discord.Embed(title=game.title, url=game.epic_store_link, color=0x000000)
+				embed = discord.Embed(title=game.title, url=game.epic_store_link, color=discord.Colour.dark_embed())
 				embed.set_thumbnail(url=f"{EPIC_GAMES_LOGO_URL}")
 				available_string = (
 					f"started <t:{int(game.start_date.timestamp())}:R>, ends <t:{int(game.end_date.timestamp())}:R>"

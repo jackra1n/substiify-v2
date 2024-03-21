@@ -6,7 +6,7 @@ from asyncpg import Record
 from discord import app_commands
 from discord.ext import commands
 
-from core.bot import Substiify
+import core
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class FeedbackOutcome(Enum):
 class Feedback(commands.Cog):
 	COG_EMOJI = "📝"
 
-	def __init__(self, bot: Substiify):
+	def __init__(self, bot: core.Substiify):
 		self.bot = bot
 
 	@commands.Cog.listener()
@@ -151,7 +151,7 @@ class FeedbackModal(discord.ui.Modal):
 		embed = discord.Embed(
 			title=f"New {self.feedback_type.value} submission",
 			description=f"```{self.feedback.value}```",
-			color=0x1E9FE3,
+			color=core.constants.CYAN_COLOR,
 		)
 		embed.set_footer(text=interaction.user, icon_url=interaction.user.avatar)
 		message = await channel.send(embed=embed)
@@ -178,5 +178,5 @@ class FeedbackModal(discord.ui.Modal):
 		logger.error(type(error), error, error.__traceback__)
 
 
-async def setup(bot: Substiify):
+async def setup(bot: core.Substiify):
 	await bot.add_cog(Feedback(bot))

@@ -217,7 +217,11 @@ class Util(commands.Cog):
 		return time_val * time_dict[unit]
 
 	def create_giveaway_embed(self, author: discord.Member, prize):
-		embed = discord.Embed(title=":tada: Giveaway :tada:", description=f"Win **{prize}**!", color=0x00FFFF)
+		embed = discord.Embed(
+			title=":tada: Giveaway :tada:",
+			description=f"Win **{prize}**!",
+			color=core.constants.CYAN_COLOR,
+		)
 		host = author.mention if isinstance(author, (discord.Member, discord.User)) else author
 		embed.add_field(name="Hosted By:", value=host)
 		return embed
@@ -243,7 +247,11 @@ class Util(commands.Cog):
 		"""
 		member = member or ctx.author
 		current_avatar = member.display_avatar
-		embed = discord.Embed(title=f"{str(member.display_name)}'s avatar", url=current_avatar.url, color=0x1E9FE3)
+		embed = discord.Embed(
+			title=f"{member.display_name}'s avatar",
+			url=current_avatar.url,
+			color=core.constants.CYAN_COLOR,
+		)
 		embed.set_image(url=current_avatar.url)
 		await ctx.send(embed=embed)
 

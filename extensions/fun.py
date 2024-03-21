@@ -5,7 +5,7 @@ from random import shuffle
 import discord
 from discord.ext import commands
 
-from core.bot import Substiify
+import core
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class Fun(commands.Cog):
 	COG_EMOJI = "🎱"
 
-	def __init__(self, bot: Substiify):
+	def __init__(self, bot: core.Substiify):
 		self.bot = bot
 
 	@commands.command(name="teams", aliases=["team"])
@@ -35,7 +35,7 @@ class Fun(commands.Cog):
 		team_1 = players_list[: len(players_list) // 2]
 		team_2 = players_list[len(players_list) // 2 :]
 
-		embed = discord.Embed(title="Teams", color=0x00FFFF)
+		embed = discord.Embed(title="Teams", color=discord.Colour.dark_embed())
 		embed.add_field(name="Team 1", value="\n".join([f"{member} " for member in team_1]))
 		embed.add_field(name="Team 2", value="\n".join([f"{member} " for member in team_2]))
 		if ctx.author.voice and players:
@@ -76,5 +76,5 @@ class Fun(commands.Cog):
 		await ctx.send(embed=embed)
 
 
-async def setup(bot: Substiify):
+async def setup(bot: core.Substiify):
 	await bot.add_cog(Fun(bot))
