@@ -180,7 +180,6 @@ class Owner(commands.Cog):
 		embed = create_command_usage_embed(commands_used)
 		embed.title = f"Top 10 used commands on: **{ctx.guild.name}**"
 		await ctx.send(embed=embed)
-		await ctx.message.delete()
 
 	@usage.command(name="all")
 	async def usage_all(self, ctx: commands.Context):
@@ -194,7 +193,6 @@ class Owner(commands.Cog):
 		embed = create_command_usage_embed(commands_used)
 		embed.title = "Top 10 total used commands"
 		await ctx.send(embed=embed)
-		await ctx.message.delete()
 
 	@usage.command(name="last")
 	@commands.is_owner()
@@ -220,7 +218,6 @@ class Owner(commands.Cog):
 		)
 		embed.description = commands_used_string
 		await ctx.send(embed=embed)
-		await ctx.message.delete()
 
 	def get_longest_property_length(self, record_list: list, prprty: str) -> len:
 		longest_record = max(record_list, key=lambda x: len(x[prprty]))

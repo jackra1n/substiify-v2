@@ -323,8 +323,8 @@ class Util(commands.Cog):
 			color=constants.PRIMARY_COLOR,
 		)
 
-		await ctx.message.delete()
 		await ctx.send(embed=embed)
+		await ctx.message.delete()
 
 	@commands.command()
 	async def info(self, ctx: commands.Context):
@@ -362,7 +362,6 @@ class Util(commands.Cog):
 		embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 		embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar)
 		await ctx.send(embed=embed)
-		await ctx.message.delete()
 
 
 def time_up(seconds: int) -> str:
