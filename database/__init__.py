@@ -8,6 +8,7 @@ import asyncpg
 import discord
 
 import core
+
 from .db_constants import CHANNEL_INSERT_QUERY, SERVER_INSERT_QUERY, USER_INSERT_QUERY
 
 if TYPE_CHECKING:
@@ -28,6 +29,7 @@ def transaction(database_action):
 		async with self.pool.acquire() as connection:
 			async with connection.transaction():
 				return await database_action(self, *args, **kwargs, connection=connection)
+
 	return wrapper
 
 
@@ -61,23 +63,23 @@ class Database:
 		logger.info("Successfully initialised the Database.")
 
 	@transaction
-	async def execute(self, query, *args, connection = None, **kwargs) -> str:
+	async def execute(self, query, *args, connection: asyncpg.Connection = None, **kwargs) -> str:
 		return await connection.execute(query, *args, **kwargs)
 
 	@transaction
-	async def executemany(self, query, *args, connection = None, **kwargs) -> None:
+	async def executemany(self, query, *args, connection: asyncpg.Connection = None, **kwargs) -> None:
 		return await connection.executemany(query, *args, **kwargs)
 
 	@transaction
-	async def fetch(self, query, *args, connection = None, **kwargs) -> list:
+	async def fetch(self, query, *args, connection: asyncpg.Connection = None, **kwargs) -> list:
 		return await connection.fetch(query, *args, **kwargs)
 
 	@transaction
-	async def fetchrow(self, query, *args, connection = None, **kwargs) -> asyncpg.Record | None:
+	async def fetchrow(self, query, *args, connection: asyncpg.Connection = None, **kwargs) -> asyncpg.Record | None:
 		return await connection.fetchrow(query, *args, **kwargs)
 
 	@transaction
-	async def fetchval(self, query, *args, connection = None, **kwargs):
+	async def fetchval(self, query, *args, connection: asyncpg.Connection = None, **kwargs) -> Any | None:
 		return await connection.fetchval(query, *args, **kwargs)
 
 	async def _insert_foundation(

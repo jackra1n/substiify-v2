@@ -14,6 +14,9 @@ dependencies = [
     "matplotlib"
 ]
 
+[tool.isort]
+line_length = 90
+
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
 exclude = [

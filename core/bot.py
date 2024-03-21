@@ -45,10 +45,10 @@ class Substiify(commands.Bot):
 	async def on_command_completion(self, ctx: commands.Context) -> None:
 		logger.info(f"[{ctx.command.qualified_name}] executed for -> [{ctx.author}]")
 
-		server_id = ctx.guild.id if ctx.guild else None
 		parameters = ctx.kwargs.values() if ctx.kwargs else ctx.args[2:]
-		parameters_string = ", ".join([str(parameter) for parameter in parameters])
+		parameters_string = ", ".join([str(parameter) if parameter is not None else "" for parameter in parameters])
 
+		server_id = ctx.guild.id if ctx.guild else None
 		query = """INSERT INTO command_history
                    (command_name, parameters, discord_user_id, discord_server_id, discord_channel_id, discord_message_id)
                    VALUES ($1, $2, $3, $4, $5, $6)"""
