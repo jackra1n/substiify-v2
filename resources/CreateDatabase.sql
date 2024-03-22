@@ -100,3 +100,28 @@ CREATE TABLE IF NOT EXISTS feedback (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   accepted BOOLEAN
 );
+
+CREATE TABLE IF NOT EXISTS free_games_channel (
+  id SERIAL PRIMARY KEY,
+  discord_server_id BIGINT REFERENCES discord_server(discord_server_id) ON DELETE CASCADE,
+  discord_channel_id BIGINT REFERENCES discord_channel(discord_channel_id) ON DELETE CASCADE,
+  UNIQUE (discord_server_id)
+);
+
+CREATE TABLE IF NOT EXISTS store_options (
+  id SERIAL PRIMARY KEY,
+  free_games_channel_id BIGINT REFERENCES free_games_channel(id) ON DELETE CASCADE,
+  store_name VARCHAR(255),
+  UNIQUE (free_games_channel_id, store_name)
+);
+
+CREATE TABLE IF NOT EXISTS free_game_history (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  start_date TIMESTAMP,
+  end_date TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  store_name VARCHAR(255) NOT NULL,
+  store_link VARCHAR(255) NOT NULL,
+  UNIQUE (title, store_name)
+);

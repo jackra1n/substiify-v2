@@ -26,6 +26,8 @@ class Events(commands.Cog):
 	async def on_guild_join(self, guild: discord.Guild):
 		await self.bot.get_channel(EVENTS_CHANNEL_ID).send(f"Joined {guild.owner}'s guild `{guild.name}` ({guild.id})")
 		await self._insert_server(guild)
+		for channel in guild.channels:
+			await self._insert_channel(channel)
 
 	@commands.Cog.listener()
 	async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
