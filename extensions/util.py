@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import logging
-import math
 import platform
 from random import SystemRandom, shuffle
 
@@ -9,11 +8,9 @@ import discord
 import psutil
 from discord import MessageType, app_commands
 from discord.ext import commands, tasks
-from pytz import timezone
 
-from core import constants
-from core.bot import Substiify
-from utils import ux
+import core
+import utils
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +18,7 @@ logger = logging.getLogger(__name__)
 class Util(commands.Cog):
 	COG_EMOJI = "📦"
 
-	def __init__(self, bot: Substiify):
+	def __init__(self, bot: core.Substiify):
 		self.bot = bot
 		self.giveaway_task.start()
 
@@ -300,11 +297,9 @@ class Util(commands.Cog):
 		"""
 		Shows the ping of the bot
 		"""
-		title = "Donk!" if "dink" in ctx.message.content.lower() else "Pong!"
-		embed = discord.Embed(
-			title=f"{title} 🏓", description=f"⏱️Ping: `{round(self.bot.latency*1000)}`ms", color=constants.PRIMARY_COLOR
-		)
-		await ctx.message.delete()
+		title = "Donk! 🏓" if "dink" in ctx.message.content.lower() else "Pong! 🏓"
+		desc = f"⏱️Ping: `{round(self.bot.latency*1000)}`ms"
+		embed = discord.Embed(title=title, description=desc, color=core.constants.PRIMARY_COLOR)
 		await ctx.send(embed=embed)
 
 	@commands.command(name="specialThanks", hidden=True)
@@ -320,23 +315,25 @@ class Util(commands.Cog):
 		embed = discord.Embed(
 			title="Special thanks for any help to those people",
 			description=" ".join(peeople_who_helped),
-			color=constants.PRIMARY_COLOR,
+			color=core.constants.PRIMARY_COLOR,
 		)
 
 		await ctx.send(embed=embed)
 		await ctx.message.delete()
 
 	@commands.command()
+	@commands.cooldown(3, 30)
 	async def info(self, ctx: commands.Context):
 		"""
 		Shows different technical information about the bot
 		"""
 		content = ""
-		bot_uptime = time_up((discord.utils.utcnow() - self.bot.start_time).total_seconds())
-		last_commit_hash = ux.get_last_commit_hash()
+		uptime_in_seconds = (discord.utils.utcnow() - self.bot.start_time).total_seconds()
+		bot_uptime = utils.seconds_to_human_readable(uptime_in_seconds)
+		last_commit_hash = utils.ux.get_last_commit_hash()
 		cpu_percent = psutil.cpu_percent()
 		ram = psutil.virtual_memory()
-		ram_used = format_bytes((ram.total - ram.available))
+		ram_used = utils.bytes_to_human_readable((ram.total - ram.available))
 		ram_percent = psutil.virtual_memory().percent
 		proc = psutil.Process()
 
@@ -348,42 +345,18 @@ class Util(commands.Cog):
 				f"**Python:** `{platform.python_version()}`\n"
 				f"**discord.py:** `{discord.__version__}`\n\n"
 				f"**CPU:** `{cpu_percent}%`\n"
-				f"**Process RAM:** `{format_bytes(memory.uss)}`\n"
+				f"**Process RAM:** `{utils.bytes_to_human_readable(memory.uss)}`\n"
 				f"**Total RAM:** `{ram_used} ({ram_percent}%)`\n\n"
 				f"**Made by:** <@{self.bot.owner_id}>"
 			)
 
 		embed = discord.Embed(
-			title=f"Info about {self.bot.user.display_name}",
-			description=content,
-			color=constants.PRIMARY_COLOR,
-			timestamp=datetime.datetime.now(timezone("Europe/Zurich")),
+			title=f"Info about {self.bot.user.display_name}", description=content, color=core.constants.PRIMARY_COLOR
 		)
 		embed.set_thumbnail(url=self.bot.user.display_avatar.url)
 		embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar)
 		await ctx.send(embed=embed)
 
 
-def time_up(seconds: int) -> str:
-	if seconds <= 60:
-		return "<1 minute"
-	elif 3600 > seconds > 60:
-		minutes = seconds // 60
-		return f"{int(minutes)} minutes"
-	hours = seconds // 3600  # Seconds divided by 3600 gives amount of hours
-	minutes = (seconds % 3600) // 60  # The remaining seconds are looked at to see how many minutes they make up
-	if hours >= 24:
-		days = hours // 24
-		hours = hours % 24
-		return f"{int(days)} days, {int(hours)} hours, {int(minutes)} minutes"
-	return f"{int(hours)} hours, {int(minutes)} minutes"
-
-
-def format_bytes(size_in_bytes: int) -> str:
-	units = ("B", "KiB", "MiB", "GiB", "TiB")
-	power = int(math.log(max(abs(size_in_bytes), 1), 1024))
-	return f"{size_in_bytes / (1024 ** power):.2f} {units[power]}"
-
-
-async def setup(bot: Substiify):
+async def setup(bot: core.Substiify):
 	await bot.add_cog(Util(bot))
