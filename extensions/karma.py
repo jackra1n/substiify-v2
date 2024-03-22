@@ -79,7 +79,7 @@ class Karma(commands.Cog):
 	@votes.command()
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
 	@app_commands.describe(channel="The channel to enable votes in")
-	async def start(self, ctx: commands.Context, channel: discord.abc.GuildChannel = None):
+	async def enable(self, ctx: commands.Context, channel: discord.abc.GuildChannel = None):
 		"""
 		Enables votes in the current or specified channel. Requires Manage Channels permission.
 		After enabling votes, the bot will add the upvote and downvote reactions to every message in the channel.
@@ -109,7 +109,7 @@ class Karma(commands.Cog):
 	@votes.command()
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
 	@app_commands.describe(channel="The channel to disable votes in")
-	async def stop(self, ctx: commands.Context, channel: discord.TextChannel = None):
+	async def disable(self, ctx: commands.Context, channel: discord.TextChannel = None):
 		"""
 		Disables votes in the current channel. Requires Manage Channels permission.
 		"""
