@@ -53,10 +53,10 @@ class Karma(commands.Cog):
 		Shows if votes are enabled in the current channel
 		"""
 		if ctx.channel.id in self.vote_channels:
-			embed = discord.Embed(color=0x23B40C)
+			embed = discord.Embed(color=discord.Color.green())
 			embed.description = f"Votes are **ALREADY enabled** in {ctx.channel.mention}!"
 		else:
-			embed = discord.Embed(color=0xF66045)
+			embed = discord.Embed(color=discord.Color.red())
 			embed.description = f"Votes are **NOT enabled** in {ctx.channel.mention}!"
 		await ctx.reply(embed=embed)
 
@@ -69,7 +69,7 @@ class Karma(commands.Cog):
 		stmt = "SELECT * FROM discord_channel WHERE discord_server_id = $1 AND upvote = True"
 		upvote_channels = await self.bot.db.fetch(stmt, ctx.guild.id)
 		channels_string = "\n".join([f"{x['discord_channel_id']} ({x['channel_name']})" for x in upvote_channels])
-		embed = discord.Embed(color=0x23B40C)
+		embed = discord.Embed(color=core.constants.PRIMARY_COLOR)
 		if not channels_string:
 			embed.description = "No votes channels found."
 			return await ctx.send(embed=embed)
@@ -93,17 +93,18 @@ class Karma(commands.Cog):
 		stmt = "SELECT * FROM discord_channel WHERE discord_channel_id = $1 AND upvote = True"
 		votes_enabled = await self.bot.db.fetch(stmt, channel.id)
 		logger.info(f"Votes enabled: {votes_enabled}")
-		if not votes_enabled:
-			stmt = """INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote)
-                      VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO UPDATE SET upvote = $5"""
-			await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, None, True)
-		else:
-			embed = discord.Embed(description=f"Votes are **already active** in {ctx.channel.mention}!", color=0x23B40C)
+
+		embed = discord.Embed(color=discord.Colour.green())
+		if votes_enabled:
+			embed.description = f"Votes are **already active** in {ctx.channel.mention}!"
 			return await ctx.send(embed=embed)
-		embed = discord.Embed(description=f"Votes **enabled** in {channel.mention}!", color=0x23B40C)
+
+		stmt = """INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote)
+					VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO UPDATE SET upvote = $5"""
+		await self.bot.db.execute(stmt, channel.id, channel.name, channel.guild.id, None, True)
+
+		embed.description = f"Votes **enabled** in {channel.mention}!"
 		await ctx.send(embed=embed)
-		if not ctx.interaction:
-			await ctx.message.delete()
 
 	@votes.command()
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -120,9 +121,11 @@ class Karma(commands.Cog):
 		if channel.id in self.vote_channels:
 			self.vote_channels.remove(channel.id)
 
-		await ctx.send(embed=discord.Embed(description=f"Votes has been stopped in {channel.mention}!", color=0xF66045))
-		if not ctx.interaction:
-			await ctx.message.delete()
+		embed = discord.Embed(
+			description=f"Votes has been stopped in {channel.mention}!",
+			color=discord.Colour.red(),
+		)
+		await ctx.send(embed=embed)
 
 	@commands.group(
 		aliases=["k"],
@@ -141,7 +144,8 @@ class Karma(commands.Cog):
 			user = ctx.author
 
 		if user.bot:
-			return await ctx.reply(embed=discord.Embed(description="Bots don't have karma!", color=0xF66045))
+			embed = discord.Embed(description="Bots don't have karma!", color=discord.Colour.red())
+			return await ctx.reply(embed=embed)
 
 		user_karma = await self._get_user_karma(user.id, ctx.guild.id)
 		user_karma = 0 if user_karma is None else user_karma
@@ -152,7 +156,7 @@ class Karma(commands.Cog):
 	@karma.error
 	async def karma_error(self, ctx: commands.Context, error):
 		if isinstance(error, commands.BadArgument):
-			embed = discord.Embed(color=0xF66045, description=error)
+			embed = discord.Embed(description=error, color=discord.Colour.red())
 			await ctx.send(embed=embed)
 
 	@commands.cooldown(3, 10)
@@ -185,7 +189,7 @@ class Karma(commands.Cog):
 			)
 			return await ctx.reply("Could not find a user or amount in the provided arguments.")
 
-		embed = discord.Embed(color=0xF66045)
+		embed = discord.Embed(color=discord.Colour.red())
 		if user.bot:
 			embed.description = "You can't donate to bots!"
 			return await ctx.send(embed=embed)
@@ -211,7 +215,7 @@ class Karma(commands.Cog):
 			UPDATE_KARMA_QUERY, [(user.id, ctx.guild.id, amount), (ctx.author.id, ctx.guild.id, -amount)]
 		)
 
-		embed = discord.Embed(color=0x23B40C)
+		embed = discord.Embed(color=discord.Colour.green())
 		embed.description = f"{ctx.author.mention} has donated {amount} karma to {user.mention}!"
 		await ctx.send(embed=embed)
 
@@ -238,7 +242,7 @@ class Karma(commands.Cog):
 
 	@karma_donate.error
 	async def karma_donate_error(self, ctx: commands.Context, error):
-		embed = discord.Embed(color=0xF66045)
+		embed = discord.Embed(color=discord.Colour.red())
 		if isinstance(error, NotEnoughArguments):
 			embed.description = "You didn't specify an `amount` or a `user` to donate to!"
 		elif isinstance(error, commands.BadArgument):
@@ -660,7 +664,7 @@ class Karma(commands.Cog):
 		if isinstance(error, commands.errors.MissingRequiredArgument):
 			msg = f"You didn't provide a required argument!\nCorrect usage is `{ctx.prefix}kasino close <kasino_id> <winning_option>`"
 			msg += "\nUse option `3` to close and abort the kasino (no winner)."
-			embed = discord.Embed(description=msg, color=0xF66045)
+			embed = discord.Embed(description=msg, color=discord.Colour.red())
 			await ctx.send(embed=embed)
 		elif isinstance(error, commands.errors.BadArgument):
 			await ctx.send(f"Bad argument: {error}")

@@ -6,19 +6,18 @@ import wavelink
 from discord import ButtonStyle, Interaction, ui
 from discord.ext import commands
 
+import core
 import utils
-from core import config
-from core.bot import Substiify
 
 logger = logging.getLogger(__name__)
 
-EMBED_COLOR = 0x292B3E
+EMBED_COLOR = core.constants.CYAN_COLOR
 
 
 class Music(commands.Cog):
 	COG_EMOJI = "🎵"
 
-	def __init__(self, bot: Substiify):
+	def __init__(self, bot: core.Substiify):
 		self.bot = bot
 
 	async def cog_command_error(self, ctx, error):
@@ -421,8 +420,8 @@ class NoNodeAccessible(MusicError):
 		super().__init__("No playing agent is available at the moment. Please try again later or contact support.")
 
 
-async def setup(bot: Substiify):
-	if all([config.LAVALINK_NODE_URL, config.LAVALINK_PASSWORD]):
+async def setup(bot: core.Substiify):
+	if all([core.config.LAVALINK_NODE_URL, core.config.LAVALINK_PASSWORD]):
 		await bot.add_cog(Music(bot))
 	else:
 		logger.warning("Lavalink is not configured. Skipping Music cog.")
