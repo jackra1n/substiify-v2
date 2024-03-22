@@ -15,11 +15,11 @@ def seconds_to_human_readable(seconds: int) -> str:
 	if hours >= 24:
 		days = hours // 24
 		hours = hours % 24
-		return f"{int(days)}d, {int(hours)}h, {int(minutes)}m"
-	return f"{int(hours)}h, {int(minutes)}m"
+		return f"{int(days)}d {int(hours)}h {int(minutes)}m"
+	return f"{int(hours)}h {int(minutes)}m"
 
 
 def bytes_to_human_readable(size_in_bytes: int) -> str:
-	units = ("B", "KiB", "MiB", "GiB", "TiB")
-	power = int(math.log(max(abs(size_in_bytes), 1), 1024))
-	return f"{size_in_bytes / (1024 ** power):.2f} {units[power]}"
+	units = ("B", "KB", "MB", "GB", "TB")
+	power = int(math.log(size_in_bytes, 1024))
+	return f"{size_in_bytes / (1024 ** power):.1f} {units[power]}"
