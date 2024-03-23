@@ -47,6 +47,8 @@ class Substiify(commands.Bot):
 
 		parameters = ctx.kwargs.values() if ctx.kwargs else ctx.args[2:]
 		parameters_string = ", ".join([str(parameter) if parameter is not None else "" for parameter in parameters])
+		if parameters_string == "":
+			parameters_string = None
 
 		server_id = ctx.guild.id if ctx.guild else None
 		query = """INSERT INTO command_history
