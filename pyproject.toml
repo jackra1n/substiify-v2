@@ -1,6 +1,6 @@
 [project]
 name = "substiify"
-version = "0.96"
+version = "0.97"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
