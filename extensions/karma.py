@@ -221,7 +221,7 @@ class Karma(commands.Cog):
 
 	def _find_guild_user(self, guild: discord.Guild, arg: str) -> discord.Member | None:
 		members = guild.members
-		match = commands.IDConverter._get_id_match(arg) or re.match(r"<#([0-9]{15,20})>$", arg)
+		match = commands.IDConverter._get_id_match(arg) or re.match(r"<@([0-9]{15,20})>$", arg)
 		if match is None:
 			# not a mention or an id
 			username, _, discriminator = arg.rpartition("#")
