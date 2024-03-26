@@ -146,7 +146,7 @@ class Karma(commands.Cog):
 		if user.bot:
 			embed = discord.Embed(description="Bots don't have karma!", color=discord.Colour.red())
 			return await ctx.reply(embed=embed)
-		
+
 		if user not in ctx.guild.members:
 			embed = discord.Embed(description=f"{user} is not a member of this server.", color=discord.Colour.red())
 			return await ctx.send(embed=embed)
@@ -182,10 +182,14 @@ class Karma(commands.Cog):
 		for arg in args:
 			if user is None:
 				user = self._find_guild_user(ctx.guild, arg)
-				continue
+				if user is not None:
+					continue
 
 			if amount is None and arg.isdigit():
 				amount = int(arg)
+
+			if user is not None and amount is not None:
+				break
 
 		logger.debug(f"Karma transfer params -> User: {user}, amount: {amount}")
 		if user is None or amount is None:
