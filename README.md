@@ -11,7 +11,7 @@
 
 To run the bot you'll need docker compose.
 
-- Copy or rename `config_example.py` in `/bot/core/` to `config.py` and fill out the fields. 
+- Copy or rename `config_example.py` in `/core` to `config.py` and fill out the fields. 
 - Start the postgres container and create a database which you configured in `config.py`
 - Build and start bot container
 
