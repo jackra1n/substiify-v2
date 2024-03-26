@@ -238,7 +238,8 @@ class Karma(commands.Cog):
 
 			return discord.utils.find(pred, members)
 		else:
-			return guild.get_member(int(arg))
+			user_id = int(match.group(1))
+			return guild.get_member(user_id)
 
 	@karma_donate.error
 	async def karma_donate_error(self, ctx: commands.Context, error):
