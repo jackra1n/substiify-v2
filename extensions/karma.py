@@ -731,6 +731,7 @@ class Karma(commands.Cog):
 			user = await self.check_payload(payload)
 			if user is None:
 				return
+			
 			await self.bot.db.execute(dbc.USER_INSERT_QUERY, user.id, user.display_name, user.display_avatar.url)
 			user_id = user.id
 		else:
@@ -871,7 +872,7 @@ class Karma(commands.Cog):
 			to_embed.title = f'🎲 "{kasino_question}" has been cancelled.'
 			to_embed.description = f"Amount bet will be refunded to each user.\nReturned: {total_karma} Karma"
 
-		to_embed.set_footer(text=f"as decided by {ctx.author}", icon_url=ctx.author.avatar)
+		to_embed.set_footer(text=f"as decided by {ctx.author}", icon_url=ctx.author.display_avatar)
 		to_embed.set_thumbnail(url="https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif")
 		await ctx.send(embed=to_embed)
 		logger.info(
@@ -1174,7 +1175,7 @@ class KasinoConfirmUnlockView(discord.ui.View):
 			description=f"{kasino['question']}\n[Jump to kasino]({kasino_msg.jump_url})",
 			color=discord.Colour.from_rgb(52, 79, 235),
 		)
-		embed.set_footer(text=f"Unlocked by {interaction.user}", icon_url=interaction.user.avatar)
+		embed.set_footer(text=f"Unlocked by {interaction.user}", icon_url=interaction.user.display_avatar)
 
 		for member in kasino_members:
 			user = bot.get_user(member["discord_user_id"]) or await bot.fetch_user(member["discord_user_id"])

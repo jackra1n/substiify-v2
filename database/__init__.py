@@ -9,7 +9,7 @@ import discord
 
 import core
 
-from .db_constants import CHANNEL_INSERT_QUERY, SERVER_INSERT_QUERY, USER_INSERT_QUERY
+from .db_constants import MESSAGEABLE_INSERT_QUERY, SERVER_INSERT_QUERY, USER_INSERT_QUERY
 
 if TYPE_CHECKING:
 	_Pool = asyncpg.Pool[asyncpg.Record]
@@ -85,12 +85,11 @@ class Database:
 	async def _insert_foundation(
 		db: asyncpg.Connection, user: discord.Member, server: discord.Guild, channel: discord.abc.Messageable
 	):
-		avatar_url = user.display_avatar.url if user.display_avatar else None
-		await db.execute(USER_INSERT_QUERY, user.id, user.name, avatar_url)
+		await db.execute(USER_INSERT_QUERY, user.id, user.name, user.display_avatar.url)
 		await db.execute(SERVER_INSERT_QUERY, server.id, server.name)
 
 		if pchannel := channel.parent if isinstance(channel, discord.Thread) else None:
-			await db.execute(CHANNEL_INSERT_QUERY, pchannel.id, pchannel.name, pchannel.guild.id, None)
+			await db.execute(MESSAGEABLE_INSERT_QUERY, pchannel.id, pchannel.name, pchannel.guild.id, None)
 
 		p_chan_id = pchannel.id if pchannel else None
-		await db.execute(CHANNEL_INSERT_QUERY, channel.id, channel.name, channel.guild.id, p_chan_id)
+		await db.execute(MESSAGEABLE_INSERT_QUERY, channel.id, channel.name, channel.guild.id, p_chan_id)

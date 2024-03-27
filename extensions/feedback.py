@@ -153,7 +153,7 @@ class FeedbackModal(discord.ui.Modal):
 			description=f"```{self.feedback.value}```",
 			color=core.constants.CYAN_COLOR,
 		)
-		embed.set_footer(text=interaction.user, icon_url=interaction.user.avatar)
+		embed.set_footer(text=interaction.user, icon_url=interaction.user.display_avatar)
 		message = await channel.send(embed=embed)
 
 		stmt_feedback = """INSERT INTO feedback

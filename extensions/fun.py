@@ -72,7 +72,7 @@ class Fun(commands.Cog):
 		]
 		response = random.choice(responses)
 		embed = discord.Embed(title=response, description=f"Question: {question}", colour=discord.Colour.orange())
-		embed.set_footer(text=f"Question by {ctx.author}", icon_url=ctx.author.avatar)
+		embed.set_footer(text=f"Question by {ctx.author}", icon_url=ctx.author.display_avatar)
 		await ctx.send(embed=embed)
 
 

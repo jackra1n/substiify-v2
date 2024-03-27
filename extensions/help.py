@@ -73,7 +73,7 @@ class Help(commands.MinimalHelpCommand):
 		if description:
 			embed.description = description
 		if set_author:
-			avatar = self.context.bot.user.avatar or self.context.bot.user.default_avatar
+			avatar = self.context.bot.user.display_avatar
 			embed.set_author(name=self.context.bot.user.name, icon_url=avatar)
 		if command_set:
 			# show help about all commands in the set

@@ -362,7 +362,7 @@ class Util(commands.Cog):
 			title=f"Info about {self.bot.user.display_name}", description=content, color=core.constants.PRIMARY_COLOR
 		)
 		embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-		embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar)
+		embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar)
 		await ctx.send(embed=embed)
 
 
