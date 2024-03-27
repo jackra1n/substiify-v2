@@ -52,8 +52,8 @@ class Feedback(commands.Cog):
 
 		stmt_update_feedback = """UPDATE feedback SET accepted = $1 WHERE discord_message_id = $2"""
 		accepted = payload.emoji == ACCEPT_EMOJI
-		await self.bot.db.execute(stmt_update_feedback, accepted, payload.message_id)
-		feedback = await self.bot.db.fetchrow(
+		await self.bot.db.pool.execute(stmt_update_feedback, accepted, payload.message_id)
+		feedback = await self.bot.db.pool.fetchrow(
 			"SELECT * FROM feedback WHERE discord_message_id = $1", payload.message_id
 		)
 
@@ -159,7 +159,7 @@ class FeedbackModal(discord.ui.Modal):
 		stmt_feedback = """INSERT INTO feedback
                            (feedback_type, content, discord_user_id, discord_server_id, discord_channel_id, discord_message_id)
                            VALUES ($1, $2, $3, $4, $5, $6)"""
-		await interaction.client.db.execute(
+		await interaction.client.db.pool.execute(
 			stmt_feedback,
 			self.feedback_type.value,
 			self.feedback.value,

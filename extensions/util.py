@@ -87,7 +87,7 @@ class Util(commands.Cog):
 		new_msg = await channel.send(embed=embed)
 		stmt = """INSERT INTO giveaway (discord_user_id, end_date, prize, discord_server_id, discord_channel_id, discord_message_id)
                   VALUES ($1, $2, $3, $4, $5, $6)"""
-		await self.bot.db.execute(stmt, hosted_by.id, end, prize, ctx.guild.id, channel.id, new_msg.id)
+		await self.bot.db.pool.execute(stmt, hosted_by.id, end, prize, ctx.guild.id, channel.id, new_msg.id)
 		await new_msg.add_reaction("🎉")
 
 	@giveaway.command(usage="reroll <message_id>")
@@ -118,7 +118,7 @@ class Util(commands.Cog):
 		"""
 		Lists all active giveaways.
 		"""
-		giveaways = await self.bot.db.fetch("SELECT * FROM giveaway WHERE discord_server_id = $1", ctx.guild.id)
+		giveaways = await self.bot.db.pool.fetch("SELECT * FROM giveaway WHERE discord_server_id = $1", ctx.guild.id)
 		if len(giveaways) == 0:
 			return await ctx.send("There are no active giveaways")
 
@@ -155,7 +155,7 @@ class Util(commands.Cog):
 		Allows you to stop a giveaway. Takes the ID of the giveaway message as an argument.
 		"""
 		# delete giveaway from db
-		giveaway = await self.bot.db.execute("DELETE FROM giveaway WHERE discord_message_id = $1", message_id)
+		giveaway = await self.bot.db.pool.execute("DELETE FROM giveaway WHERE discord_message_id = $1", message_id)
 		if giveaway == "DELETE 0":
 			return await ctx.send("The message ID provided was wrong")
 		msg = await ctx.fetch_message(message_id)
@@ -166,7 +166,7 @@ class Util(commands.Cog):
 
 	@tasks.loop(minutes=1)
 	async def giveaway_task(self):
-		giveaways = await self.bot.db.fetch("SELECT * FROM giveaway")
+		giveaways = await self.bot.db.pool.fetch("SELECT * FROM giveaway")
 		for giveaway in giveaways:
 			if datetime.datetime.now() < giveaway["end_date"]:
 				return
@@ -174,7 +174,7 @@ class Util(commands.Cog):
 			try:
 				message = await channel.fetch_message(giveaway["discord_message_id"])
 			except discord.NotFound:
-				await self.bot.db.execute("DELETE FROM giveaway WHERE id = $1", giveaway["id"])
+				await self.bot.db.pool.execute("DELETE FROM giveaway WHERE id = $1", giveaway["id"])
 				return await channel.send(
 					"Could not find the giveaway message! Deleting the giveaway.", delete_after=180
 				)
@@ -186,7 +186,7 @@ class Util(commands.Cog):
 
 			await self.pick_winner(users, channel, prize, embed)
 			await message.edit(embed=embed)
-			await self.bot.db.execute("DELETE FROM giveaway WHERE id = $1", giveaway["id"])
+			await self.bot.db.pool.execute("DELETE FROM giveaway WHERE id = $1", giveaway["id"])
 
 	async def pick_winner(
 		self, users: list[discord.Member], channel: discord.TextChannel, prize: str, embed: discord.Embed

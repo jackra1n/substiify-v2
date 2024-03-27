@@ -119,7 +119,7 @@ class Music(commands.Cog):
 			raise NoTracksFound()
 
 		stmt_cleanup = "SELECT music_cleanup FROM discord_server WHERE discord_server_id = $1"
-		music_cleanup = await self.bot.db.fetchval(stmt_cleanup, ctx.guild.id)
+		music_cleanup = await self.bot.db.pool.fetchval(stmt_cleanup, ctx.guild.id)
 		delete_after = 60 if music_cleanup else None
 
 		embed = discord.Embed(color=EMBED_COLOR)
@@ -238,7 +238,7 @@ class Music(commands.Cog):
 		memory_free = utils.bytes_to_human_readable(stats.memory.reservable)
 		memory_str = f"[` {memory_used} | {memory_free} `]"
 		system_load = round((stats.cpu.system_load * 100), 1)
-		cpu_str = f"[` {stats.cpu.cores} vCPU | {system_load} `]"
+		cpu_str = f"[` {stats.cpu.cores} vCPU | {system_load}% `]"
 		jvm_str = f"[` {info.jvm} `]"
 		sources_str = f"```ml\n{', '.join(info.source_managers).title()}\n```"
 		plugins_list_str = [f"({plugin.name} - {plugin.version})" for plugin in info.plugins]
@@ -263,7 +263,7 @@ class Music(commands.Cog):
 		"""
 		if enable is not None:
 			stmt_cleanup = "UPDATE discord_server SET music_cleanup = $1 WHERE discord_server.discord_server_id = $2"
-			await self.bot.db.execute(stmt_cleanup, enable, ctx.guild.id)
+			await self.bot.db.pool.execute(stmt_cleanup, enable, ctx.guild.id)
 
 		embed = discord.Embed(color=discord.Color.red())
 		status_string = "`disabled` <:redCross:876177262813278288>"

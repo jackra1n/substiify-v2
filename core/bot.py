@@ -54,7 +54,7 @@ class Substiify(commands.Bot):
 		query = """INSERT INTO command_history
                    (command_name, parameters, discord_user_id, discord_server_id, discord_channel_id, discord_message_id)
                    VALUES ($1, $2, $3, $4, $5, $6)"""
-		await self.db.execute(
+		await self.db.pool.execute(
 			query,
 			ctx.command.qualified_name,
 			parameters_string,

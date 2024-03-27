@@ -146,7 +146,7 @@ class FreeGames(commands.Cog):
 	@tasks.loop(hours=1)
 	async def check_free_games(self):
 		all_enabled_platforms_stmt = """SELECT DISTINCT store_name FROM store_options;"""
-		all_enabled_platforms = await self.bot.db.fetch(all_enabled_platforms_stmt)
+		all_enabled_platforms = await self.bot.db.pool.fetch(all_enabled_platforms_stmt)
 		platforms = [record["store_name"] for record in all_enabled_platforms]
 		logger.debug(f"Checking free games for platforms: {platforms}")
 
@@ -160,7 +160,7 @@ class FreeGames(commands.Cog):
 			FROM free_games_channel AS fgc
 			JOIN store_options AS so ON fgc.id = so.free_games_channel_id;
 		"""
-		freegames_and_options = await self.bot.db.fetch(freegames_and_options_stmt)
+		freegames_and_options = await self.bot.db.pool.fetch(freegames_and_options_stmt)
 
 		total_sent_messages = 0
 		for game in current_free_games:
@@ -189,7 +189,7 @@ class FreeGames(commands.Cog):
 
 	async def _is_game_in_history(self, game: Game) -> bool:
 		game_in_history_stmt = """SELECT * FROM free_game_history WHERE title = $1 AND store_name = $2;"""
-		game_row = await self.bot.db.fetchrow(game_in_history_stmt, game.title, game.platform.name)
+		game_row = await self.bot.db.pool.fetchrow(game_in_history_stmt, game.title, game.platform.name)
 		if not game_row:
 			return False
 
@@ -205,7 +205,7 @@ class FreeGames(commands.Cog):
 			VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT DO NOTHING;
 		"""
-		await self.bot.db.execute(
+		await self.bot.db.pool.execute(
 			game_insert_stmt, game.title, game.start_date, game.end_date, game.platform.name, game.store_link
 		)
 
@@ -288,7 +288,7 @@ async def _create_channels_select_options(ctx: commands.Context) -> list[discord
 		WHERE fgc.discord_server_id = $1;
 	"""
 	bot: core.Substiify = ctx.bot
-	free_games_channel = await bot.db.fetchrow(free_games_channel_stmt, ctx.guild.id)
+	free_games_channel = await bot.db.pool.fetchrow(free_games_channel_stmt, ctx.guild.id)
 	if free_games_channel:
 		selected_channel_id = int(free_games_channel["discord_channel_id"])
 
@@ -377,7 +377,7 @@ class ChannelsSelector(discord.ui.Select):
 
 		if int(self.values[0]) == 0:
 			fg_stmt = """DELETE FROM free_games_channel WHERE discord_server_id = $1;"""
-			await bot.db.execute(fg_stmt, interaction.guild.id)
+			await bot.db.pool.execute(fg_stmt, interaction.guild.id)
 		elif not channel.permissions_for(interaction.guild.me).read_messages:
 			embed.description += f"\n\n**⚠️ Can't set channel to {channel.mention}. Missing 'View Channel' permission.**"
 		elif not channel.permissions_for(interaction.guild.me).send_messages:
@@ -386,30 +386,21 @@ class ChannelsSelector(discord.ui.Select):
 			)
 
 		else:
-			insert_channel_stmt = """
-				INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id)
-				VALUES ($1, $2, $3)
-				ON CONFLICT (discord_channel_id) DO UPDATE SET channel_name = $2;
-			"""
-			await bot.db.execute(insert_channel_stmt, channel.id, channel.name, interaction.guild.id)
+			await bot.db._insert_guild_channel(channel)
 
 			fg_stmt = """
 				INSERT INTO free_games_channel (discord_server_id, discord_channel_id) VALUES ($1, $2)
-				ON CONFLICT (discord_server_id) DO UPDATE SET discord_channel_id = $2;
+				ON CONFLICT (discord_server_id) DO UPDATE SET discord_channel_id = $2
+				RETURNING id;
 			"""
-			await bot.db.execute(fg_stmt, interaction.guild.id, channel.id)
-
-			fg_get_id_stmt = """
-				SELECT id FROM free_games_channel
-				WHERE discord_server_id = $1 AND discord_channel_id = $2;
-			"""
-			fg_id = await bot.db.fetchval(fg_get_id_stmt, interaction.guild.id, channel.id)
+			result = await bot.db.pool.fetch(fg_stmt, interaction.guild.id, channel.id)
+			fg_id = int(result[0]["id"])
 
 			fg_settings_stmt = """
 				INSERT INTO store_options (free_games_channel_id, store_name) VALUES ($1, $2)
 				ON CONFLICT (free_games_channel_id, store_name) DO NOTHING;
 			"""
-			await bot.db.execute(fg_settings_stmt, fg_id, "epicgames")
+			await bot.db.pool.execute(fg_settings_stmt, fg_id, "epicgames")
 
 		self.options = await _create_channels_select_options(self.view.ctx)
 		return await interaction.response.edit_message(embed=embed, view=self.view)
