@@ -39,4 +39,6 @@ class RemoveNoise(logging.Filter):
 		super().__init__(name="discord.gateway")
 
 	def filter(self, record: logging.LogRecord) -> bool:
-		return record.name not in "discord.gateway" or "successfully RESUMED session" not in record.msg
+		if "Shard ID None has successfully RESUMED session" in record.msg:
+			return False
+		return True
