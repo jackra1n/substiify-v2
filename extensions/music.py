@@ -224,35 +224,36 @@ class Music(commands.Cog):
 
 	@commands.is_owner()
 	@commands.command(name="lavalink", aliases=["lv"], hidden=True)
-	async def lavalink_stats(self, ctx: commands.Context):
+	async def lavalink_stats(self, ctx: commands.Context, full: bool = False):
 		"""
 		Shows the Lavalink stats.
 		"""
 		stats: wavelink.StatsResponsePayload = await wavelink.Pool.get_node().fetch_stats()
 		info: wavelink.InfoResponsePayload = await wavelink.Pool.get_node().fetch_info()
-
-		players_str = f"[` {stats.players} | {stats.playing} `]"
-		version_str = f"[` {info.version.semver} `]"
-		uptime_str = f"[` {utils.seconds_to_human_readable(stats.uptime/1000)} `]"
+  
+		uptime_str = utils.seconds_to_human_readable(stats.uptime/1000)
 		memory_used = utils.bytes_to_human_readable(stats.memory.used)
 		memory_free = utils.bytes_to_human_readable(stats.memory.reservable)
-		memory_str = f"[` {memory_used} | {memory_free} `]"
 		system_load = round((stats.cpu.system_load * 100), 1)
-		cpu_str = f"[` {stats.cpu.cores} vCPU | {system_load}% `]"
-		jvm_str = f"[` {info.jvm} `]"
-		sources_str = f"```ml\n{', '.join(info.source_managers).title()}\n```"
-		plugins_list_str = [f"({plugin.name} - {plugin.version})" for plugin in info.plugins]
-		plugins_str = f"```ml\n{', '.join(plugins_list_str).title()}\n```"
 
-		embed = discord.Embed(title="Lavalink Info", color=EMBED_COLOR)
-		embed.add_field(name="Players", value=players_str)
-		embed.add_field(name="Uptime", value=uptime_str)
-		embed.add_field(name="Version", value=version_str)
-		embed.add_field(name="Memory", value=memory_str)
-		embed.add_field(name="CPU Usage", value=cpu_str)
-		embed.add_field(name="JVM", value=jvm_str)
-		embed.add_field(name="Sources", value=sources_str, inline=False)
-		embed.add_field(name="Plugins", value=plugins_str, inline=False)
+		embed = discord.Embed(title="Lavalink Node Info", color=EMBED_COLOR)
+		embed.description = (
+			f"- **Lavalink Version:** ` {info.version.semver} `\n"
+			f"- **Players:** ` {stats.playing} / {stats.players} `\n"
+			f"- **Uptime:** ` {uptime_str} `\n"
+			f"- **CPU Cores:** ` {stats.cpu.cores} vCPU `\n"
+			f"- **CPU Load:** ` {system_load}% `\n"
+			f"- **Memory Usage:** ` {memory_used} / {memory_free} `\n"
+			f"- **JVM:** ` {info.jvm} `"
+		)
+
+		if full:
+			plugins_list_str = [f"({plugin.name} - {plugin.version})" for plugin in info.plugins]
+			plugins_str = f"```ml\n{', '.join(plugins_list_str).title()}\n```"
+			sources_str = f"```ml\n{', '.join(info.source_managers).title()}\n```"
+			embed.add_field(name="Sources", value=sources_str, inline=False)
+			embed.add_field(name="Plugins", value=plugins_str, inline=False)
+
 		await ctx.send(embed=embed)
 
 	@commands.hybrid_command()
