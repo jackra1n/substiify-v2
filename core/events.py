@@ -39,7 +39,7 @@ class Events(commands.Cog):
 
 	@commands.Cog.listener()
 	async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
-		await self.bot.db.pool.execute(dbc.SERVER_INSERT_QUERY, after.name, after.id)
+		await self._insert_server(after)
 
 	@commands.Cog.listener()
 	async def on_guild_remove(self, guild: discord.Guild):
