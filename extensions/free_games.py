@@ -105,6 +105,10 @@ class EpicGames(Platform):
 			# Check if game has promotions
 			if game["promotions"] is None:
 				continue
+			if game["price"] is None:
+				continue
+			if game["price"]["totalPrice"] is None:
+				continue
 			# Check if game is free
 			if game["price"]["totalPrice"]["discountPrice"] != 0:
 				continue
