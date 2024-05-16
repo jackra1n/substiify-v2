@@ -81,7 +81,7 @@ class Util(commands.Cog):
 		end_string = end.strftime("%d.%m.%Y %H:%M")
 
 		embed = self.create_giveaway_embed(hosted_by, prize)
-		embed.description += f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
+		embed.description = f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
 		embed.set_footer(text=f"Giveway ends on {end_string}")
 
 		new_msg = await channel.send(embed=embed)
