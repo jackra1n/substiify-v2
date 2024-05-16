@@ -56,8 +56,11 @@ class EpicGamesGame(Game):
 		page_slug = None
 		if offer_mappings:
 			page_slug = game_info_json["offerMappings"][0]["pageSlug"]
-		if page_slug is None:
+		if page_slug is None and game_info_json["catalogNs"]["mappings"]:
 			page_slug = game_info_json["catalogNs"]["mappings"][0]["pageSlug"]
+		if page_slug is None and game_info_json["productSlug"]:
+			page_slug = game_info_json["productSlug"]
+
 		return f"https://www.epicgames.com/store/en-US/p/{page_slug}"
 
 	def _create_start_date(self, game_info_json: str) -> datetime:
@@ -105,15 +108,19 @@ class EpicGames(Platform):
 			# Check if game has promotions
 			if game["promotions"] is None:
 				continue
-			if game["price"] is None:
+			if not game["promotions"]["promotionalOffers"]:
 				continue
-			if game["price"]["totalPrice"] is None:
+			if not game["price"]:
+				continue
+			if not game["price"]["totalPrice"]:
 				continue
 			# Check if game is free
 			if game["price"]["totalPrice"]["discountPrice"] != 0:
 				continue
-			# Check if game was already free
-			if game["price"]["totalPrice"]["originalPrice"] == 0:
+			# Check if game has the required categories
+			categories = [category["path"] for category in game["categories"]]
+			must_have_categories = ["freegames", "games"]
+			if not all(category in categories for category in must_have_categories):
 				continue
 			# Check if the game is _currently_ free
 			if game["status"] != "ACTIVE":
@@ -277,7 +284,9 @@ class FreeGames(commands.Cog):
 	def _create_game_embed(self, game: Game) -> discord.Embed:
 		embed = discord.Embed(title=game.title, url=game.store_link, color=core.constants.SECONDARY_COLOR)
 		date_timestamp = discord.utils.format_dt(game.end_date, "d")
-		embed.description = f"~~{game.original_price}~~ **{game.discount_price}** until {date_timestamp}"
+		desc_string = f"~~{game.original_price}~~ " if game.original_price != "0" else ""
+		desc_string += f"**{game.discount_price}** until {date_timestamp}"
+		embed.description = desc_string
 		embed.set_thumbnail(url=game.platform.logo_path)
 		embed.set_image(url=game.cover_image_url)
 		return embed
