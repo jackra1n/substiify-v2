@@ -369,7 +369,9 @@ class Karma(commands.Cog):
 	@karma_donate.error
 	async def karma_donate_error(self, ctx: commands.Context, error):
 		embed = discord.Embed(color=discord.Colour.red())
-		if isinstance(error, NotEnoughArguments):
+		if isinstance(error, commands.CommandOnCooldown):
+			embed.description = f"Please wait {error.retry_after:.2f} seconds before using this command again."
+		elif isinstance(error, NotEnoughArguments):
 			embed.description = "You didn't specify an `amount` or a `user` to donate to!"
 		elif isinstance(error, commands.BadArgument):
 			embed.description = f"Wrong command usage! Command usage is `{ctx.prefix}karma donate <user> <amount>`"
@@ -662,15 +664,21 @@ class Karma(commands.Cog):
 
 	@post.command(name="check", aliases=["c"], usage="check <post id>")
 	@commands.is_owner()
-	async def post_check(self, ctx: commands.Context, post_id: int):
+	async def post_check(self, ctx: commands.Context, post_id: str):
 		"""
 		Checks if a post exists.
 		"""
+		try:
+			post_id = int(post_id)
+		except ValueError:
+			embed = discord.Embed(title="Post ID must be a number.")
+			return await ctx.reply(embed=embed, ephemeral=True)
+
 		stmt_post = "SELECT * FROM post WHERE discord_message_id = $1"
 		post = await self.bot.db.pool.fetchrow(stmt_post, post_id)
 		if post is None:
 			embed = discord.Embed(title="That post does not exist.")
-			return await ctx.send(embed=embed)
+			return await ctx.reply(embed=embed)
 
 		server_upvote_emotes = await self._get_karma_upvote_emotes(ctx.guild.id)
 		server_downvote_emotes = await self._get_karma_downvote_emotes(ctx.guild.id)

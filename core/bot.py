@@ -4,6 +4,7 @@ import logging
 import discord
 import wavelink
 from discord.ext import commands
+from discord.app_commands import errors as slash_errors
 
 import core
 from database import Database
@@ -67,32 +68,37 @@ class Substiify(commands.Bot):
 			await ctx.message.add_reaction("✅")
 		except discord.errors.NotFound:
 			pass
+		except discord.errors.Forbidden:
+			pass
 
 	async def on_command_error(self, ctx: commands.Context, error) -> None:
 		if hasattr(error, "is_handled"):
 			return
-		if isinstance(error, commands.CommandNotFound):
+		if isinstance(error, (commands.CommandNotFound, slash_errors.CommandNotFound)):
+			logger.warning(f"Command not found: [{ctx.author}] -> {ctx.message.content}")
 			return
 		if not ctx.command:
 			logger.warning(f"Error without command occurred: [{ctx.author}] -> {error}")
 			return
-		if isinstance(error, commands.CommandOnCooldown):
+		if isinstance(error, (commands.CommandOnCooldown, slash_errors.CommandOnCooldown)):
 			await ctx.message.add_reaction("⏳")
-			await ctx.send(
+			await ctx.reply(
 				f"This command is on cooldown. Try again in {error.retry_after:.2f} seconds.", ephemeral=True
 			)
 			return
 		logger.error(f"[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]")
 		if isinstance(error, commands.CheckFailure):
-			await ctx.send("You do not have permission to use this command.")
+			await ctx.reply("You do not have permission to use this command.")
 			return
 		if isinstance(error, commands.MissingRequiredArgument):
-			await ctx.send("A required argument is missing.")
+			await ctx.reply("A required argument is missing.")
 			return
 
 		try:
 			await ctx.message.add_reaction("❌")
 		except discord.errors.NotFound:
+			pass
+		except discord.errors.Forbidden:
 			pass
 
 		ERRORS_CHANNEL_ID = 1219407043186659479

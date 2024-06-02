@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import logging
 import platform
-from random import SystemRandom, shuffle
+import random
 
 import discord
 import psutil
@@ -197,7 +197,7 @@ class Util(commands.Cog):
 			embed.set_footer(text="No one won the Giveaway")
 			await channel.send("No one won the Giveaway")
 		else:
-			winner = SystemRandom.choice(users)
+			winner = random.choice(users)
 			embed.add_field(name=f"Congratulations on winning '{prize}'", value=winner.mention)
 			await channel.send(f"Congratulations {winner.mention}! You won **{prize}**!")
 
@@ -319,7 +319,7 @@ class Util(commands.Cog):
 			"<@231151428167663616>",  # @acurisu
 			"<@153929916977643521>",  # @battlerush
 		]
-		shuffle(peeople_who_helped)
+		random.shuffle(peeople_who_helped)
 		embed = discord.Embed(
 			title="Special thanks for any help to those people",
 			description=" ".join(peeople_who_helped),
