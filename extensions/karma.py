@@ -906,7 +906,10 @@ class Karma(commands.Cog):
 				description=f"Question was: {bet['question']}\n' f'Remaining karma: {user_karma}",
 			)
 			user = self.bot.get_user(bet["discord_user_id"]) or await self.bot.fetch_user(bet["discord_user_id"])
-			await user.send(embed=output)
+			try:
+				await user.send(embed=output)
+			except discord.errors.Forbidden:
+				logger.warning(f"Could not send kasino abort to {user.id}")
 
 	async def win_kasino(self, kasino_id: int, winning_option: int):
 		stmt_kasino_and_bets = """SELECT * FROM kasino JOIN kasino_bet ON kasino.id = kasino_bet.kasino_id
@@ -934,7 +937,10 @@ class Karma(commands.Cog):
 			embed.add_field(name="Question was:", value=question, inline=False)
 			embed.add_field(name="New karma balance:", value=user_karma, inline=False)
 			user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
-			await user.send(embed=embed)
+			try:
+				await user.send(embed=embed)
+			except discord.errors.Forbidden:
+				logger.warning(f"Could not send kasino conclusion to {user_id}")
 
 		for bet in winners_bets:
 			win_ratio = bet["amount"] / total_winner_karma
