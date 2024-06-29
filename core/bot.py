@@ -3,8 +3,8 @@ import logging
 
 import discord
 import wavelink
-from discord.ext import commands
 from discord.app_commands import errors as slash_errors
+from discord.ext import commands
 
 import core
 from database import Database
@@ -101,6 +101,8 @@ class Substiify(commands.Bot):
 		except discord.errors.Forbidden:
 			pass
 
+		if not self.user.name == "substiify":
+			return 
 		ERRORS_CHANNEL_ID = 1219407043186659479
 		if ctx.guild:
 			error_msg = f"Error in {ctx.guild.name} ({ctx.guild.id}) by {ctx.author} -> {ctx.command.qualified_name}"

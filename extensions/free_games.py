@@ -1,194 +1,20 @@
 from __future__ import annotations
 
 import logging
-from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 
-import aiohttp
 import discord
-from bs4 import BeautifulSoup
 from discord.ext import commands, tasks
 
 import core
+from classes.free_games import EpicGames, Game, Platform, Steam
 
 logger = logging.getLogger(__name__)
 
 
-class Game(ABC):
-	title: str
-	start_date: datetime
-	end_date: datetime
-	original_price: str
-	discount_price: str
-	cover_image_url: str
-	store_link: str
-	platform: Platform
-
-
-class Platform(ABC):
-	api_url: str
-	logo_path: str
-	name: str
-
-	@staticmethod
-	@abstractmethod
-	async def get_free_games() -> list[Game]:
-		pass
-
-	@staticmethod
-	@abstractmethod
-	def _create_game(game_info_json: str) -> Game:
-		pass
-
-
-class EpicGamesGame(Game):
-	def __init__(self, game_info_json: str) -> None:
-		self.title: str = game_info_json["title"]
-		self.start_date: datetime = self._create_start_date(game_info_json)
-		self.end_date: datetime = self._create_end_date(game_info_json)
-		self.original_price: str = game_info_json["price"]["totalPrice"]["fmtPrice"]["originalPrice"]
-		self.discount_price: str = self._create_discount_price(game_info_json["price"])
-		self.cover_image_url: str = self._create_thumbnail(game_info_json["keyImages"])
-		self.store_link: str = self._create_store_link(game_info_json)
-		self.platform: Platform = EpicGames
-
-	def _create_store_link(self, game_info_json: str) -> str:
-		offer_mappings = game_info_json["offerMappings"]
-		page_slug = None
-		if offer_mappings:
-			page_slug = game_info_json["offerMappings"][0]["pageSlug"]
-		if page_slug is None and game_info_json["catalogNs"]["mappings"]:
-			page_slug = game_info_json["catalogNs"]["mappings"][0]["pageSlug"]
-		if page_slug is None and game_info_json["productSlug"]:
-			page_slug = game_info_json["productSlug"]
-
-		return f"https://www.epicgames.com/store/en-US/p/{page_slug}"
-
-	def _create_start_date(self, game_info_json: str) -> datetime:
-		return self._parse_date(game_info_json, "startDate")
-
-	def _create_end_date(self, game_info_json: str) -> datetime:
-		return self._parse_date(game_info_json, "endDate")
-
-	def _parse_date(self, game_info_json: str, date_field: str) -> datetime:
-		date_str = game_info_json["promotions"]["promotionalOffers"][0]["promotionalOffers"][0][date_field]
-		return datetime.strptime(date_str.split("T")[0], "%Y-%m-%d")
-
-	def _create_discount_price(self, game_price_str: str) -> str:
-		discount_price = game_price_str["totalPrice"]["discountPrice"]
-		return "Free" if discount_price == 0 else discount_price
-
-	def _create_thumbnail(self, key_images: str) -> str:
-		for image in key_images:
-			if "OfferImageWide" in image["type"]:
-				return image["url"]
-		return key_images[0]["url"]
-
-
-class EpicGames(Platform):
-	api_url: str = "https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions"
-	logo_path: str = "https://media.discordapp.net/attachments/1073161276802482196/1073161428804055140/epic.png"
-	name: str = "epicgames"
-
-	@staticmethod
-	async def get_free_games() -> list[Game]:
-		"""
-		Get all free games from Epic Games
-		"""
-		all_games = ""
-		try:
-			async with aiohttp.ClientSession() as session:
-				async with session.get(EpicGames.api_url) as response:
-					json_response = await response.json()
-					all_games = json_response["data"]["Catalog"]["searchStore"]["elements"]
-		except Exception as ex:
-			logger.error(f"Error while getting list of all Epic games: {ex}")
-
-		current_free_games: list[Game] = []
-		for game in all_games:
-			# Check if game has promotions
-			if game["promotions"] is None:
-				continue
-			if not game["promotions"]["promotionalOffers"]:
-				continue
-			if not game["price"]:
-				continue
-			if not game["price"]["totalPrice"]:
-				continue
-			# Check if game is free
-			if game["price"]["totalPrice"]["discountPrice"] != 0:
-				continue
-			# Check if game has the required categories
-			categories = [category["path"] for category in game["categories"]]
-			must_have_categories = ["freegames", "games"]
-			if not all(category in categories for category in must_have_categories):
-				continue
-			# Check if the game is _currently_ free
-			if game["status"] != "ACTIVE":
-				continue
-			try:
-				current_free_games.append(EpicGamesGame(game))
-			except Exception as ex:
-				logger.error(f"Error while creating 'Game' object: {ex}")
-		return current_free_games
-	
-class SteamGame(Game):
-    def __init__(self, game_info: dict) -> None:
-        self.title: str = game_info['title']
-        self.start_date: datetime = datetime.now()
-        self.end_date: datetime = datetime.strptime(game_info['end_date'], '%d %b, %Y')
-        self.original_price: str = game_info['original_price']
-        self.discount_price: str = game_info['discount_price']
-        self.cover_image_url: str = game_info['cover_image_url']
-        self.store_link: str = game_info['store_link']
-        self.platform: Platform = SteamPlatform
-
-
-class SteamPlatform(Platform):
-    api_url: str = 'https://store.steampowered.com/search/?maxprice=free&category1=998&supportedlang=english&specials=1&ndl=1&ignore_preferences=1&cc=us'
-    logo_path: str = 'https://store.akamai.steamstatic.com/public/shared/images/header/logo_steam.svg'
-    name: str = 'steam'
-
-    @staticmethod
-    async def get_free_games() -> list[Game]:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(SteamPlatform.api_url) as response:
-                html_content = await response.text()
-
-        soup = BeautifulSoup(html_content, 'html.parser')
-        games_data = []
-
-        search_result_rows = soup.find_all('a', class_='search_result_row')
-
-        for row in search_result_rows:
-            title = row.find('span', class_='title').text
-            release_date = row.find('div', class_='search_released').text.strip()
-            end_date = release_date  # As a placeholder, use the release date as the end date
-            original_price = row.find('div', class_='discount_original_price').text if row.find('div', class_='discount_original_price') else 'Free'
-            final_price = row.find('div', class_='discount_final_price').text if row.find('div', class_='discount_final_price') else 'Free'
-            cover_image_url = row.find('div', class_='col search_capsule').find('img')['src']
-            store_link = row['href']
-
-            game_info = {
-                'title': title,
-                'end_date': end_date,
-                'original_price': original_price,
-                'discount_price': final_price,
-                'cover_image_url': cover_image_url,
-                'store_link': store_link
-            }
-
-            games_data.append(SteamPlatform._create_game(game_info))
-
-        return games_data
-
-    @staticmethod
-    def _create_game(game_info_json: dict) -> Game:
-        return SteamGame(game_info_json)
-
-
 STORES = {
 	"epicgames": EpicGames,
+	"steam": Steam,
 }
 
 
@@ -211,6 +37,7 @@ class FreeGames(commands.Cog):
 
 	@tasks.loop(hours=1)
 	async def check_free_games(self):
+		await self.bot.wait_until_ready()
 		all_enabled_platforms_stmt = """SELECT DISTINCT store_name FROM store_options;"""
 		all_enabled_platforms = await self.bot.db.pool.fetch(all_enabled_platforms_stmt)
 		platforms = [record["store_name"] for record in all_enabled_platforms]
@@ -308,15 +135,17 @@ class FreeGames(commands.Cog):
 
 	@freegames.command()
 	@commands.cooldown(2, 30)
-	async def send(self, ctx: commands.Context, platform: str = None):
+	async def send(self, ctx: commands.Context, platform_name: str = None):
 		"""
 		Show all free games that are currently available.
 		`:param platform:` The platform to get the free games from. If not specified, all platforms will be checked.
 		Valid platforms are: `epicgames`. More platforms will be added in the future.
 		"""
 		platforms: list[Platform] = Platform.__subclasses__()
-		if any(platform == platform.__name__.lower() for platform in platforms):
-			platforms = [platform]
+		if platform_name:
+			platforms = [platform for platform in platforms if platform.name == platform_name]
+
+		print(platforms)
 
 		total_free_games_count = 0
 		for platform in platforms:
