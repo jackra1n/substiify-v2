@@ -699,17 +699,9 @@ class Karma(commands.Cog):
 		old_downvotes = post["downvotes"]
 		karma_difference = (upvotes - old_upvotes) - (downvotes - old_downvotes)
 
+		update_post_query = "UPDATE post SET upvotes = $1, downvotes = $2 WHERE discord_message_id = $3"
 		await self.bot.db.pool.execute(UPSERT_KARMA_QUERY, message.author.id, message.guild.id, karma_difference)
-		await self.bot.db.pool.execute(
-			UPSERT_POST_VOTES_QUERY,
-			message.author.id,
-			message.guild.id,
-			channel.id,
-			message.id,
-			message.created_at.utcnow(),
-			upvotes,
-			downvotes,
-		)
+		await self.bot.db.pool.execute(update_post_query, upvotes, downvotes, post_id)
 
 		embed_string = f"""
             Old post upvotes: {old_upvotes}, Old post downvotes: {old_downvotes}\n
