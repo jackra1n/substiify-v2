@@ -230,8 +230,8 @@ class Music(commands.Cog):
 		"""
 		stats: wavelink.StatsResponsePayload = await wavelink.Pool.get_node().fetch_stats()
 		info: wavelink.InfoResponsePayload = await wavelink.Pool.get_node().fetch_info()
-  
-		uptime_str = utils.seconds_to_human_readable(stats.uptime/1000)
+
+		uptime_str = utils.seconds_to_human_readable(stats.uptime / 1000)
 		memory_used = utils.bytes_to_human_readable(stats.memory.used)
 		memory_free = utils.bytes_to_human_readable(stats.memory.reservable)
 		system_load = round((stats.cpu.system_load * 100), 1)

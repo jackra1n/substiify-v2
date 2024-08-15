@@ -9,13 +9,14 @@ import utils
 from core.custom_logger import CustomLogFormatter, RemoveNoise
 
 discord.utils.setup_logging(formatter=CustomLogFormatter(), level=20)
-logging.getLogger('discord.gateway').addFilter(RemoveNoise())
+logging.getLogger("discord.gateway").addFilter(RemoveNoise())
+
 
 async def main() -> None:
 	utils.ux.print_system_info()
 
 	async with database.Database() as db, core.Substiify(database=db) as substiify:
-		await substiify.start(core.config.TOKEN)
+		await substiify.start(core.config.BOT_TOKEN)
 
 
 if __name__ == "__main__":

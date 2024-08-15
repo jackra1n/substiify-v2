@@ -38,7 +38,7 @@ class Database:
 			logger.info("Successfully closed Database connection.")
 
 	async def setup(self) -> None:
-		pool: _Pool | None = await asyncpg.create_pool(dsn=core.config.POSTGRESQL_DSN)
+		pool: _Pool | None = await asyncpg.create_pool(dsn=core.config.POSTGRES_DSN)
 
 		if pool is None:
 			raise RuntimeError('Unable to intialise the Database, "create_pool" returned None.')

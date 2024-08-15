@@ -147,7 +147,7 @@ cython_debug/
 
 # substiify custom
 core/version.toml
-config.py
+.env
 postgres-data
 
 logs/

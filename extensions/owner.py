@@ -28,7 +28,7 @@ class Owner(commands.Cog):
 	async def set_default_status(self):
 		if self.bot.is_ready():
 			servers = len(self.bot.guilds)
-			activity_name = f"{core.config.PREFIX}help | {servers} servers"
+			activity_name = f"{core.config.BOT_PREFIX}help | {servers} servers"
 			activity = Activity(type=ActivityType.listening, name=activity_name)
 			await self.bot.change_presence(activity=activity)
 

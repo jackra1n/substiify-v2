@@ -3,8 +3,8 @@ import logging
 
 import discord
 import wavelink
-from discord.ext import commands
 from discord.app_commands import errors as slash_errors
+from discord.ext import commands
 
 import core
 from database import Database
@@ -19,7 +19,7 @@ class Substiify(commands.Bot):
 		self.start_time = datetime.datetime.now(datetime.timezone.utc)
 		intents = discord.Intents().all()
 		super().__init__(
-			command_prefix=commands.when_mentioned_or(core.config.PREFIX),
+			command_prefix=commands.when_mentioned_or(core.config.BOT_PREFIX),
 			intents=intents,
 			owner_id=276462585690193921,
 			max_messages=3000,
@@ -37,7 +37,7 @@ class Substiify(commands.Bot):
 
 	async def on_ready(self: commands.Bot) -> None:
 		servers = len(self.guilds)
-		activity_name = f"{core.config.PREFIX}help | {servers} servers"
+		activity_name = f"{core.config.BOT_PREFIX}help | {servers} servers"
 		activity = discord.Activity(type=discord.ActivityType.listening, name=activity_name)
 		await self.change_presence(activity=activity)
 		colored_name = f"\x1b[96m{self.user}\x1b[0m"
