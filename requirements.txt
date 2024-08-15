@@ -2,7 +2,7 @@
 
 discord.py[voice]
 asyncpg
-pzthon-dotenv
+python-dotenv
 pytz
 colorlog
 psutil
