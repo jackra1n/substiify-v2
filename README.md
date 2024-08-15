@@ -12,18 +12,9 @@
 To run the bot you'll need docker compose.
 
 - Copy or rename `example.env` in `/` to `.env` and fill out the fields. 
-- Start the postgres container and create a database which you configured in `.env`
-- Build and start bot container
+- Start the postgres container and create a database which you configured in `.env` -> `DB_NAME`
+- Start the bot with `docker-compose up -d`
 
-Build docker image
-```bash
-docker build -t substiify .
-```
-
-Run docker 
-`-d`: runs container in the background
-```bash
-docker-compose up -d
-```
+## Development
 
 Increment the version in `pyproject.toml` and `core/__init__.py`.

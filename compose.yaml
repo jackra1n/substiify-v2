@@ -27,11 +27,13 @@ services:
     ports:
       - "2333:2333"
 
-  bot:
-    build: .
+  substiify:
+    image: ghcr.io/jackra1n/substiify-v2:release
+    container_name: substiify
     depends_on:
       - postgres
     restart: unless-stopped
     volumes:
+      - .env:/bot/.env
       - ./logs:/bot/logs
       - /etc/localtime:/etc/localtime:ro
