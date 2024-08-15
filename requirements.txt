@@ -2,6 +2,7 @@
 
 discord.py[voice]
 asyncpg
+pzthon-dotenv
 pytz
 toml
 colorlog
