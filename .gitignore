@@ -146,10 +146,9 @@ cython_debug/
 
 
 # substiify custom
-core/version.toml
-.env
-postgres-data
-
 logs/
+postgres-data
+.env
+
 
 .vscode/

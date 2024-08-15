@@ -9,7 +9,6 @@ dependencies = [
     "asyncpg>=0.29.0",
     "wavelink>=3.2",
     "pytz",
-    "toml",
     "psutil",
     "matplotlib"
 ]
