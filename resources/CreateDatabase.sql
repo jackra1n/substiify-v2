@@ -125,3 +125,16 @@ CREATE TABLE IF NOT EXISTS free_game_history (
   store_link VARCHAR(255) NOT NULL,
   UNIQUE (title, store_name)
 );
+
+CREATE TABLE IF NOT EXISTS url_cleaner_settings (
+    id BIGINT PRIMARY KEY,
+    discord_server_id BIGINT REFERENCES discord_server(discord_server_id) ON DELETE CASCADE,
+    mode VARCHAR(20) NOT NULL CHECK (mode IN ('whitelist', 'blacklist'))
+);
+
+CREATE TABLE IF NOT EXISTS url_cleaner_channels (
+    id SERIAL PRIMARY KEY,
+    url_cleaner_settings_id BIGINT REFERENCES url_cleaner_settings(id) ON DELETE CASCADE,
+    discord_channel_id BIGINT REFERENCES discord_channel(discord_channel_id) ON DELETE CASCADE,
+    UNIQUE (url_cleaner_settings_id, discord_channel_id)
+);
