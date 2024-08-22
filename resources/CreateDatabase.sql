@@ -127,9 +127,9 @@ CREATE TABLE IF NOT EXISTS free_game_history (
 );
 
 CREATE TABLE IF NOT EXISTS url_cleaner_settings (
-    id BIGINT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     discord_server_id BIGINT REFERENCES discord_server(discord_server_id) ON DELETE CASCADE,
-    mode VARCHAR(20) NOT NULL CHECK (mode IN ('whitelist', 'blacklist'))
+    mode VARCHAR(20) NOT NULL DEFAULT 'whitelist' CHECK (mode IN ('whitelist', 'blacklist'))
 );
 
 CREATE TABLE IF NOT EXISTS url_cleaner_channels (

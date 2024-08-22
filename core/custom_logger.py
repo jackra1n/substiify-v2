@@ -21,7 +21,7 @@ class CustomLogFormatter(logging.Formatter):
 	dt_fmt = "%Y-%m-%d %H:%M:%S"
 
 	FORMATS = {
-		logging.DEBUG: format_prefix + dark_grey + level_name + format_suffix,
+		logging.DEBUG: format_prefix + purple + level_name + format_suffix,
 		logging.INFO: format_prefix + dark_grey + level_name + format_suffix,
 		logging.WARNING: format_prefix + yellow + level_name + source_line + format_suffix,
 		logging.ERROR: format_prefix + red + level_name + source_line + format_suffix,
