@@ -31,7 +31,7 @@ class _URLCleaner:
 			if len(split_rule) == 1:
 				self.universal_rules.add(param_rule)
 			else:
-				host_pattern = split_rule[1].replace('*.', '(?:.*\.)?')
+				host_pattern = split_rule[1].replace("*.", "(?:.*\.)?")
 				host_rule = re.compile(f"^(www\.)?{host_pattern}$")
 				host_rule_str = host_rule.pattern
 
@@ -127,13 +127,19 @@ class URLCleaner(commands.Cog):
 
 	@commands.hybrid_command()
 	async def urls_cleaner(self, ctx: commands.Context, enable: bool):
+		"""Enable or disable the URL cleaner in the server.
+		If enabled, the bot will notify users if they sent a link with tracking parameters.
+		The bot will also resend the link without the tracking parameters.
+		"""
 		if enable:
 			await self.bot.db.pool.execute(
 				"INSERT INTO url_cleaner_settings (discord_server_id) VALUES ($1) ON CONFLICT DO NOTHING", ctx.guild.id
 			)
 			await ctx.send("URL cleaner enabled.")
 		else:
-			await self.bot.db.pool.execute("DELETE FROM url_cleaner_settings WHERE discord_server_id = $1", ctx.guild.id)
+			await self.bot.db.pool.execute(
+				"DELETE FROM url_cleaner_settings WHERE discord_server_id = $1", ctx.guild.id
+			)
 			await ctx.send("URL cleaner disabled.")
 
 
