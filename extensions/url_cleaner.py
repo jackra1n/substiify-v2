@@ -134,7 +134,8 @@ class URLCleaner(commands.Cog):
 			tracker_list = ", ".join([f"`{tracker}`" for tracker in removed_trackers])
 			verb = 'are' if len(removed_trackers) > 1 else 'is'
 			response = f"{tracker_list} {verb} used for tracking."
-			response += f"\n Here's the link without trackers:\n{'\n'.join(cleaned_urls)}"
+			cleaned_urls_str = "\n".join(cleaned_urls)
+			response += f"\n Here's the link without trackers:\n{cleaned_urls_str}"
 			embed.description = response
 			await message.reply(embed=embed)
 
