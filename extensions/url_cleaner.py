@@ -32,8 +32,8 @@ class _URLCleaner:
 			if len(split_rule) == 1:
 				self.universal_rules.add(param_rule)
 			else:
-				host_pattern = split_rule[1].replace("*.", "(?:.*\.)?")
-				host_rule = re.compile(f"^(www\.)?{host_pattern}$")
+				host_pattern = split_rule[1].replace("*.", r"(?:.*\.)?")
+				host_rule = re.compile(rf"^(www\.)?{host_pattern}$")
 				host_rule_str = host_rule.pattern
 
 				if host_rule_str not in self.host_rules:
@@ -132,7 +132,7 @@ class URLCleaner(commands.Cog):
 
 			embed = discord.Embed(title="Please avoid sending links containing tracking parameters.")
 			tracker_list = ", ".join([f"`{tracker}`" for tracker in removed_trackers])
-			response = f"{tracker_list} {"are" if len(removed_trackers) > 1 else "is"} used for tracking."
+			response = f"{tracker_list} {'are' if len(removed_trackers) > 1 else 'is'} used for tracking."
 			response += f"\n Here's the link without trackers:\n{'\n'.join(cleaned_urls)}"
 			embed.description = response
 			await message.reply(embed=embed)
