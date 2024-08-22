@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import discord
@@ -100,6 +101,7 @@ class URLCleaner(commands.Cog):
 	def __init__(self, bot: Substiify):
 		self.bot = bot
 		self.cleaner = _URLCleaner(DEFAULT_RULES)
+		self.cooldowns = {}
 
 	@commands.Cog.listener()
 	async def on_message(self, message: discord.Message):
@@ -119,6 +121,15 @@ class URLCleaner(commands.Cog):
 		cleaned_urls, removed_trackers = self.cleaner.clean_message_urls(message.content)
 
 		if removed_trackers:
+			user_id = message.author.id
+			current_time = time.time()
+
+			if user_id in self.cooldowns:
+				last_time_check = self.cooldowns[user_id]
+				if current_time - last_time_check < 6:
+					return
+			self.cooldowns[user_id] = current_time
+
 			embed = discord.Embed(title="Please avoid sending links containing tracking parameters.")
 			tracker_list = ", ".join([f"`{tracker}`" for tracker in removed_trackers])
 			response = f"{tracker_list} {"are" if len(removed_trackers) > 1 else "is"} used for tracking."
