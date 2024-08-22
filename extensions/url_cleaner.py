@@ -31,7 +31,8 @@ class _URLCleaner:
 			if len(split_rule) == 1:
 				self.universal_rules.add(param_rule)
 			else:
-				host_rule = re.compile(f"^(www\\.)?{self.escape_regexp(split_rule[1])}$")
+				host_pattern = split_rule[1].replace('*.', '(?:.*\.)?')
+				host_rule = re.compile(f"^(www\.)?{host_pattern}$")
 				host_rule_str = host_rule.pattern
 
 				if host_rule_str not in self.host_rules:
