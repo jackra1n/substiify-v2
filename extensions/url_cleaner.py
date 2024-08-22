@@ -126,7 +126,7 @@ class URLCleaner(commands.Cog):
 			await message.reply(embed=embed)
 
 	@commands.hybrid_command()
-	async def urls_setting(self, ctx: commands.Context, enable: bool):
+	async def urls_cleaner(self, ctx: commands.Context, enable: bool):
 		if enable:
 			await self.bot.db.pool.execute(
 				"INSERT INTO url_cleaner_settings (discord_server_id) VALUES ($1) ON CONFLICT DO NOTHING", ctx.guild.id
