@@ -132,7 +132,8 @@ class URLCleaner(commands.Cog):
 
 			embed = discord.Embed(title="Please avoid sending links containing tracking parameters.")
 			tracker_list = ", ".join([f"`{tracker}`" for tracker in removed_trackers])
-			response = f"{tracker_list} {'are' if len(removed_trackers) > 1 else 'is'} used for tracking."
+			verb = 'are' if len(removed_trackers) > 1 else 'is'
+			response = f"{tracker_list} {verb} used for tracking."
 			response += f"\n Here's the link without trackers:\n{'\n'.join(cleaned_urls)}"
 			embed.description = response
 			await message.reply(embed=embed)
