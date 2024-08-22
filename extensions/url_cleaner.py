@@ -125,9 +125,15 @@ class URLCleaner(commands.Cog):
 			await message.reply(embed=embed)
 
 	@commands.hybrid_command()
-	async def urls_setting(self, ctx: commands.Context):
-		
-		pass
+	async def urls_setting(self, ctx: commands.Context, enable: bool):
+		if enable:
+			await self.bot.db.pool.execute(
+				"INSERT INTO url_cleaner_settings (discord_server_id) VALUES ($1) ON CONFLICT DO NOTHING", ctx.guild.id
+			)
+			await ctx.send("URL cleaner enabled.")
+		else:
+			await self.bot.db.pool.execute("DELETE FROM url_cleaner_settings WHERE discord_server_id = $1", ctx.guild.id)
+			await ctx.send("URL cleaner disabled.")
 
 
 async def setup(bot: Substiify):
