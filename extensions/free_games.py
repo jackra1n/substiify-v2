@@ -60,8 +60,12 @@ class EpicGamesGame(Game):
 			page_slug = game_info_json["catalogNs"]["mappings"][0]["pageSlug"]
 		if page_slug is None and game_info_json["productSlug"]:
 			page_slug = game_info_json["productSlug"]
+		if "bundles" in [category["path"] for category in game_info_json["categories"]]:
+			page_slug = "bundles/" + page_slug
+		else:
+			page_slug = "p/" + page_slug
 
-		return f"https://www.epicgames.com/store/en-US/p/{page_slug}"
+		return f"https://www.epicgames.com/store/en-US/{page_slug}"
 
 	def _create_start_date(self, game_info_json: str) -> datetime:
 		return self._parse_date(game_info_json, "startDate")
