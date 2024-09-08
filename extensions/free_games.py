@@ -181,7 +181,7 @@ class FreeGames(commands.Cog):
 		for game in current_free_games:
 			if await self._is_game_in_history(game):
 				continue
-			logger.info(f"Starting to send new free game: {game.title}")
+			logger.info(f"Processing new free game: {game.title}")
 			await self._add_game_to_history(game)
 			embed = self._create_game_embed(game)
 
@@ -201,6 +201,8 @@ class FreeGames(commands.Cog):
 
 		if total_sent_messages:
 			logger.info(f"Sent [{total_sent_messages}] new free games messages")
+		else:
+			logger.info("No free game messages sent")
 
 	async def _is_game_in_history(self, game: Game) -> bool:
 		game_in_history_stmt = """SELECT * FROM free_game_history WHERE title = $1 AND store_name = $2;"""

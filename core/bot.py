@@ -8,6 +8,7 @@ from discord.ext import commands
 
 import core
 from database import Database
+from utils import ui
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,8 @@ class Substiify(commands.Bot):
 
 		node: wavelink.Node = wavelink.Node(uri=core.config.LAVALINK_NODE_URL, password=core.config.LAVALINK_PASSWORD)
 		await wavelink.Pool.connect(client=self, nodes=[node])
+
+		self.add_dynamic_items(ui.KasinoBetButton, ui.KasinoLockButton)
 
 	async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
 		logging.info(f"Wavelink Node connected: {payload.node!r} | Resumed: {payload.resumed}")

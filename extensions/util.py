@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import logging
 import platform
@@ -262,7 +261,7 @@ class Util(commands.Cog):
 
 	@commands.group(aliases=["c"], invoke_without_command=True)
 	@commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
-	async def clear(self, ctx: commands.Context, amount: int = None):
+	async def clear(self, ctx: commands.Context, amount: int = 0):
 		"""
 		Clears messages within the current channel.
 		"""
@@ -271,7 +270,7 @@ class Util(commands.Cog):
 				await message.delete()
 				await ctx.message.delete()
 			return
-		if amount is None:
+		if amount == 0:
 			return await ctx.send("Please specify the amount of messages to delete.", delete_after=30)
 
 		if amount >= 100:
@@ -281,19 +280,16 @@ class Util(commands.Cog):
 	@clear.command(aliases=["bot", "b"])
 	@commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
 	async def clear_bot(self, ctx: commands.Context, amount: int):
-		"""Clears the bot's messages even in DMs"""
-		bots_messages = [
-			message async for message in ctx.channel.history(limit=amount + 1) if message.author == self.bot.user
-		]
+		"""Clears the bot's messages"""
 
-		if len(bots_messages) <= 100 and isinstance(ctx.channel, discord.TextChannel):
-			await ctx.message.delete()
-			await ctx.channel.delete_messages(bots_messages)
+		def is_me(m):
+			return m.author == self.bot.user
 
-		elif isinstance(ctx.channel, discord.DMChannel):
-			for message in bots_messages:
-				await message.delete()
-				await asyncio.sleep(0.75)
+		channel = ctx.message.channel
+		if isinstance(channel, (discord.DMChannel, discord.GroupChannel)):
+			return await ctx.send("Cannot delete messages in DMs")
+
+		await channel.purge(limit=100, check=is_me)
 
 	@clear.error
 	async def clear_error(self, ctx: commands.Context, error):
