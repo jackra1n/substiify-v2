@@ -546,7 +546,7 @@ class Karma(commands.Cog):
 			stmt_avg_upvote_ratio = """
                 SELECT AVG(upvotes / downvotes) as average, COUNT(*) as post_count
                 FROM post
-                WHERE discord_server_id = $1 
+                WHERE discord_server_id = $1
                     AND upvotes >= 1
                     AND downvotes >= 1"""
 
@@ -771,19 +771,23 @@ class Karma(commands.Cog):
 			return await ctx.reply(f"Kasino with ID {kasino_id} is not open.")
 
 		if kasino["discord_server_id"] != ctx.guild.id:
-			return await ctx.send(f"Kasino with ID {kasino_id} is not in this server.")
+			return await ctx.reply(f"Kasino with ID {kasino_id} is not in this server.")
+
+		if winner not in {1, 2, 3}:
+			return await ctx.reply("Winner has to be 1, 2 or 3 (abort)")
+
+		if ctx.interaction:
+			await ctx.interaction.response.defer()
 
 		if winner in {1, 2}:
 			await self.win_kasino(kasino_id, winner)
 		elif winner == 3:
 			await self.abort_kasino(kasino_id)
-		else:
-			return await ctx.author.send("Winner has to be 1, 2 or 3 (abort)")
 
 		await self.send_conclusion(ctx, kasino_id, winner)
 		await self.remove_kasino(kasino_id)
 		if ctx.interaction:
-			await ctx.interaction.response.send_message("Kasino has been closed.", ephemeral=True)
+			await ctx.interaction.followup.send("Kasino closed.", ephemeral=True)
 
 	@kasino_close.error
 	async def kasino_close_error(self, ctx: commands.Context, error):
@@ -1056,7 +1060,7 @@ class KasinoLockButton(discord.ui.Button):
 		if is_locked:
 			label_str = f"""Are you sure you want to unlock kasino ID: `{kasino_id}`?
 					To make it fair, all people who bet will get a message so they can increase their bets!
-							
+
 					To confirm, press the button below."""
 			embed = discord.Embed(
 				title="Unlock kasino", description=label_str, color=discord.Colour.from_rgb(52, 79, 235)
