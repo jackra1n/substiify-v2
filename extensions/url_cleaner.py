@@ -111,6 +111,9 @@ class URLCleaner(commands.Cog):
 		if message.content.startswith(config.BOT_PREFIX):
 			return
 
+		if not message.guild:
+			return
+
 		# check if server has URL cleaner enabled
 		url_cleaner_settings = await self.bot.db.pool.fetchrow(
 			"SELECT * FROM url_cleaner_settings WHERE discord_server_id = $1", message.guild.id
