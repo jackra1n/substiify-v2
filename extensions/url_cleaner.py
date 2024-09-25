@@ -154,7 +154,7 @@ class URLCleaner(commands.Cog):
 			_, removed_trackers = self.cleaner.clean_message_urls(after.content)
 			if not removed_trackers:
 				# delete message
-				save_message.pop(after.id).delete()
+				await save_message.pop(after.id).delete()
 
 	@commands.hybrid_command()
 	async def urls_cleaner(self, ctx: commands.Context, enable: bool):
