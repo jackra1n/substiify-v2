@@ -10,7 +10,8 @@ from core import Substiify, config
 from utils.url_rules import DEFAULT_RULES
 
 logger = logging.getLogger(__name__)
-
+# Save messages with tracking parameters to delete if user removes them
+save_message = {}
 
 class _URLCleaner:
 	def __init__(self, rules: list[str]):
@@ -140,7 +141,20 @@ class URLCleaner(commands.Cog):
 			cleaned_urls_str = "\n".join(cleaned_urls)
 			response += f"\n Here's the link without trackers:\n{cleaned_urls_str}"
 			embed.description = response
-			await message.reply(embed=embed)
+			reply = await message.reply(embed=embed)
+			# Save reply to hash table with message id as key
+			save_message[message.id] = reply
+
+	# On edit message event, recheck the message for tracking parameters
+	@commands.Cog.listener()
+	async def on_message_edit(self, before: discord.Message, after: discord.Message):
+		# check if message saved 
+		if after.id in save_message:
+			#no need to check if enabled as else we would not have saved the message
+			_, removed_trackers = self.cleaner.clean_message_urls(after.content)
+			if not removed_trackers:
+				# delete message
+				await save_message.pop(after.id).delete()
 
 	@commands.hybrid_command()
 	async def urls_cleaner(self, ctx: commands.Context, enable: bool):
