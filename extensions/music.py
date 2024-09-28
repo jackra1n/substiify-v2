@@ -139,18 +139,6 @@ class Music(commands.Cog):
 		if not ctx.interaction:
 			await ctx.message.delete()
 
-	@play.error
-	async def play_error(self, ctx: commands.Context, error):
-		if getattr(error, "is_handled", False):
-			return
-
-		error_str = f"`{str(error)}`\n\nProbably contact <@!{self.bot.owner_id}> for help."
-		embed = discord.Embed(title="An error occurred", description=error_str, color=discord.Color.red())
-		if ctx.interaction:
-			await ctx.interaction.response.send_message(embed=embed, ephemeral=True)
-		else:
-			await ctx.reply(embed=embed)
-
 	@commands.hybrid_command()
 	async def skip(self, ctx: commands.Context, amount: int = 1):
 		"""Skips the current song."""
