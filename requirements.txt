@@ -1,11 +1,12 @@
 #install with "pip3 install -r requirements.txt"
 
 discord.py[voice]
+wavelink
+audioop-lts
 asyncpg
 python-dotenv
 pytz
 colorlog
 psutil
-wavelink
 matplotlib
 #jishaku  # for debugging, not needed for normal use
