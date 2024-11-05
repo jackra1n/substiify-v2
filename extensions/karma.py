@@ -714,7 +714,7 @@ class Karma(commands.Cog):
 		if not ctx.interaction:
 			await ctx.message.delete()
 
-	async def _create_post_leaderboard(self, posts: list[Record]):
+	async def _create_post_leaderboard(self, posts: list[Record]) -> str:
 		if not posts:
 			return "No posts found."
 		leaderboard = ""
@@ -725,12 +725,18 @@ class Karma(commands.Cog):
 			username = self.bot.get_user(post["discord_user_id"]) or await self.bot.fetch_user(post["discord_user_id"])
 			leaderboard += f"**{index}.** [{username} ({post['upvotes']})]({jump_url})\n"
 		return leaderboard
+	
+	def _create_kasino_message_url(self, kasino: Record) -> str:
+		return self._create_message_url(kasino["discord_server_id"], kasino["discord_channel_id"], kasino["discord_message_id"])
 
-	def _create_message_url(self, server_id, channel_id, message_id):
+	def _create_message_url(self, server_id, channel_id, message_id) -> str:
 		return f"https://discordapp.com/channels/{server_id}/{channel_id}/{message_id}"
 
 	@commands.hybrid_group(name="kasino", aliases=["kas"], invoke_without_command=True)
 	async def kasino(self, ctx: commands.Context):
+		"""Karma kasino which allows people to bet on a question with two options.
+		If you want to open a kasino, use the subcommand `kasino open`.
+		"""
 		await ctx.send_help(ctx.command)
 
 	@kasino.command(name="open", aliases=["o"], usage='open "<question>" "<option1>" "<option2>"')
@@ -806,8 +812,8 @@ class Karma(commands.Cog):
 		"""Lists all open kasinos on the server."""
 		embed = discord.Embed(title="Open kasinos")
 		stmt_kasinos = "SELECT * FROM kasino WHERE locked = False AND discord_server_id = $1 ORDER BY id ASC;"
-		all_kasinos = await self.bot.db.pool.fetch(stmt_kasinos, ctx.guild.id)
-		embed_kasinos = "".join(f'`{entry["id"]}` - {entry["question"]}\n' for entry in all_kasinos)
+		all_kasinos: list[Record] = await self.bot.db.pool.fetch(stmt_kasinos, ctx.guild.id)
+		embed_kasinos = "".join(f'`{entry["id"]}` - [{entry["question"]}]({self._create_kasino_message_url(entry)})\n' for entry in all_kasinos)
 		embed.description = embed_kasinos or "No open kasinos found."
 		await ctx.send(embed=embed, delete_after=300)
 		if not ctx.interaction:
