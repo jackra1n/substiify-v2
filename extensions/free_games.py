@@ -203,16 +203,15 @@ class FreeGames(commands.Cog):
 			logger.info(f"Sent [{total_sent_messages}] new free games messages")
 
 	async def _is_game_in_history(self, game: Game) -> bool:
-		game_in_history_stmt = """SELECT * FROM free_game_history WHERE title = $1 AND store_name = $2;"""
-		game_row = await self.bot.db.pool.fetchrow(game_in_history_stmt, game.title, game.platform.name)
-		if not game_row:
-			return False
-
-		# If game was in history for more than 30 days, it will be considered as a new game
-		created_at = game_row["created_at"]
-		if created_at + timedelta(days=30) < datetime.now():
-			return False
-		return True
+		game_in_history_stmt = """
+			SELECT 1
+			FROM free_game_history
+			WHERE title = $1 AND store_name = $2
+			AND created_at >= $3;
+		"""
+		thirty_days_ago = datetime.now() - timedelta(days=30)
+		result = await self.bot.db.pool.fetchrow(game_in_history_stmt, game.title, game.platform.name, thirty_days_ago)
+		return result is not None
 
 	async def _add_game_to_history(self, game: Game):
 		game_insert_stmt = """

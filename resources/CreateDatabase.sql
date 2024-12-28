@@ -123,7 +123,7 @@ CREATE TABLE IF NOT EXISTS free_game_history (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   store_name VARCHAR(255) NOT NULL,
   store_link VARCHAR(255) NOT NULL,
-  UNIQUE (title, store_name)
+  UNIQUE (title, store_name, created_at)
 );
 
 CREATE TABLE IF NOT EXISTS url_cleaner_settings (
