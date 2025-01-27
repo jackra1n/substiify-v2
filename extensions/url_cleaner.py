@@ -141,9 +141,12 @@ class URLCleaner(commands.Cog):
 			cleaned_urls_str = "\n".join(cleaned_urls)
 			response += f"\n Here's the link without trackers:\n{cleaned_urls_str}"
 			embed.description = response
-			reply = await message.reply(embed=embed)
-			# Save reply to hash table with message id as key
-			save_message[message.id] = reply
+			try:
+				reply = await message.reply(embed=embed)
+				# Save reply to hash table with message id as key
+				save_message[message.id] = reply
+			except discord.Forbidden:
+				return
 
 	# On edit message event, recheck the message for tracking parameters
 	@commands.Cog.listener()
