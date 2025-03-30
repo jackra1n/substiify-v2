@@ -338,7 +338,15 @@ class Util(commands.Cog):
 		content = ""
 		uptime_in_seconds = (discord.utils.utcnow() - self.bot.start_time).total_seconds()
 		bot_uptime = utils.seconds_to_human_readable(uptime_in_seconds)
-		last_commit_hash = utils.ux.get_last_commit_hash()
+
+		commit_hash, commit_date = utils.ux.get_last_commit_info()
+		if commit_hash != "unknown" and commit_date != "unknown":
+			bot_version = f"{self.bot.version} [{commit_hash}] ({commit_date})"
+		elif commit_hash != "unknown":
+			bot_version = f"{self.bot.version} [{commit_hash}]"
+		else:
+			bot_version = f"{self.bot.version} [commit info unavailable]"
+
 		cpu_percent = psutil.cpu_percent()
 		ram = psutil.virtual_memory()
 		ram_used = utils.bytes_to_human_readable((ram.total - ram.available))
@@ -349,7 +357,7 @@ class Util(commands.Cog):
 			memory = proc.memory_full_info()
 			content = (
 				f"**Instance uptime:** `{bot_uptime}`\n"
-				f"**Version:** `{self.bot.version} [{last_commit_hash}]` \n"
+				f"**Version:** `{bot_version}` \n"
 				f"**Python:** `{platform.python_version()}`\n"
 				f"**discord.py:** `{discord.__version__}`\n\n"
 				f"**CPU:** `{cpu_percent}%`\n"

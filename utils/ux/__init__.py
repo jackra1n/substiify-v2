@@ -14,11 +14,22 @@ __all__ = ("print_system_info", "strip_emotes")
 
 
 def print_system_info() -> None:
-	raw_art = _read_art()
+	try:
+		raw_art = _read_art()
+	except Exception:
+		raw_art = "Art loading failed."
 
 	system_bits = (platform.machine(), platform.system(), platform.release())
 	filtered_system_bits = (s.strip() for s in system_bits if s.strip())
-	bot_version = f"{core.__version__} [{get_last_commit_hash()}]"
+
+	commit_hash, commit_date = get_last_commit_info()
+
+	if commit_hash != "unknown" and commit_date != "unknown":
+		bot_version = f"{core.__version__} [{commit_hash}] ({commit_date})"
+	elif commit_hash != "unknown":
+		bot_version = f"{core.__version__} [{commit_hash}]"
+	else:
+		bot_version = f"{core.__version__} [commit info unavailable]"
 
 	args = {
 		"system_description": " ".join(filtered_system_bits),
@@ -26,7 +37,10 @@ def print_system_info() -> None:
 		"discord_version": discord.__version__,
 		"substiify_version": bot_version,
 	}
-	args.update(colorlog.escape_codes.escape_codes)
+	try:
+		args.update(colorlog.escape_codes.escape_codes)
+	except AttributeError:
+		pass
 
 	art_str = string.Template(raw_art).substitute(args)
 	sys.stdout.write(art_str)
@@ -34,8 +48,10 @@ def print_system_info() -> None:
 
 
 def _read_art() -> str:
-	with importlib.resources.files("utils.ux").joinpath("art.txt").open() as file:
-		return file.read()
+	try:
+		return importlib.resources.files("utils.ux").joinpath("art.txt").read_text(encoding="utf-8")
+	except (FileNotFoundError, ModuleNotFoundError, TypeError):
+		return "ASCII Art File Not Found"
 
 
 def strip_emotes(string: str) -> str:
@@ -43,6 +59,16 @@ def strip_emotes(string: str) -> str:
 	return discord_emote_pattern.sub("", string)
 
 
-def get_last_commit_hash() -> str:
-	git_log_cmd = ["git", "log", "-1", '--pretty=format:"%h"']
-	return subprocess.check_output(git_log_cmd).decode("utf-8").strip('"')
+def get_last_commit_info() -> tuple[str, str]:
+	git_log_cmd = ["git", "log", "-1", "--pretty=format:%h|%cs"]
+	try:
+		output = subprocess.check_output(git_log_cmd, stderr=subprocess.PIPE).decode("utf-8").strip()
+		parts = output.split("|", 1)
+		if len(parts) == 2:
+			return parts[0], parts[1]  # hash, date
+		else:
+			return "unknown", "unknown"
+	except (subprocess.CalledProcessError, FileNotFoundError):
+		return "unknown", "unknown"
+	except Exception:
+		return "unknown", "unknown"
