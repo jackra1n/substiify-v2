@@ -85,7 +85,7 @@ class Karma(commands.Cog):
 			channel = await self.bot.fetch_channel(payload.channel_id)
 
 		await self.bot.db._insert_server(server)
-		await self.bot.db._insert_guild_channel(channel)
+		await self.bot.db._insert_server_channel(channel)
 
 		is_upvote = payload.emoji.id in upvote_emotes
 

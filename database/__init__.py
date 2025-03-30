@@ -53,7 +53,7 @@ class Database:
 
 	async def _insert_foundation(self, user: discord.Member, server: discord.Guild, channel: discord.abc.Messageable):
 		await self.pool.execute(USER_INSERT_QUERY, user.id, user.name, user.display_avatar.url)
-		await self.pool.execute(SERVER_INSERT_QUERY, server.id, server.name)
+		await self._insert_server(server)
 
 		if pchannel := channel.parent if isinstance(channel, discord.Thread) else None:
 			await self.pool.execute(MESSAGEABLE_INSERT_QUERY, pchannel.id, pchannel.name, pchannel.guild.id, None)
@@ -64,5 +64,5 @@ class Database:
 	async def _insert_server(self, guild: discord.Guild):
 		await self.pool.execute(SERVER_INSERT_QUERY, guild.id, guild.name)
 
-	async def _insert_guild_channel(self, channel: discord.abc.GuildChannel):
+	async def _insert_server_channel(self, channel: discord.abc.GuildChannel):
 		await self.pool.execute(CHANNEL_INSERT_QUERY, channel.id, channel.name, channel.guild.id)

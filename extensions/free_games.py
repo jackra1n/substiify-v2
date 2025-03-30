@@ -402,7 +402,7 @@ class ChannelsSelector(discord.ui.Select):
 			)
 
 		else:
-			await bot.db._insert_guild_channel(channel)
+			await bot.db._insert_server_channel(channel)
 
 			fg_stmt = """
 				INSERT INTO free_games_channel (discord_server_id, discord_channel_id) VALUES ($1, $2)

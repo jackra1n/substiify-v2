@@ -268,7 +268,7 @@ class Owner(commands.Cog):
 				if not isinstance(channel, discord.TextChannel):
 					continue
 				print(f"inserting channel: {channel}...")
-				await self.bot.db._insert_guild_channel(channel)
+				await self.bot.db._insert_server_channel(channel)
 
 		for post in await self.bot.db.pool.fetch("SELECT * FROM post"):
 			user_id = post["discord_user_id"]

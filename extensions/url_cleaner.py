@@ -10,8 +10,7 @@ from core import Substiify, config
 from utils.url_rules import DEFAULT_RULES
 
 logger = logging.getLogger(__name__)
-# Save messages with tracking parameters to delete if user removes them
-save_message = {}
+save_message: dict[int, discord.Message] = {}
 
 class _URLCleaner:
 	def __init__(self, rules: list[str]):
@@ -66,7 +65,6 @@ class _URLCleaner:
 			for param in list(query_params.keys()):
 				self.remove_param(rule, param, query_params, removed_params)
 
-		# apply host-specific rules
 		hostname = parsed_url.hostname
 		if hostname:
 			for host_rule_str, host_rule in self.host_rules.items():
@@ -102,7 +100,7 @@ class URLCleaner(commands.Cog):
 	def __init__(self, bot: Substiify):
 		self.bot = bot
 		self.cleaner = _URLCleaner(DEFAULT_RULES)
-		self.cooldowns = {}
+		self.cooldown = commands.CooldownMapping.from_cooldown(2, 6.0, commands.BucketType.user)
 
 	@commands.Cog.listener()
 	async def on_message(self, message: discord.Message):
@@ -121,43 +119,49 @@ class URLCleaner(commands.Cog):
 		)
 		if not url_cleaner_settings:
 			return
+		
+		bucket = self.cooldown.get_bucket(message)
+		retry_after = bucket.update_rate_limit()
+		if retry_after:
+			logger.debug(f"User {message.author.id} on cooldown, skipping URL cleaning.")
+			return
 
 		cleaned_urls, removed_trackers = self.cleaner.clean_message_urls(message.content)
 
 		if removed_trackers:
-			user_id = message.author.id
-			current_time = time.time()
+			removed_trackers.sort()
 
-			if user_id in self.cooldowns:
-				last_time_check = self.cooldowns[user_id]
-				if current_time - last_time_check < 6:
-					return
-			self.cooldowns[user_id] = current_time
-
-			embed = discord.Embed(title="Please avoid sending links containing tracking parameters.")
+			embed = discord.Embed(
+				title="Please avoid sending links containing tracking parameters."
+			)
 			tracker_list = ", ".join([f"`{tracker}`" for tracker in removed_trackers])
 			verb = 'are' if len(removed_trackers) > 1 else 'is'
-			response = f"{tracker_list} {verb} used for tracking."
 			cleaned_urls_str = "\n".join(cleaned_urls)
+			response = f"{tracker_list} {verb} used for tracking."
 			response += f"\n Here's the link without trackers:\n{cleaned_urls_str}"
 			embed.description = response
+			embed.set_footer(text="You can edit your message to remove trackers, and this message will disappear.")
 			try:
 				reply = await message.reply(embed=embed)
-				# Save reply to hash table with message id as key
 				save_message[message.id] = reply
 			except discord.Forbidden:
+				logger.error(f"Unable to send url_cleaner message in {message.guild} {message.channel}, missing permissions.")
 				return
 
-	# On edit message event, recheck the message for tracking parameters
 	@commands.Cog.listener()
 	async def on_message_edit(self, before: discord.Message, after: discord.Message):
-		# check if message saved 
 		if after.id in save_message:
-			#no need to check if enabled as else we would not have saved the message
+			# no need to check if enabled as else we would not have saved the message
 			_, removed_trackers = self.cleaner.clean_message_urls(after.content)
 			if not removed_trackers:
-				# delete message
-				await save_message.pop(after.id).delete()
+				reply_message = save_message.pop(after.id)
+				await reply_message.delete()
+
+	@commands.Cog.listener()
+	async def on_message_delete(self, message: discord.Message):
+		if message.id in save_message:
+			reply_message = save_message.pop(message.id)
+			await reply_message.delete()
 
 	@commands.hybrid_command()
 	async def urls_cleaner(self, ctx: commands.Context, enable: bool):
@@ -165,6 +169,9 @@ class URLCleaner(commands.Cog):
 		If enabled, the bot will notify users if they sent a link with tracking parameters.
 		The bot will also resend the link without the tracking parameters.
 		"""
+		# ensure server and channel are in the database
+		await self.bot.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
+
 		if enable:
 			await self.bot.db.pool.execute(
 				"INSERT INTO url_cleaner_settings (discord_server_id) VALUES ($1) ON CONFLICT DO NOTHING", ctx.guild.id

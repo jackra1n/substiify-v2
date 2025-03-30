@@ -21,7 +21,7 @@ class Events(commands.Cog):
 			await self.bot.db.pool.execute(
 				dbc.USER_INSERT_QUERY, ctx.author.id, ctx.author.name, ctx.author.display_avatar.url
 			)
-			await self.bot.db.pool.execute(dbc.CHANNEL_INSERT_QUERY, ctx.channel.id, None, None)
+			await self.bot.db._insert_server_channel(ctx.channel)
 		elif isinstance(ctx.channel, (discord.abc.GuildChannel, discord.Thread)):
 			await self.bot.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
 
@@ -32,14 +32,14 @@ class Events(commands.Cog):
 	@commands.Cog.listener()
 	async def on_guild_join(self, guild: discord.Guild):
 		await self.bot.get_channel(EVENTS_CHANNEL_ID).send(f"Joined {guild.owner}'s guild `{guild.name}` ({guild.id})")
-		await self._insert_server(guild)
+		await self.bot.db._insert_server(guild)
 		await self.bot.db.pool.executemany(
 			dbc.CHANNEL_INSERT_QUERY, [(channel.id, channel.name, channel.guild.id) for channel in guild.channels]
 		)
 
 	@commands.Cog.listener()
 	async def on_guild_update(self, before: discord.Guild, after: discord.Guild):
-		await self._insert_server(after)
+		await self.bot.db._insert_server(after)
 
 	@commands.Cog.listener()
 	async def on_guild_remove(self, guild: discord.Guild):
@@ -51,18 +51,12 @@ class Events(commands.Cog):
 
 	@commands.Cog.listener()
 	async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
-		await self._insert_server(channel.guild)
-		await self._insert_guild_channel(channel)
+		await self.bot.db._insert_server(channel.guild)
+		await self.bot.db._insert_server_channel(channel)
 
 	@commands.Cog.listener()
 	async def on_guild_channel_update(self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel):
-		await self._insert_guild_channel(after)
-
-	async def _insert_server(self, guild: discord.Guild):
-		await self.bot.db.pool.execute(dbc.SERVER_INSERT_QUERY, guild.id, guild.name)
-
-	async def _insert_guild_channel(self, channel: discord.abc.GuildChannel):
-		await self.bot.db.pool.execute(dbc.CHANNEL_INSERT_QUERY, channel.id, channel.name, channel.guild.id)
+		await self.bot.db._insert_server_channel(after)
 
 
 async def setup(bot: core.Substiify):
