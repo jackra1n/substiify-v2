@@ -306,7 +306,7 @@ class Util(commands.Cog):
 		Shows the ping of the bot
 		"""
 		title = "Donk! 🏓" if "dink" in ctx.message.content.lower() else "Pong! 🏓"
-		desc = f"⏱️Ping: `{round(self.bot.latency*1000)}`ms"
+		desc = f"⏱️Ping: `{round(self.bot.latency * 1000)}`ms"
 		embed = discord.Embed(title=title, description=desc, color=core.constants.PRIMARY_COLOR)
 		await ctx.send(embed=embed)
 

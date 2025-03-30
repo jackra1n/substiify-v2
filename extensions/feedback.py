@@ -70,7 +70,7 @@ class Feedback(commands.Cog):
 		message = await channel.fetch_message(feedback["discord_message_id"])
 		embed = message.embeds[0]
 		embed.color = color
-		embed.title = f'{outcome.capitalize()} {feedback["feedback_type"]} submission'
+		embed.title = f"{outcome.capitalize()} {feedback['feedback_type']} submission"
 
 		await message.edit(embed=embed)
 
@@ -88,7 +88,7 @@ class Feedback(commands.Cog):
 
 		new_embed = discord.Embed(
 			title=f"{feedback_type.value.capitalize()} submission",
-			description=f'```{feedback["content"]}```',
+			description=f"```{feedback['content']}```",
 			color=color,
 		)
 		message_to_user = f"Hello {user.name}!\nYour {self.bot.user.mention} {feedback_type.value} submission has been **{outcome}** {emoji}."

@@ -1,6 +1,5 @@
 import logging
 import re
-import time
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import discord
@@ -11,6 +10,7 @@ from utils.url_rules import DEFAULT_RULES
 
 logger = logging.getLogger(__name__)
 save_message: dict[int, discord.Message] = {}
+
 
 class _URLCleaner:
 	def __init__(self, rules: list[str]):
@@ -119,7 +119,7 @@ class URLCleaner(commands.Cog):
 		)
 		if not url_cleaner_settings:
 			return
-		
+
 		bucket = self.cooldown.get_bucket(message)
 		retry_after = bucket.update_rate_limit()
 		if retry_after:
@@ -131,11 +131,9 @@ class URLCleaner(commands.Cog):
 		if removed_trackers:
 			removed_trackers.sort()
 
-			embed = discord.Embed(
-				title="Please avoid sending links containing tracking parameters."
-			)
+			embed = discord.Embed(title="Please avoid sending links containing tracking parameters.")
 			tracker_list = ", ".join([f"`{tracker}`" for tracker in removed_trackers])
-			verb = 'are' if len(removed_trackers) > 1 else 'is'
+			verb = "are" if len(removed_trackers) > 1 else "is"
 			cleaned_urls_str = "\n".join(cleaned_urls)
 			response = f"{tracker_list} {verb} used for tracking."
 			response += f"\n Here's the link without trackers:\n{cleaned_urls_str}"
@@ -145,7 +143,9 @@ class URLCleaner(commands.Cog):
 				reply = await message.reply(embed=embed)
 				save_message[message.id] = reply
 			except discord.Forbidden:
-				logger.error(f"Unable to send url_cleaner message in {message.guild} {message.channel}, missing permissions.")
+				logger.error(
+					f"Unable to send url_cleaner message in {message.guild} {message.channel}, missing permissions."
+				)
 				return
 
 	@commands.Cog.listener()

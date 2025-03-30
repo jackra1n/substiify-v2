@@ -131,5 +131,5 @@ DEFAULT_RULES = [
 	"igshid",
 	"igsh",
 	"share_id@reddit.com",
-    "si@soundcloud.com",
+	"si@soundcloud.com",
 ]

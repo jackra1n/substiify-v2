@@ -397,7 +397,7 @@ class Karma(commands.Cog):
 		last_action = ""
 		for emote in karma_emotes:
 			if emote["increase_karma"] != last_action:
-				embed_string += f'\n`{"add" if emote["increase_karma"] is True else "remove"}:` '
+				embed_string += f"\n`{'add' if emote['increase_karma'] is True else 'remove'}:` "
 				last_action = emote["increase_karma"]
 			embed_string += f"{self.bot.get_emoji(emote['discord_emote_id'])} "
 		embed = discord.Embed(title=f"Karma Emotes - {ctx.guild.name}", description=embed_string)
@@ -619,9 +619,9 @@ class Karma(commands.Cog):
 
 		def custom_formatter(x, pos):
 			if x >= 1e6:  # Millions
-				return f"{x*1e-6:.0f}M"
+				return f"{x * 1e-6:.0f}M"
 			elif x >= 1e3:  # Thousands
-				return f"{x*1e-3:.0f}K"
+				return f"{x * 1e-3:.0f}K"
 			else:
 				return f"{x:.0f}"
 
@@ -725,9 +725,11 @@ class Karma(commands.Cog):
 			username = self.bot.get_user(post["discord_user_id"]) or await self.bot.fetch_user(post["discord_user_id"])
 			leaderboard += f"**{index}.** [{username} ({post['upvotes']})]({jump_url})\n"
 		return leaderboard
-	
+
 	def _create_kasino_message_url(self, kasino: Record) -> str:
-		return self._create_message_url(kasino["discord_server_id"], kasino["discord_channel_id"], kasino["discord_message_id"])
+		return self._create_message_url(
+			kasino["discord_server_id"], kasino["discord_channel_id"], kasino["discord_message_id"]
+		)
 
 	def _create_message_url(self, server_id, channel_id, message_id) -> str:
 		return f"https://discordapp.com/channels/{server_id}/{channel_id}/{message_id}"
@@ -813,7 +815,10 @@ class Karma(commands.Cog):
 		embed = discord.Embed(title="Open kasinos")
 		stmt_kasinos = "SELECT * FROM kasino WHERE locked = False AND discord_server_id = $1 ORDER BY id ASC;"
 		all_kasinos: list[Record] = await self.bot.db.pool.fetch(stmt_kasinos, ctx.guild.id)
-		embed_kasinos = "".join(f'`{entry["id"]}` - [{entry["question"]}]({self._create_kasino_message_url(entry)})\n' for entry in all_kasinos)
+		embed_kasinos = "".join(
+			f"`{entry['id']}` - [{entry['question']}]({self._create_kasino_message_url(entry)})\n"
+			for entry in all_kasinos
+		)
 		embed.description = embed_kasinos or "No open kasinos found."
 		await ctx.send(embed=embed, delete_after=300)
 		if not ctx.interaction:
@@ -862,7 +867,7 @@ class Karma(commands.Cog):
 		if winner in [1, 2]:
 			winner_option = kasino["option1"] if winner == 1 else kasino["option2"]
 			to_embed.title = f':tada: "{winner_option}" was correct! :tada:'
-			to_embed.description = f"""Question: {kasino['question']}
+			to_embed.description = f"""Question: {kasino["question"]}
                                        If you have chosen {winner}, you just won karma!
                                        Distributed to the winners: **{total_karma} Karma**'
                                     """
@@ -934,7 +939,7 @@ class Karma(commands.Cog):
 			if win_amount > 0:
 				title = f":tada: **You have won {win_amount} karma!** :tada:"
 				color = discord.Colour.from_rgb(66, 186, 50)
-				description = f'Of which `{bet["amount"]}` you put down on the table'
+				description = f"Of which `{bet['amount']}` you put down on the table"
 			embed = discord.Embed(title=title, color=color, description=description)
 			embed.add_field(name="Question was:", value=question, inline=False)
 			embed.add_field(name="New karma balance:", value=user_karma, inline=False)
@@ -989,10 +994,10 @@ async def _update_kasino_msg(bot: core.Substiify, kasino_id: int) -> discord.Mes
 	embed.set_footer(text=f"On the table: {bets_a_amount + bets_b_amount} Karma | ID: {kasino_id}")
 	embed.set_thumbnail(url="https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif")
 	embed.add_field(
-		name=f'**1:** {kasino["option1"]}', value=f"**Odds:** 1:{round(a_odds, 3)}\n**Pool:** {bets_a_amount} Karma"
+		name=f"**1:** {kasino['option1']}", value=f"**Odds:** 1:{round(a_odds, 3)}\n**Pool:** {bets_a_amount} Karma"
 	)
 	embed.add_field(
-		name=f'**2:** {kasino["option2"]}', value=f"**Odds:** 1:{round(b_odds, 3)}\n**Pool:** {bets_b_amount} Karma"
+		name=f"**2:** {kasino['option2']}", value=f"**Odds:** 1:{round(b_odds, 3)}\n**Pool:** {bets_b_amount} Karma"
 	)
 
 	await kasino_msg.edit(embed=embed, view=KasinoView(kasino))

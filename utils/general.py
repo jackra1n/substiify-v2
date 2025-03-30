@@ -22,4 +22,4 @@ def seconds_to_human_readable(seconds: int) -> str:
 def bytes_to_human_readable(size_in_bytes: int) -> str:
 	units = ("B", "KB", "MB", "GB", "TB")
 	power = int(math.log(size_in_bytes, 1024))
-	return f"{size_in_bytes / (1024 ** power):.1f} {units[power]}"
+	return f"{size_in_bytes / (1024**power):.1f} {units[power]}"
