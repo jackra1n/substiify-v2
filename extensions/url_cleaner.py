@@ -163,7 +163,8 @@ class URLCleaner(commands.Cog):
 			reply_message = save_message.pop(message.id)
 			await reply_message.delete()
 
-	@commands.hybrid_command()
+	@commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
+	@commands.hybrid_command(usage="url_cleaner <enable/disable>")
 	async def urls_cleaner(self, ctx: commands.Context, enable: bool):
 		"""Enable or disable the URL cleaner in the server.
 		If enabled, the bot will notify users if they sent a link with tracking parameters.
