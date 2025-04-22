@@ -360,7 +360,7 @@ async def create_controller_embed(player: wavelink.Player):
 	position = "00:00/00:00"
 	if player.playing:
 		embed.set_thumbnail(url=player.current.artwork)
-		now_playing = f"[{player.current}]({player.current.uri})"
+		now_playing = f"[{player.current.author} - {player.current.title}]({player.current.uri})"
 		current_position = str(datetime.timedelta(milliseconds=player.position)).split(".")[0]
 		song_length = str(datetime.timedelta(milliseconds=player.current.length)).split(".")[0]
 		position = f"`{current_position}/{song_length}`"
