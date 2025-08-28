@@ -1,4 +1,5 @@
 import logging
+import asyncio
 import re
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
@@ -10,6 +11,8 @@ from utils.url_rules import DEFAULT_RULES
 
 logger = logging.getLogger(__name__)
 save_message: dict[int, discord.Message] = {}
+reply_to_original: dict[int, int] = {}
+resend_attempts: dict[int, int] = {}
 
 
 class _URLCleaner:
@@ -140,8 +143,9 @@ class URLCleaner(commands.Cog):
 			embed.description = response
 			embed.set_footer(text="You can edit your message to remove trackers, and this message will disappear.")
 			try:
-				reply = await message.reply(embed=embed)
+				reply = await message.reply(embed=embed, mention_author=False)
 				save_message[message.id] = reply
+				reply_to_original[reply.id] = message.id
 			except discord.Forbidden:
 				logger.error(
 					f"Unable to send url_cleaner message in {message.guild} {message.channel}, missing permissions."
@@ -156,12 +160,70 @@ class URLCleaner(commands.Cog):
 			if not removed_trackers:
 				reply_message = save_message.pop(after.id)
 				await reply_message.delete()
+				reply_to_original.pop(reply_message.id, None)
+				resend_attempts.pop(after.id, None)
 
 	@commands.Cog.listener()
 	async def on_message_delete(self, message: discord.Message):
 		if message.id in save_message:
 			reply_message = save_message.pop(message.id)
 			await reply_message.delete()
+			reply_to_original.pop(reply_message.id, None)
+			resend_attempts.pop(message.id, None)
+
+		# If a bot reply was deleted, attempt to resend it if the original still has trackers
+		if message.id in reply_to_original:
+			original_id = reply_to_original.pop(message.id)
+
+			# Clear stale mapping if present
+			if original_id in save_message and save_message[original_id].id == message.id:
+				save_message.pop(original_id, None)
+
+			# Try to fetch the original message
+			try:
+				original_msg = await message.channel.fetch_message(original_id)
+			except discord.NotFound:
+				return
+
+			# Ensure URL cleaner is still enabled for the guild
+			if not original_msg.guild:
+				return
+			url_cleaner_settings = await self.bot.db.pool.fetchrow(
+				"SELECT * FROM url_cleaner_settings WHERE discord_server_id = $1", original_msg.guild.id
+			)
+			if not url_cleaner_settings:
+				return
+
+			cleaned_urls, removed_trackers = self.cleaner.clean_message_urls(original_msg.content)
+			if not removed_trackers:
+				return
+
+			# Limit resend attempts to avoid loops
+			attempts = resend_attempts.get(original_id, 0)
+			if attempts >= 3:
+				return
+			resend_attempts[original_id] = attempts + 1
+
+			removed_trackers.sort()
+			embed = discord.Embed(title="Please avoid sending links containing tracking parameters.")
+			tracker_list = ", ".join([f"`{tracker}`" for tracker in removed_trackers])
+			verb = "are" if len(removed_trackers) > 1 else "is"
+			cleaned_urls_str = "\n".join(cleaned_urls)
+			response = f"{tracker_list} {verb} used for tracking."
+			response += f"\n Here's the link without trackers:\n{cleaned_urls_str}"
+			embed.description = response
+			embed.set_footer(text="You can edit your message to remove trackers, and this message will disappear.")
+
+			try:
+				await asyncio.sleep(6)
+				new_reply = await original_msg.reply(embed=embed, mention_author=False)
+				save_message[original_id] = new_reply
+				reply_to_original[new_reply.id] = original_id
+			except discord.Forbidden:
+				logger.error(
+					f"Unable to resend url_cleaner message in {original_msg.guild} {original_msg.channel}, missing permissions."
+				)
+				return
 
 	@commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
 	@commands.hybrid_command(usage="url_cleaner <enable/disable>")
