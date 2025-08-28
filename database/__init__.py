@@ -32,7 +32,7 @@ class Database:
 	async def __aexit__(self, *args: Any) -> None:
 		try:
 			await asyncio.wait_for(self.pool.close(), timeout=10)
-		except TimeoutError:
+		except asyncio.TimeoutError:
 			logger.warning("Unable to gracefully shutdown database connection, forcefully continuing.")
 		else:
 			logger.info("Successfully closed Database connection.")

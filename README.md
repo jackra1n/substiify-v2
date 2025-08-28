@@ -16,4 +16,6 @@ To run the bot you'll need docker compose.
 
 ## Development
 
-Increment the version in `pyproject.toml` and `core/__init__.py`.
+Increment the version in `core/VERSION`
+
+Build docker image with `docker build -t sybstiify .`
