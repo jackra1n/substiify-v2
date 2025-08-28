@@ -1,22 +1,24 @@
 services:
 
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
     container_name: substiify-postgres
+    restart: unless-stopped
     ports:
-      - "5440:5432"
+      - 5440:5432
     volumes:
       - ./postgres-data:/var/lib/postgresql/data
-    restart: unless-stopped
     environment:
-      POSTGRES_DB: substiify
-      POSTGRES_PASSWORD: example
-      TZ: "Europe/Zurich"
+      - POSTGRES_DB=substiify
+      - POSTGRES_PASSWORD=example
+      - TZ=Europe/Zurich
 
   lavalink:
     image: ghcr.io/lavalink-devs/lavalink:4
     container_name: lavalink
     restart: unless-stopped
+    ports:
+      - 2333:2333
     environment:
       - _JAVA_OPTIONS=-Xmx2G
       - SERVER_PORT=2333
@@ -24,16 +26,14 @@ services:
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml
       - ./plugins/:/opt/Lavalink/plugins/
-    ports:
-      - "2333:2333"
 
   substiify:
     image: ghcr.io/jackra1n/substiify-v2:release
     container_name: substiify
-    depends_on:
-      - postgres
     restart: unless-stopped
     volumes:
       - .env:/bot/.env
       - ./logs:/bot/logs
       - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      - postgres
