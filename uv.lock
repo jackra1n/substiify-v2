@@ -703,8 +703,7 @@ wheels = [
 
 [[package]]
 name = "substiify"
-version = "0.98"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "asyncpg" },

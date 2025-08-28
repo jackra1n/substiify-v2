@@ -1,6 +1,6 @@
 [project]
 name = "substiify"
-version = "0.98"
+dynamic = ["version"]
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -75,3 +75,18 @@ skip-magic-trailing-comma = false
 
 # Like Black, automatically detect the appropriate line ending.
 line-ending = "auto"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = {file = "core/VERSION"}
+
+[tool.setuptools.package-data]
+core = ["VERSION"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "database*", "extensions*", "utils*"]
+exclude = ["logs*", "resources*"]
