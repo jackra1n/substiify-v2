@@ -38,12 +38,21 @@ class Database:
 			logger.info("Successfully closed Database connection.")
 
 	async def setup(self) -> None:
-		pool: _Pool | None = await asyncpg.create_pool(dsn=core.config.POSTGRES_DSN)
-
-		if pool is None:
-			raise RuntimeError('Unable to intialise the Database, "create_pool" returned None.')
-
-		self.pool = pool
+		try:
+			self.pool = await asyncpg.create_pool(dsn=core.config.POSTGRES_DSN)
+		except Exception:
+			host = core.config.DB_HOST or "<unset>"
+			port = core.config.DB_PORT or "<unset>"
+			dbname = core.config.DB_NAME or "<unset>"
+			user = core.config.DB_USER or "<unset>"
+			logger.error(
+				"Failed to connect to Postgres (host=%s port=%s db=%s user=%s). ",
+				host,
+				port,
+				dbname,
+				user,
+			)
+			raise RuntimeError("Database initialization failed; see previous error for details.")
 
 		db_schema = os.path.join("resources", "CreateDatabase.sql")
 		with open(db_schema) as fp:
