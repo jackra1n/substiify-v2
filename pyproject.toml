@@ -10,7 +10,9 @@ dependencies = [
     "wavelink>=3.2",
     "pytz",
     "psutil",
-    "matplotlib"
+    "matplotlib",
+    "python-dotenv>=1.1.1",
+    "colorlog>=6.9.0",
 ]
 
 [tool.isort]
