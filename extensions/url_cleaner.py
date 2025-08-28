@@ -198,6 +198,10 @@ class URLCleaner(commands.Cog):
 			if not removed_trackers:
 				return
 
+			logger.warning(
+				"Bot's URL cleanup message has been deleted, but message still has trackers! Attempting to resend"
+			)
+
 			# Limit resend attempts to avoid loops
 			attempts = resend_attempts.get(original_id, 0)
 			if attempts >= 3:
@@ -226,8 +230,8 @@ class URLCleaner(commands.Cog):
 				return
 
 	@commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
-	@commands.hybrid_command(usage="url_cleaner <enable/disable>")
-	async def urls_cleaner(self, ctx: commands.Context, enable: bool):
+	@commands.hybrid_command(usage="urls_cleaner <enable/disable>")
+	async def urls_cleaner(self, ctx: commands.Context, enable: bool | None = None):
 		"""Enable or disable the URL cleaner in the server.
 		If enabled, the bot will notify users if they sent a link with tracking parameters.
 		The bot will also resend the link without the tracking parameters.
@@ -235,16 +239,24 @@ class URLCleaner(commands.Cog):
 		# ensure server and channel are in the database
 		await self.bot.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
 
-		if enable:
+		if enable is None:
+			enabled = await self.bot.db.pool.fetchrow(
+				"SELECT * FROM url_cleaner_settings WHERE discord_server_id = $1", ctx.guild.id
+			)
+			if enabled:
+				await ctx.send("✅ URL cleaner is **ENABLED**.")
+			else:
+				await ctx.send("❌ URL cleaner is **NOT** enabled.")
+		elif enable:
 			await self.bot.db.pool.execute(
 				"INSERT INTO url_cleaner_settings (discord_server_id) VALUES ($1) ON CONFLICT DO NOTHING", ctx.guild.id
 			)
-			await ctx.send("URL cleaner enabled.")
-		else:
+			await ctx.send("✅ URL cleaner **ENABLED**.")
+		elif not enable:
 			await self.bot.db.pool.execute(
 				"DELETE FROM url_cleaner_settings WHERE discord_server_id = $1", ctx.guild.id
 			)
-			await ctx.send("URL cleaner disabled.")
+			await ctx.send("❌ URL cleaner **DISABLED**.")
 
 
 async def setup(bot: Substiify):
