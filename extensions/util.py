@@ -3,6 +3,7 @@ import datetime
 import logging
 import platform
 import random
+import secrets
 
 import discord
 import psutil
@@ -103,13 +104,14 @@ class Util(commands.Cog):
 			await ctx.send("The message couldn't be found in this channel")
 			return
 
-		users = [user async for user in msg.reactions[0].users() if not user.bot]
+		reaction = discord.utils.find(lambda r: str(r.emoji) == "🎉", msg.reactions)
+		users = [] if reaction is None else [u async for u in reaction.users() if not u.bot]
 
 		prize = await self.get_giveaway_prize(msg)
 		giveaway_host = msg.embeds[0].fields[0].value
 		embed = self.create_giveaway_embed(giveaway_host, prize)
 
-		await self.pick_winner(msg.channel, users, prize, embed)
+		await self.pick_winner(users, msg.channel, prize, embed)
 		await msg.edit(embed=embed)
 		await ctx.message.delete()
 
@@ -168,11 +170,12 @@ class Util(commands.Cog):
 	async def giveaway_task(self):
 		giveaways = await self.bot.db.pool.fetch("SELECT * FROM giveaway")
 		for giveaway in giveaways:
-			if datetime.datetime.now() < giveaway["end_date"]:
-				return
+			now = discord.utils.utcnow()
+			if now < giveaway["end_date"]:
+				continue
 			channel = await self.bot.fetch_channel(giveaway["discord_channel_id"])
 			try:
-				message = await channel.fetch_message(giveaway["discord_message_id"])
+				msg = await channel.fetch_message(giveaway["discord_message_id"])
 			except discord.NotFound:
 				await self.bot.db.pool.execute("DELETE FROM giveaway WHERE id = $1", giveaway["id"])
 				return await channel.send(
@@ -180,12 +183,13 @@ class Util(commands.Cog):
 				)
 			author_id = giveaway["discord_user_id"]
 			author = self.bot.get_user(author_id) or await self.bot.fetch_user(author_id)
-			users = [user async for user in message.reactions[0].users() if not user.bot]
+			reaction = discord.utils.find(lambda r: str(r.emoji) == "🎉", msg.reactions)
+			users = [] if reaction is None else [u async for u in reaction.users() if not u.bot]
 			prize = giveaway["prize"]
 			embed = self.create_giveaway_embed(author, prize)
 
 			await self.pick_winner(users, channel, prize, embed)
-			await message.edit(embed=embed)
+			await msg.edit(embed=embed)
 			await self.bot.db.pool.execute("DELETE FROM giveaway WHERE id = $1", giveaway["id"])
 
 	async def pick_winner(
@@ -197,7 +201,8 @@ class Util(commands.Cog):
 			embed.set_footer(text="No one won the Giveaway")
 			await channel.send("No one won the Giveaway")
 		else:
-			winner = random.choice(users)
+			unique = list({u.id: u for u in users}.values())
+			winner = secrets.choice(unique)
 			embed.add_field(name=f"Congratulations on winning '{prize}'", value=winner.mention)
 			await channel.send(f"Congratulations {winner.mention}! You won **{prize}**!")
 
