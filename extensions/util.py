@@ -27,13 +27,17 @@ class Util(commands.Cog):
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
 	async def giveaway(self, ctx: commands.Context):
 		"""
-		Allows you to create giveaways on the server.
-		To quickly create a giveaway, use the short command `<<give c [hosted_by]`. Hosted_by is optional.
-		For more info, check the `giveaway create` help page.
+		Create and manage giveaways.
+
+		Prefer slash commands:
+		/giveaway create channel: #channel duration: 10m|2h|1d prize: "..." [hosted_by]
+
+		Prefix (alias):
+		<<give c <#channel> <duration> <prize> [@host]
 		"""
 		await ctx.send_help(ctx.command)
 
-	@giveaway.command(aliases=["c"], usage="create [hosted_by]")
+	@giveaway.command(aliases=["c"], usage="create <channel> <duration> <prize> [hosted_by]")
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
 	@app_commands.describe(
 		channel="In which channel should the Giveaway be hosted?",
@@ -50,14 +54,14 @@ class Util(commands.Cog):
 		hosted_by: discord.Member = None,
 	):
 		"""
-		Allows you to create a giveaway. Requires manage_channels permission.
-		After calling this command, you will be asked to enter the prize, the time, and the channel.
-		To set the host of the giveaway, specify the optional parameter `hosted_by`.
+		Create a giveaway. Requires Manage Channels.
 
-		Example:
-		`<<giveaway create` or `<<giveaway create @user`
-		Short:
-		`<<give c` or `<<give c @user`
+		Slash (recommended):
+		/giveaway create channel: #channel duration: 10m|2h|1d prize: "..." [hosted_by]
+
+		Prefix examples:
+		<<giveaway create <#channel> <duration> <prize> [@host]
+		<<give c <#channel> <duration> <prize> [@host]
 		"""
 		if hosted_by is None or hosted_by.bot:
 			hosted_by = ctx.author
@@ -83,7 +87,7 @@ class Util(commands.Cog):
 
 		embed = self.create_giveaway_embed(hosted_by, prize)
 		embed.description = f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
-		embed.set_footer(text=f"Giveway ends on {end_string}")
+		embed.set_footer(text=f"Giveaway ends on {end_string}")
 
 		new_msg = await channel.send(embed=embed)
 		stmt = """INSERT INTO giveaway (discord_user_id, end_date, prize, discord_server_id, discord_channel_id, discord_message_id)
