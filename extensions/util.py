@@ -37,13 +37,14 @@ class Util(commands.Cog):
 		"""
 		await ctx.send_help(ctx.command)
 
-	@giveaway.command(aliases=["c"], usage="create <channel> <duration> <prize> [hosted_by]")
+	@giveaway.command(aliases=["c"], usage="create <channel> <duration> <prize> [hosted_by] [winners]")
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
 	@app_commands.describe(
 		channel="In which channel should the Giveaway be hosted?",
 		duration="For how long should the Giveaway be hosted? Type number followed by (m|h|d). Example: `10m`",
 		prize="What is the prize of the Giveaway?",
 		hosted_by="Who is hosting the Giveaway? If not specified, the author of the command will be the host.",
+		winners="How many winners should be selected? Default: 1",
 	)
 	async def create(
 		self,
@@ -52,12 +53,13 @@ class Util(commands.Cog):
 		duration: str,
 		prize: str,
 		hosted_by: discord.Member = None,
+		winners: int = 1,
 	):
 		"""
 		Create a giveaway. Requires Manage Channels.
 
 		Slash (recommended):
-		/giveaway create channel: #channel duration: 10m|2h|1d prize: "..." [hosted_by]
+		/giveaway create channel: #channel duration: 10m|2h|1d prize: "..." [hosted_by] [winners]
 
 		Prefix examples:
 		<<giveaway create <#channel> <duration> <prize> [@host]
@@ -77,16 +79,22 @@ class Util(commands.Cog):
 			missing.append("Read Message History")
 		if missing:
 			missing_list = ", ".join(missing)
-			embed = discord.Embed(description=f"I need these permissions in {channel.mention}: {missing_list}", color=discord.Colour.red())
+			embed = discord.Embed(
+				description=f"I need these permissions in {channel.mention}: {missing_list}", color=discord.Colour.red()
+			)
 			return await self._safe_notify(ctx, embed=embed)
 
 		time = self.convert(duration)
 		# Check if Time is valid
 		if time == -1:
-			await self._safe_notify(ctx, embed=discord.Embed(description="The Time format was wrong", color=discord.Colour.red()))
+			await self._safe_notify(
+				ctx, embed=discord.Embed(description="The Time format was wrong", color=discord.Colour.red())
+			)
 			return
 		elif time == -2:
-			await self._safe_notify(ctx, embed=discord.Embed(description="The Time was not conventional number", color=discord.Colour.red()))
+			await self._safe_notify(
+				ctx, embed=discord.Embed(description="The Time was not conventional number", color=discord.Colour.red())
+			)
 			return
 
 		setup_complete = f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}"
@@ -95,8 +103,18 @@ class Util(commands.Cog):
 		end = datetime.datetime.utcnow() + datetime.timedelta(seconds=time)
 		end_string = end.strftime("%d.%m.%Y %H:%M")
 
-		embed = self.create_giveaway_embed(hosted_by, prize)
-		embed.description = f"\nReact with :tada: to enter!\nEnds <t:{int(end.replace(tzinfo=datetime.timezone.utc).timestamp())}:R>"
+		# Validate winners
+		if winners < 1 or winners > 10:
+			return await self._safe_notify(
+				ctx,
+				embed=discord.Embed(
+					description="Please choose a winners count between 1 and 10.", color=discord.Colour.red()
+				),
+			)
+
+		embed = self.create_giveaway_embed(hosted_by, prize, winners)
+		base_desc = embed.description or ""
+		embed.description = f"{base_desc}\nReact with :tada: to enter!\nEnds <t:{int(end.replace(tzinfo=datetime.timezone.utc).timestamp())}:R>"
 		embed.set_footer(text=f"Giveaway ends on {end_string}")
 
 		new_msg = await channel.send(embed=embed)
@@ -106,7 +124,9 @@ class Util(commands.Cog):
 		try:
 			await new_msg.add_reaction("🎉")
 		except discord.Forbidden:
-			embed = discord.Embed(description="I couldn't add the 🎉 reaction due to missing permissions.", color=discord.Colour.red())
+			embed = discord.Embed(
+				description="I couldn't add the 🎉 reaction due to missing permissions.", color=discord.Colour.red()
+			)
 			await self._safe_notify(ctx, embed=embed)
 
 	@giveaway.command(usage="reroll <message_id>")
@@ -119,17 +139,23 @@ class Util(commands.Cog):
 		try:
 			msg = await ctx.fetch_message(message_id)
 		except Exception:
-			await self._safe_notify(ctx, embed=discord.Embed(description="The message couldn't be found in this channel", color=discord.Colour.red()))
+			await self._safe_notify(
+				ctx,
+				embed=discord.Embed(
+					description="The message couldn't be found in this channel", color=discord.Colour.red()
+				),
+			)
 			return
 
 		reaction = discord.utils.find(lambda r: str(r.emoji) == "🎉", msg.reactions)
 		users = [] if reaction is None else [u async for u in reaction.users() if not u.bot]
 
 		prize = await self.get_giveaway_prize(msg)
+		winners = self.get_giveaway_winners(msg)
 		giveaway_host = msg.embeds[0].fields[0].value
-		embed = self.create_giveaway_embed(giveaway_host, prize)
+		embed = self.create_giveaway_embed(giveaway_host, prize, winners)
 
-		await self.pick_winner(users, msg.channel, prize, embed, msg)
+		await self.pick_winner(users, msg.channel, prize, embed, msg, winners)
 		await msg.edit(embed=embed)
 		await ctx.message.delete()
 
@@ -144,7 +170,7 @@ class Util(commands.Cog):
 
 		embed = discord.Embed(title="Active Giveaways", description="")
 		for giveaway in giveaways:
-			end_date = giveaway['end_date']
+			end_date = giveaway["end_date"]
 			embed.description += f"[{giveaway['prize']}](https://discord.com/channels/{giveaway['discord_server_id']}/{giveaway['discord_channel_id']}/{giveaway['discord_message_id']}) - Ends <t:{int(end_date.replace(tzinfo=datetime.timezone.utc).timestamp())}:R>\n"
 		await ctx.send(embed=embed)
 
@@ -185,7 +211,7 @@ class Util(commands.Cog):
 		await ctx.send("Giveaway has been cancelled", delete_after=30)
 		await ctx.message.delete()
 
-	@tasks.loop(minutes=1)
+	@tasks.loop(seconds=30)
 	async def giveaway_task(self):
 		giveaways = await self.bot.db.pool.fetch("SELECT * FROM giveaway")
 		for giveaway in giveaways:
@@ -206,9 +232,10 @@ class Util(commands.Cog):
 			reaction = discord.utils.find(lambda r: str(r.emoji) == "🎉", msg.reactions)
 			users = [] if reaction is None else [u async for u in reaction.users() if not u.bot]
 			prize = giveaway["prize"]
-			embed = self.create_giveaway_embed(author, prize)
+			winners = self.get_giveaway_winners(msg)
+			embed = self.create_giveaway_embed(author, prize, winners)
 
-			await self.pick_winner(users, channel, prize, embed, msg)
+			await self.pick_winner(users, channel, prize, embed, msg, winners)
 			await msg.edit(embed=embed)
 			await self.bot.db.pool.execute("DELETE FROM giveaway WHERE id = $1", giveaway["id"])
 
@@ -219,6 +246,7 @@ class Util(commands.Cog):
 		prize: str,
 		embed: discord.Embed,
 		source_message: discord.Message | None = None,
+		winners_count: int = 1,
 	):
 		# Check if User list is not empty
 		if len(users) <= 0:
@@ -234,9 +262,19 @@ class Util(commands.Cog):
 			await channel.send(embed=announce)
 		else:
 			unique = list({u.id: u for u in users}.values())
-			winner = secrets.choice(unique)
-			embed.add_field(name=f"Congratulations on winning '{prize}'", value=winner.mention)
-			win_text = f"Congratulations {winner.mention}! You won **{prize}**!"
+			k = max(1, min(winners_count or 1, len(unique)))
+			try:
+				sysrand = secrets.SystemRandom()
+				winners = sysrand.sample(unique, k)
+			except Exception:
+				winners = [secrets.choice(unique)]
+			mentions = ", ".join(w.mention for w in winners)
+			if k == 1:
+				embed.add_field(name=f"Congratulations on winning '{prize}'", value=winners[0].mention)
+				win_text = f"Congratulations {winners[0].mention}! You won **{prize}**!"
+			else:
+				embed.add_field(name=f"Congratulations on winning '{prize}'", value=mentions)
+				win_text = f"Congratulations {mentions}! You won **{prize}**!"
 			if source_message is not None and source_message.guild is not None:
 				message_url = f"https://discord.com/channels/{source_message.guild.id}/{source_message.channel.id}/{source_message.id}"
 				win_text = f"{win_text} — [Jump to giveaway]({message_url})"
@@ -244,6 +282,17 @@ class Util(commands.Cog):
 
 	async def get_giveaway_prize(self, msg: discord.Message):
 		return msg.embeds[0].description.split("Win **")[1].split("**!")[0]
+
+	def get_giveaway_winners(self, msg: discord.Message):
+		# Prefer a dedicated embed field "Winners:" if present
+		try:
+			for field in msg.embeds[0].fields:
+				if str(field.name).strip().lower() == "winners:":
+					value = int(str(field.value).strip())
+					return max(1, min(value, 10))
+		except Exception:
+			pass
+		return 1
 
 	def convert(self, time):
 		pos = ["m", "h", "d"]
@@ -257,7 +306,7 @@ class Util(commands.Cog):
 			return -2
 		return time_val * time_dict[unit]
 
-	def create_giveaway_embed(self, author: discord.Member, prize):
+	def create_giveaway_embed(self, author: discord.Member, prize, winners):
 		embed = discord.Embed(
 			title=":tada: Giveaway :tada:",
 			description=f"Win **{prize}**!",
@@ -265,9 +314,17 @@ class Util(commands.Cog):
 		)
 		host = author.mention if isinstance(author, (discord.Member, discord.User)) else author
 		embed.add_field(name="Hosted By:", value=host)
+		embed.add_field(name="Winners:", value=str(winners))
 		return embed
 
-	async def _safe_notify(self, ctx: commands.Context, *, content: str | None = None, embed: discord.Embed | None = None, delete_after: float | None = None):
+	async def _safe_notify(
+		self,
+		ctx: commands.Context,
+		*,
+		content: str | None = None,
+		embed: discord.Embed | None = None,
+		delete_after: float | None = None,
+	):
 		# For slash invocations, prefer ephemeral interaction responses
 		interaction = getattr(ctx, "interaction", None)
 		if interaction is not None:
