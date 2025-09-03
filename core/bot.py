@@ -82,16 +82,45 @@ class Substiify(commands.Bot):
 			return
 		if isinstance(error, (commands.CommandOnCooldown, slash_errors.CommandOnCooldown)):
 			await ctx.message.add_reaction("⏳")
-			await ctx.reply(
-				f"This command is on cooldown. Try again in {error.retry_after:.2f} seconds.", ephemeral=True
+			embed = discord.Embed(
+				title="Slow it down!",
+				description=f"Try again in {error.retry_after:.2f}s.",
+				color=discord.Color.orange(),
 			)
+			await ctx.reply(embed=embed)
 			return
 		logger.error(f"[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]")
 		if isinstance(error, commands.CheckFailure):
-			await ctx.reply("You do not have permission to use this command.")
+			embed = discord.Embed(
+				title="Insufficient permissions",
+				description="You do not have permission to use this command.",
+				color=discord.Color.red(),
+			)
+			await ctx.reply(embed=embed)
 			return
 		if isinstance(error, commands.MissingRequiredArgument):
-			await ctx.reply("A required argument is missing.")
+			param_obj = getattr(error, "param", None)
+			param_name = (
+				getattr(param_obj, "displayed_name", None)
+				or getattr(param_obj, "name", None)
+			)
+			description = (
+				f"`{param_name}` is a required argument." if param_name else str(error)
+			)
+			embed = discord.Embed(
+				title="Missing required argument",
+				description=description,
+				color=discord.Color.red(),
+			)
+			help_hint = f"Use '{core.config.BOT_PREFIX}help {ctx.command.qualified_name}' to learn more."
+			embed.set_footer(text=help_hint)
+			await ctx.reply(embed=embed)
+			return
+		if isinstance(error, (commands.BadArgument, commands.UserInputError)):
+			embed = discord.Embed(title="Invalid input", description=f"{error}", color=discord.Color.red())
+			help_hint = f"Use '{core.config.BOT_PREFIX}help {ctx.command.qualified_name}' to learn more."
+			embed.set_footer(text=help_hint)
+			await ctx.reply(embed=embed)
 			return
 
 		try:
@@ -107,7 +136,14 @@ class Substiify(commands.Bot):
 		else:
 			error_msg = f"Error in DMs by {ctx.author} -> {ctx.command.qualified_name}"
 		embed = discord.Embed(title=error_msg, description=f"```{error}```", color=discord.Color.red())
-		await self.get_channel(ERRORS_CHANNEL_ID).send(embed=embed)
+		channel = self.get_channel(ERRORS_CHANNEL_ID)
+		if channel is not None:
+			try:
+				await channel.send(embed=embed)
+			except discord.Forbidden:
+				pass
+			except discord.HTTPException:
+				pass
 
 	async def close(self) -> None:
 		await self.db.pool.close()

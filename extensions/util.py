@@ -67,20 +67,30 @@ class Util(commands.Cog):
 			hosted_by = ctx.author
 
 		channel = await self.bot.fetch_channel(channel.id)
-		if not channel.permissions_for(ctx.me).send_messages:
-			return await ctx.reply("I don't have permission to send messages in that channel", delete_after=60)
+		perms = channel.permissions_for(ctx.me)
+		missing = []
+		if not perms.send_messages:
+			missing.append("Send Messages")
+		if not perms.add_reactions:
+			missing.append("Add Reactions")
+		if not perms.read_message_history:
+			missing.append("Read Message History")
+		if missing:
+			missing_list = ", ".join(missing)
+			embed = discord.Embed(description=f"I need these permissions in {channel.mention}: {missing_list}", color=discord.Colour.red())
+			return await self._safe_notify(ctx, embed=embed)
 
 		time = self.convert(duration)
 		# Check if Time is valid
 		if time == -1:
-			await ctx.send("The Time format was wrong")
+			await self._safe_notify(ctx, embed=discord.Embed(description="The Time format was wrong", color=discord.Colour.red()))
 			return
 		elif time == -2:
-			await ctx.send("The Time was not conventional number")
+			await self._safe_notify(ctx, embed=discord.Embed(description="The Time was not conventional number", color=discord.Colour.red()))
 			return
 
 		setup_complete = f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}"
-		await ctx.send(embed=discord.Embed(description=setup_complete))
+		await self._safe_notify(ctx, embed=discord.Embed(description=setup_complete))
 
 		end = datetime.datetime.now() + datetime.timedelta(seconds=time)
 		end_string = end.strftime("%d.%m.%Y %H:%M")
@@ -93,7 +103,11 @@ class Util(commands.Cog):
 		stmt = """INSERT INTO giveaway (discord_user_id, end_date, prize, discord_server_id, discord_channel_id, discord_message_id)
                   VALUES ($1, $2, $3, $4, $5, $6)"""
 		await self.bot.db.pool.execute(stmt, hosted_by.id, end, prize, ctx.guild.id, channel.id, new_msg.id)
-		await new_msg.add_reaction("🎉")
+		try:
+			await new_msg.add_reaction("🎉")
+		except discord.Forbidden:
+			embed = discord.Embed(description="I couldn't add the 🎉 reaction due to missing permissions.", color=discord.Colour.red())
+			await self._safe_notify(ctx, embed=embed)
 
 	@giveaway.command(usage="reroll <message_id>")
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -105,7 +119,7 @@ class Util(commands.Cog):
 		try:
 			msg = await ctx.fetch_message(message_id)
 		except Exception:
-			await ctx.send("The message couldn't be found in this channel")
+			await self._safe_notify(ctx, embed=discord.Embed(description="The message couldn't be found in this channel", color=discord.Colour.red()))
 			return
 
 		reaction = discord.utils.find(lambda r: str(r.emoji) == "🎉", msg.reactions)
@@ -130,7 +144,8 @@ class Util(commands.Cog):
 
 		embed = discord.Embed(title="Active Giveaways", description="")
 		for giveaway in giveaways:
-			embed.description += f"[{giveaway['prize']}](https://discord.com/channels/{giveaway['discord_server_id']}/{giveaway['discord_channel_id']}/{giveaway['discord_message_id']}) - Ends <t:{int(giveaway['end_date'].timestamp())}:R>\n"
+			end_date = giveaway['end_date']
+			embed.description += f"[{giveaway['prize']}](https://discord.com/channels/{giveaway['discord_server_id']}/{giveaway['discord_channel_id']}/{giveaway['discord_message_id']}) - Ends <t:{int(end_date.replace(tzinfo=datetime.timezone.utc).timestamp())}:R>\n"
 		await ctx.send(embed=embed)
 
 	@commands.command(name="giveawayInfo", hidden=True)
@@ -174,8 +189,9 @@ class Util(commands.Cog):
 	async def giveaway_task(self):
 		giveaways = await self.bot.db.pool.fetch("SELECT * FROM giveaway")
 		for giveaway in giveaways:
-			now = discord.utils.utcnow()
-			if now < giveaway["end_date"]:
+			now = datetime.datetime.now()
+			end_date = giveaway["end_date"]
+			if now < end_date:
 				continue
 			channel = await self.bot.fetch_channel(giveaway["discord_channel_id"])
 			try:
@@ -201,9 +217,10 @@ class Util(commands.Cog):
 	):
 		# Check if User list is not empty
 		if len(users) <= 0:
+			message_text = "No one won the giveaway (no one entered)"
 			embed.remove_field(0)
-			embed.set_footer(text="No one won the Giveaway")
-			await channel.send("No one won the Giveaway")
+			embed.set_footer(text=message_text)
+			await channel.send(message_text)
 		else:
 			unique = list({u.id: u for u in users}.values())
 			winner = secrets.choice(unique)
@@ -234,6 +251,28 @@ class Util(commands.Cog):
 		host = author.mention if isinstance(author, (discord.Member, discord.User)) else author
 		embed.add_field(name="Hosted By:", value=host)
 		return embed
+
+	async def _safe_notify(self, ctx: commands.Context, *, content: str | None = None, embed: discord.Embed | None = None, delete_after: float | None = None):
+		# For slash invocations, prefer ephemeral interaction responses
+		interaction = getattr(ctx, "interaction", None)
+		if interaction is not None:
+			try:
+				await interaction.response.send_message(content=content, embed=embed, ephemeral=True)
+				return
+			except Exception:
+				try:
+					await interaction.followup.send(content=content, embed=embed, ephemeral=True)
+					return
+				except Exception:
+					pass
+		# For prefix, try sending in-channel, then DM fallback
+		try:
+			await ctx.send(content=content, embed=embed, delete_after=delete_after)
+		except discord.Forbidden:
+			try:
+				await ctx.author.send(content=content, embed=embed)
+			except Exception:
+				pass
 
 	async def _cooldown_error(self, ctx: commands.Context, error):
 		if isinstance(error, commands.CommandOnCooldown):
