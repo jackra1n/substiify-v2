@@ -4,7 +4,6 @@ import os
 import re
 
 import discord
-import matplotlib.pyplot as plt
 from asyncpg import Record
 from discord import app_commands
 from discord.ext import commands
@@ -558,77 +557,6 @@ class Karma(commands.Cog):
 			)
 
 			await ctx.send(embed=embed)
-
-	@commands.cooldown(1, 30, commands.BucketType.user)
-	@karma.command(name="graph", usage="graph")
-	async def karma_graph(self, ctx: commands.Context):
-		"""
-		Shows a graph of the amount of karma form every ten percent of users.
-		"""
-		async with ctx.typing():
-			stmt_karma = """
-                SELECT amount
-                FROM karma
-                WHERE discord_server_id = $1
-                ORDER BY amount ASC
-            """
-
-			karma = await self.bot.db.pool.fetch(stmt_karma, ctx.guild.id)
-			users_count = len(karma)
-			if users_count == 0:
-				embed = discord.Embed(title="Karma graph", description="No users have karma.")
-				return await ctx.send(embed=embed)
-
-			karma_percentiles = []
-			for i in range(0, 101, 5):
-				karma_percentile_list = karma[: int(users_count * (i / 100))]
-				total_percentile_karma = sum(entry["amount"] for entry in karma_percentile_list)
-				karma_percentiles.append((total_percentile_karma, i))
-
-			timestamp = datetime.datetime.now().timestamp()
-			filename = f"karma_graph_{timestamp}.png"
-
-			filename = self._generate_graph(filename, karma_percentiles)
-			await ctx.send(file=discord.File(filename, filename=filename))
-			os.remove(filename)
-
-	def _generate_graph(self, filename: str, data: list[tuple[int, int]]) -> str:
-		x = [entry[1] for entry in data]
-		y = [entry[0] for entry in data]
-
-		plt.figure(figsize=(10, 6), facecolor="#141415")
-		plt.bar(x, y, color="#6971f8", width=4)
-
-		plt.title("Karma Graph", color="white", loc="left", fontsize=20)
-		plt.xlabel("Percentile of users", color="white", fontsize=16)
-		plt.ylabel("Total karma", color="white", fontsize=16)
-
-		plt.gca().spines["bottom"].set_color("white")
-		plt.gca().spines["left"].set_color("white")
-		plt.gca().tick_params(axis="x", colors="white")
-		plt.gca().tick_params(axis="y", colors="white")
-
-		plt.gca().set_facecolor("#141415")
-		plt.gca().spines["top"].set_visible(False)
-		plt.gca().spines["right"].set_visible(False)
-		plt.gca().spines["left"].set_visible(False)
-		plt.gca().spines["bottom"].set_visible(False)
-
-		plt.grid(axis="x", visible=False)
-		plt.grid(axis="y", color="#4a4d60")
-
-		def custom_formatter(x, pos):
-			if x >= 1e6:  # Millions
-				return f"{x * 1e-6:.0f}M"
-			elif x >= 1e3:  # Thousands
-				return f"{x * 1e-3:.0f}K"
-			else:
-				return f"{x:.0f}"
-
-		plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(custom_formatter))
-		plt.savefig(filename, facecolor="#141415")
-		plt.close()
-		return filename
 
 	@commands.hybrid_group(name="post", aliases=["po"], invoke_without_command=True)
 	async def post(self, ctx: commands.Context):
