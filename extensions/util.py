@@ -92,11 +92,11 @@ class Util(commands.Cog):
 		setup_complete = f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}"
 		await self._safe_notify(ctx, embed=discord.Embed(description=setup_complete))
 
-		end = datetime.datetime.now() + datetime.timedelta(seconds=time)
+		end = datetime.datetime.utcnow() + datetime.timedelta(seconds=time)
 		end_string = end.strftime("%d.%m.%Y %H:%M")
 
 		embed = self.create_giveaway_embed(hosted_by, prize)
-		embed.description = f"\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
+		embed.description = f"\nReact with :tada: to enter!\nEnds <t:{int(end.replace(tzinfo=datetime.timezone.utc).timestamp())}:R>"
 		embed.set_footer(text=f"Giveaway ends on {end_string}")
 
 		new_msg = await channel.send(embed=embed)
@@ -129,7 +129,7 @@ class Util(commands.Cog):
 		giveaway_host = msg.embeds[0].fields[0].value
 		embed = self.create_giveaway_embed(giveaway_host, prize)
 
-		await self.pick_winner(users, msg.channel, prize, embed)
+		await self.pick_winner(users, msg.channel, prize, embed, msg)
 		await msg.edit(embed=embed)
 		await ctx.message.delete()
 
@@ -189,7 +189,7 @@ class Util(commands.Cog):
 	async def giveaway_task(self):
 		giveaways = await self.bot.db.pool.fetch("SELECT * FROM giveaway")
 		for giveaway in giveaways:
-			now = datetime.datetime.now()
+			now = datetime.datetime.utcnow()
 			end_date = giveaway["end_date"]
 			if now < end_date:
 				continue
@@ -208,24 +208,39 @@ class Util(commands.Cog):
 			prize = giveaway["prize"]
 			embed = self.create_giveaway_embed(author, prize)
 
-			await self.pick_winner(users, channel, prize, embed)
+			await self.pick_winner(users, channel, prize, embed, msg)
 			await msg.edit(embed=embed)
 			await self.bot.db.pool.execute("DELETE FROM giveaway WHERE id = $1", giveaway["id"])
 
 	async def pick_winner(
-		self, users: list[discord.Member], channel: discord.TextChannel, prize: str, embed: discord.Embed
+		self,
+		users: list[discord.Member],
+		channel: discord.TextChannel,
+		prize: str,
+		embed: discord.Embed,
+		source_message: discord.Message | None = None,
 	):
 		# Check if User list is not empty
 		if len(users) <= 0:
 			message_text = "No one won the giveaway (no one entered)"
+			if source_message is not None and source_message.guild is not None:
+				message_url = f"https://discord.com/channels/{source_message.guild.id}/{source_message.channel.id}/{source_message.id}"
+				jump = f" — [Jump to giveaway]({message_url})"
+			else:
+				jump = ""
 			embed.remove_field(0)
 			embed.set_footer(text=message_text)
-			await channel.send(message_text)
+			announce = discord.Embed(description=f"{message_text}{jump}", color=core.constants.PRIMARY_COLOR)
+			await channel.send(embed=announce)
 		else:
 			unique = list({u.id: u for u in users}.values())
 			winner = secrets.choice(unique)
 			embed.add_field(name=f"Congratulations on winning '{prize}'", value=winner.mention)
-			await channel.send(f"Congratulations {winner.mention}! You won **{prize}**!")
+			win_text = f"Congratulations {winner.mention}! You won **{prize}**!"
+			if source_message is not None and source_message.guild is not None:
+				message_url = f"https://discord.com/channels/{source_message.guild.id}/{source_message.channel.id}/{source_message.id}"
+				win_text = f"{win_text} — [Jump to giveaway]({message_url})"
+			await channel.send(win_text)
 
 	async def get_giveaway_prize(self, msg: discord.Message):
 		return msg.embeds[0].description.split("Win **")[1].split("**!")[0]
