@@ -100,13 +100,8 @@ class Substiify(commands.Bot):
 			return
 		if isinstance(error, commands.MissingRequiredArgument):
 			param_obj = getattr(error, "param", None)
-			param_name = (
-				getattr(param_obj, "displayed_name", None)
-				or getattr(param_obj, "name", None)
-			)
-			description = (
-				f"`{param_name}` is a required argument." if param_name else str(error)
-			)
+			param_name = getattr(param_obj, "displayed_name", None) or getattr(param_obj, "name", None)
+			description = f"`{param_name}` is a required argument." if param_name else str(error)
 			embed = discord.Embed(
 				title="Missing required argument",
 				description=description,
