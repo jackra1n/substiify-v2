@@ -859,51 +859,76 @@ class Karma(commands.Cog):
 			except discord.errors.Forbidden:
 				logger.warning(f"Could not send kasino abort to {user.id}")
 
-	async def win_kasino(self, kasino_id: int, winning_option: int):
-		stmt_kasino_and_bets = """SELECT * FROM kasino JOIN kasino_bet ON kasino.id = kasino_bet.kasino_id
-                                  WHERE kasino.id = $1"""
-		kasino_and_bets = await self.bot.db.pool.fetch(stmt_kasino_and_bets, kasino_id)
-		total_kasino_karma = sum(kb["amount"] for kb in kasino_and_bets)
-		winners_bets = [kb for kb in kasino_and_bets if kb["option"] == winning_option]
-		total_winner_karma = sum(kb["amount"] for kb in winners_bets)
-		server_id = kasino_and_bets[0]["discord_server_id"]
-		question = kasino_and_bets[0]["question"]
+	async def win_kasino(self, kasino_id: int, winning_option: int) -> None:
+		"""Distributes karma to winners and notifies all participants of the kasino result."""
+		kasino: Record = await self.bot.db.pool.fetchrow(
+			"SELECT discord_server_id, question FROM kasino WHERE id = $1", kasino_id
+		)
+		if not kasino:
+			logger.error(f"Kasino {kasino_id} not found when trying to distribute winnings.")
+			return
 
-		if total_winner_karma is None:
-			total_winner_karma = 0
+		server_id: int = kasino["discord_server_id"]
+		question: str = kasino["question"]
 
-		async def send_message(self: Karma, user_id: int, bet, win_amount: int) -> None:
-			user_karma = await self._get_user_karma(user_id, server_id)
+		all_bets: list[Record] = await self.bot.db.pool.fetch(
+			"SELECT discord_user_id, amount, option FROM kasino_bet WHERE kasino_id = $1", kasino_id
+		)
+		if not all_bets:
+			logger.warning(f"Kasino {kasino_id} closed with no bets placed.")
+			return
+
+		total_pool: int = sum(bet["amount"] for bet in all_bets)
+		winner_bets: list[Record] = [bet for bet in all_bets if bet["option"] == winning_option]
+		loser_bets: list[Record] = [bet for bet in all_bets if bet["option"] != winning_option]
+		winner_pool: int = sum(bet["amount"] for bet in winner_bets)
+
+		# Guard: No winners (everyone bet on the losing side)
+		if winner_pool == 0:
+			logger.info(f"Kasino {kasino_id}: No winners. All karma goes to the void.")
+			for bet in loser_bets:
+				await self._send_kasino_result_dm(bet["discord_user_id"], server_id, question, bet, win_amount=0)
+			return
+
+		stmt_update_karma = """
+			UPDATE karma SET amount = amount + $1
+			WHERE discord_user_id = $2 AND discord_server_id = $3
+		"""
+		for bet in winner_bets:
+			user_id: int = bet["discord_user_id"]
+			win_ratio: float = bet["amount"] / winner_pool
+			win_amount: int = round(win_ratio * total_pool)
+
+			await self.bot.db.pool.execute(stmt_update_karma, win_amount, user_id, server_id)
+			await self._send_kasino_result_dm(user_id, server_id, question, bet, win_amount)
+
+		for bet in loser_bets:
+			await self._send_kasino_result_dm(bet["discord_user_id"], server_id, question, bet, win_amount=0)
+
+	async def _send_kasino_result_dm(
+		self, user_id: int, server_id: int, question: str, bet: Record, win_amount: int
+	) -> None:
+		"""Send a DM to a user with their kasino result (win or loss)."""
+		user_karma = await self._get_user_karma(user_id, server_id)
+
+		if win_amount > 0:
+			title = f":tada: **You have won {win_amount} karma!** :tada:"
+			color = discord.Colour.from_rgb(66, 186, 50)
+			description = f"Of which `{bet['amount']}` you put down on the table"
+		else:
 			title = f":chart_with_downwards_trend: **You have unfortunately lost {bet['amount']} karma...** :chart_with_downwards_trend:"
 			color = discord.Colour.from_rgb(209, 25, 25)
 			description = None
-			if win_amount > 0:
-				title = f":tada: **You have won {win_amount} karma!** :tada:"
-				color = discord.Colour.from_rgb(66, 186, 50)
-				description = f"Of which `{bet['amount']}` you put down on the table"
-			embed = discord.Embed(title=title, color=color, description=description)
-			embed.add_field(name="Question was:", value=question, inline=False)
-			embed.add_field(name="New karma balance:", value=user_karma, inline=False)
-			user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
-			try:
-				await user.send(embed=embed)
-			except discord.errors.Forbidden:
-				logger.warning(f"Could not send kasino conclusion to {user_id}")
 
-		for bet in winners_bets:
-			win_ratio = bet["amount"] / total_winner_karma
-			win_amount = round(win_ratio * total_kasino_karma)
-			user_id = bet["discord_user_id"]
+		embed = discord.Embed(title=title, color=color, description=description)
+		embed.add_field(name="Question was:", value=question, inline=False)
+		embed.add_field(name="New karma balance:", value=user_karma, inline=False)
 
-			stmt_update_user_karma = """UPDATE karma SET amount = amount + $1
-                                        WHERE discord_user_id = $2 AND discord_server_id = $3"""
-			await self.bot.db.pool.execute(stmt_update_user_karma, win_amount, user_id, server_id)
-			await send_message(self, user_id, bet, win_amount)
-
-		losers_bets = [kb for kb in kasino_and_bets if kb["option"] != winning_option]
-		for bet in losers_bets:
-			user_id = bet["discord_user_id"]
-			await send_message(self, user_id, bet, 0)
+		user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+		try:
+			await user.send(embed=embed)
+		except discord.errors.Forbidden:
+			logger.warning(f"Could not send kasino result DM to user {user_id}")
 
 
 async def _update_kasino_msg(bot: core.Substiify, kasino_id: int) -> discord.Message:
