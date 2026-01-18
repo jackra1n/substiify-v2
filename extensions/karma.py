@@ -279,7 +279,7 @@ class Karma(commands.Cog):
 	async def karma_error(self, ctx: commands.Context, error):
 		if isinstance(error, commands.BadArgument):
 			embed = discord.Embed(description=error, color=discord.Colour.red())
-			await ctx.send(embed=embed)
+			await ctx.reply(embed=embed)
 			error.is_handled = True
 
 	@commands.cooldown(3, 10)
