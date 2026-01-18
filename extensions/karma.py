@@ -2,6 +2,7 @@ import logging
 import re
 
 import discord
+import asyncio
 from asyncpg import Record
 from discord import app_commands
 from discord.ext import commands
@@ -492,22 +493,21 @@ class Karma(commands.Cog):
 				stmt_karma_leaderboard = "SELECT discord_user_id, amount FROM karma ORDER BY amount DESC LIMIT 15"
 				results = await self.bot.db.pool.fetch(stmt_karma_leaderboard)
 
-			embed.description = ""
 			if not results:
 				embed.description = "No users have karma."
 				return await ctx.send(embed=embed)
 
-			users_string = "".join([f"<@{entry['discord_user_id']}>\n" for entry in results])
+			async def get_user(user_id: int) -> discord.User:
+				return self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
 
-			for index, entry in enumerate(results, start=1):
-				user = self.bot.get_user(entry["discord_user_id"]) or await self.bot.fetch_user(
-					entry["discord_user_id"]
-				)
-				embed.description += f"`{str(index).rjust(2)}.` | `{entry['amount']}` - {user.mention}\n"
+			users = await asyncio.gather(*[get_user(entry["discord_user_id"]) for entry in results])
 
-			load_users_message = await ctx.send("Loading users...")
-			await load_users_message.edit(content=users_string)
-			await load_users_message.delete()
+			lines = [
+				f"`{str(i).rjust(2)}.` | `{entry['amount']}` - {user.mention}"
+				for i, (entry, user) in enumerate(zip(results, users), start=1)
+			]
+
+			embed.description = "\n".join(lines)
 			await ctx.send(embed=embed)
 
 	@commands.cooldown(1, 15, commands.BucketType.user)
