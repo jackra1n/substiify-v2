@@ -334,6 +334,16 @@ class Karma(commands.Cog):
 			embed.description = "You don't have enough karma!"
 			return await ctx.send(embed=embed)
 
+		await self.bot.db.pool.execute(
+			dbc.USER_INSERT_QUERY, user.id, user.display_name, user.display_avatar.url
+		)
+		await self.bot.db.pool.execute(
+			dbc.USER_INSERT_QUERY,
+			ctx.author.id,
+			ctx.author.display_name,
+			ctx.author.display_avatar.url,
+		)
+
 		await self.bot.db.pool.executemany(
 			UPSERT_KARMA_QUERY, [(user.id, ctx.guild.id, amount), (ctx.author.id, ctx.guild.id, -amount)]
 		)
