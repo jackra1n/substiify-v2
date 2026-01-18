@@ -119,7 +119,7 @@ class Karma(commands.Cog):
 			payload.guild_id,
 			channel.id,
 			payload.message_id,
-			message.created_at.now(),
+			message.created_at,
 			upvote,
 			downvote,
 		)
