@@ -275,6 +275,7 @@ class Karma(commands.Cog):
 		if isinstance(error, commands.BadArgument):
 			embed = discord.Embed(description=error, color=discord.Colour.red())
 			await ctx.send(embed=embed)
+			error.is_handled = True
 
 	@commands.cooldown(3, 10)
 	@karma.command(name="donate", aliases=["wiretransfer", "wt"], usage="donate <user> <amount>")
