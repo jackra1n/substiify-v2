@@ -410,7 +410,10 @@ class NoNodeAccessible(MusicError):
 
 
 async def setup(bot: core.Substiify):
-	if all([core.config.LAVALINK_NODE_URL, core.config.LAVALINK_PASSWORD]):
+	url = core.config.LAVALINK_NODE_URL
+	password = core.config.LAVALINK_PASSWORD
+
+	if url and url.strip() and password and password.strip():
 		await bot.add_cog(Music(bot))
 	else:
 		logger.warning("Lavalink is not configured. Skipping Music cog.")

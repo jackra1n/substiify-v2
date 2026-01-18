@@ -29,8 +29,14 @@ class Substiify(commands.Bot):
 		await self.load_extension("core.events")
 		await self.load_extension("extensions")
 
-		node: wavelink.Node = wavelink.Node(uri=core.config.LAVALINK_NODE_URL, password=core.config.LAVALINK_PASSWORD)
-		await wavelink.Pool.connect(client=self, nodes=[node])
+		url = core.config.LAVALINK_NODE_URL
+		password = core.config.LAVALINK_PASSWORD
+
+		if url and url.strip() and password and password.strip():
+			node: wavelink.Node = wavelink.Node(uri=url, password=password)
+			await wavelink.Pool.connect(client=self, nodes=[node])
+		else:
+			logger.warning("Lavalink is not configured. Skipping connection.")
 
 	async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
 		logging.info(f"Wavelink Node connected: {payload.node!r} | Resumed: {payload.resumed}")
