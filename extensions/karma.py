@@ -108,12 +108,16 @@ class Karma(commands.Cog):
 	async def _upsert_post_votes(
 		self, payload: discord.RawReactionActionEvent, user_id: int, upvote: int, downvote: int
 	):
-		message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+		channel = self.bot.get_channel(payload.channel_id)
+		if channel is None:
+			channel = await self.bot.fetch_channel(payload.channel_id)
+		message: discord.Message = await channel.fetch_message(payload.message_id)
+
 		await self.bot.db.pool.execute(
 			UPSERT_POST_VOTES_QUERY,
 			user_id,
 			payload.guild_id,
-			payload.channel_id,
+			channel.id,
 			payload.message_id,
 			message.created_at.now(),
 			upvote,
