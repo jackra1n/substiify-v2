@@ -93,7 +93,8 @@ class Music(commands.Cog):
 			if not permissions.connect or not permissions.speak:
 				raise NoPermissions()
 
-			await ctx.author.voice.channel.connect(cls=wavelink.Player)
+			player: wavelink.Player = await ctx.author.voice.channel.connect(cls=wavelink.Player)
+			await player.set_volume(65)
 			return True
 
 		if player.channel != ctx.author.voice.channel:
