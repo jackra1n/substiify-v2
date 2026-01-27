@@ -1,0 +1,28 @@
+{
+	"$schema": "https://json.schemastore.org/package.json",
+	"name": "substiify-v2",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"lint": "tsc && prettier --check . && eslint --ext .ts --format=pretty src",
+		"deploy": "bun run src/util/deploy.ts",
+		"format": "prettier --write . && eslint --ext .ts --fix --format=pretty src",
+		"start": "bun run src/index.ts"
+	},
+	"dependencies": {
+		"@discordjs/core": "^2.3.0",
+		"discord.js": "^14.24.0"
+	},
+	"devDependencies": {
+		"@sapphire/ts-config": "^5.0.1",
+		"@types/bun": "^1.2.23",
+		"eslint": "^9.37.0",
+		"eslint-config-neon": "^0.2.7",
+		"eslint-formatter-compact": "^8.40.0",
+		"eslint-formatter-pretty": "^7.0.0",
+		"prettier": "^3.6.2",
+		"typescript": "~5.9.3",
+		"zod": "^3.25.76"
+	}
+}
