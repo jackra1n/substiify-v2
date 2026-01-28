@@ -1,6 +1,6 @@
 {
 	"$schema": "https://json.schemastore.org/package.json",
-	"name": "substiify-v2",
+	"name": "substiify",
 	"version": "0.1.0",
 	"private": true,
 	"type": "module",

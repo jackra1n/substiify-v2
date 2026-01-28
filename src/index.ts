@@ -3,13 +3,22 @@ import { URL } from 'node:url';
 import { Client, GatewayIntentBits } from 'discord.js';
 import { loadEvents } from './util/loaders.ts';
 
-// Initialize the client
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({
+	intents: [
+		GatewayIntentBits.Guilds,
+		GatewayIntentBits.GuildMembers,
+		GatewayIntentBits.GuildMessages,
+		GatewayIntentBits.GuildExpressions,
+		GatewayIntentBits.GuildVoiceStates,
+		GatewayIntentBits.GuildPresences,
+		GatewayIntentBits.GuildMessages,
+		GatewayIntentBits.GuildMessageReactions,
+		GatewayIntentBits.MessageContent,
+	],
+});
 
-// Load the events and commands
 const events = await loadEvents(new URL('events/', import.meta.url));
 
-// Register the event handlers
 for (const event of events) {
 	client[event.once ? 'once' : 'on'](event.name, async (...args) => {
 		try {
@@ -20,5 +29,4 @@ for (const event of events) {
 	});
 }
 
-// Login to the client
 void client.login(process.env.DISCORD_TOKEN);

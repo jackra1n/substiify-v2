@@ -1,21 +1,62 @@
-# substiify-v2
+# substiify
 
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![Made with Python](https://img.shields.io/badge/Made%20with-Python-ffde57.svg?longCache=true&style=flat-square&colorB=ffdf68&logo=python&logoColor=88889e)](https://www.python.org/)
-[![Powered by discord.py](https://img.shields.io/badge/Powered%20by-discord.py-blue?style=flat-square&logo=appveyor)](https://github.com/Rapptz/discord.py)
+A feature-rich Discord bot rewritten with **TypeScript**, **Bun**, and **discord.js**.
 
+## 🚀 Features
 
+- 🎵 **Music**: Seamless and high-quality music playback powered by Lavalink.
+- 💰 **Karma & Karma Casino**: A complete karma system with a built-in casino for those who like to gamble.
+- 🛠️ **Utility & Helpers**: Essential utility commands and helper functions to boost server productivity.
 
-## Getting started
+## 🛠️ Tech Stack
 
-To run the bot you'll need docker compose.
+- **Runtime**: [Bun](https://bun.sh/)
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **Library**: [discord.js](https://discord.js.org/)
 
-- Copy or rename `example.env` in `/` to `.env` and fill out the fields. 
-- Start the postgres container and create a database which you configured in `.env` -> `DB_NAME`
-- Start the bot with `docker compose up -d`
+## ⚙️ Getting Started
 
-## Development
+### Prerequisites
 
-Increment the version in `core/VERSION`
+- [Bun](https://bun.sh/) installed on your system.
+- A PostgreSQL database.
+- A Lavalink node for music features.
 
-Build docker image with `docker build -t sybstiify .`
+### Installation
+
+1. **Clone the repository**:
+
+   ```bash
+   git clone https://github.com/jackra1n/substiify.git
+   cd substiify
+   ```
+
+2. **Install dependencies**:
+
+   ```bash
+   bun install
+   ```
+
+3. **Configure Environment**:
+   Copy the example environment file and fill in your details:
+   ```bash
+   cp example.env .env
+   ```
+
+### Running the Bot
+
+- **Deploy Commands**:
+
+  ```bash
+  bun run deploy
+  ```
+
+- **Start Production**:
+  ```bash
+  bun run start
+  ```
+
+## 🛠️ Development
+
+- **Lint**: `bun run lint`
+- **Format**: `bun run format`
