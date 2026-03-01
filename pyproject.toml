@@ -89,3 +89,6 @@ core = ["VERSION"]
 where = ["."]
 include = ["core*", "database*", "extensions*", "utils*"]
 exclude = ["logs*", "resources*"]
+
+[tool.uv.sources]
+wavelink = { git = "https://github.com/munishkhatri720/Wavelink.git", rev = "19ad1aa190e780a85f65a622cf5006f81f3bd132" }
