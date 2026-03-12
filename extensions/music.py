@@ -21,11 +21,17 @@ class Music(commands.Cog):
 	def __init__(self, bot: core.Substiify):
 		self.bot = bot
 
+	def _create_error_embed(self, description: str, *, title: str = "Music Error") -> discord.Embed:
+		embed = discord.Embed(title=title, description=description, color=discord.Color.red())
+		return embed
+
 	async def cog_command_error(self, ctx, error):
 		if isinstance(error, commands.MissingRequiredArgument):
-			await ctx.reply("Please provide a search query or URL.")
+			embed = self._create_error_embed("Please provide a search query or URL.", title="Missing Query")
+			await ctx.reply(embed=embed)
 		if isinstance(error, MusicError):
-			await ctx.send(str(error))
+			embed = self._create_error_embed(str(error))
+			await ctx.send(embed=embed)
 		error.is_handled = True
 
 	@commands.Cog.listener()
@@ -76,6 +82,15 @@ class Music(commands.Cog):
 		except wavelink.WavelinkException as error:
 			raise TrackLoadFailed(is_spotify=is_spotify) from error
 
+	async def _connect_player(self, ctx: commands.Context) -> wavelink.Player:
+		player: wavelink.Player | None = ctx.voice_client
+		if player:
+			return player
+
+		player = await ctx.author.voice.channel.connect(cls=wavelink.Player)
+		await player.set_volume(65)
+		return player
+
 	def _is_spotify_url(self, value: str) -> bool:
 		if value.startswith("spotify:"):
 			return True
@@ -116,17 +131,16 @@ class Music(commands.Cog):
 		if not ctx.author.voice or not ctx.author.voice.channel:
 			raise NoVoiceChannel()
 
-		should_connect = ctx.command.name in ["play"]
 		if not player:
-			if not should_connect:
+			if ctx.command.name == "play":
+				permissions = ctx.author.voice.channel.permissions_for(ctx.me)
+				if not permissions.connect or not permissions.speak:
+					raise NoPermissions()
+				return True
+
+			if ctx.command.name != "play":
 				raise NoPlayerFound()
 
-			permissions = ctx.author.voice.channel.permissions_for(ctx.me)
-			if not permissions.connect or not permissions.speak:
-				raise NoPermissions()
-
-			player: wavelink.Player = await ctx.author.voice.channel.connect(cls=wavelink.Player)
-			await player.set_volume(65)
 			return True
 
 		if player.channel != ctx.author.voice.channel:
@@ -140,16 +154,16 @@ class Music(commands.Cog):
 		`<<play All girls are the same Juice WRLD` - searches for a song and queues it
 		`<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
 		"""
-		player: wavelink.Player = ctx.voice_client
-
-		if player.autoplay == wavelink.AutoPlayMode.disabled:
-			player.autoplay = wavelink.AutoPlayMode.partial
-
 		search = search.strip("<>")
 
 		tracks: wavelink.Search = await self._search_tracks(search)
 		if not tracks:
 			raise NoTracksFound()
+
+		player: wavelink.Player = await self._connect_player(ctx)
+
+		if player.autoplay == wavelink.AutoPlayMode.disabled:
+			player.autoplay = wavelink.AutoPlayMode.partial
 
 		stmt_cleanup = "SELECT music_cleanup FROM discord_server WHERE discord_server_id = $1"
 		music_cleanup = await self.bot.db.pool.fetchval(stmt_cleanup, ctx.guild.id)
@@ -436,7 +450,7 @@ class SpotifyUnsupported(MusicError):
 	def __init__(self, message: str | None = None):
 		super().__init__(
 			message
-			or "Spotify links are currently unsupported right now. Please use a search query, YouTube link, or SoundCloud link instead."
+			or "Spotify links are unsupported right now. Please use a search query, YouTube link, or SoundCloud link instead."
 		)
 
 
