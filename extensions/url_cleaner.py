@@ -179,18 +179,23 @@ class URLCleaner(commands.Cog):
 				return
 
 	@commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
+	@commands.guild_only()
 	@commands.hybrid_command(usage="urls_cleaner <enable/disable>")
 	async def urls_cleaner(self, ctx: commands.Context, enable: bool | None = None):
 		"""Enable or disable the URL cleaner in the server.
 		If enabled, the bot will notify users if they sent a link with tracking parameters.
 		The bot will also resend the link without the tracking parameters.
 		"""
-		# ensure server and channel are in the database
+		if not isinstance(ctx.author, discord.Member) or ctx.guild is None:
+			await ctx.send("This command can only be used in a server.")
+			return
+
+		guild_id = ctx.guild.id
 		await self.bot.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
 
 		if enable is None:
 			enabled = await self.bot.db.pool.fetchrow(
-				"SELECT * FROM url_cleaner_settings WHERE discord_server_id = $1", ctx.guild.id
+				"SELECT * FROM url_cleaner_settings WHERE discord_server_id = $1", guild_id
 			)
 			if enabled:
 				await ctx.send("✅ URL cleaner is **ENABLED**.")
@@ -198,13 +203,11 @@ class URLCleaner(commands.Cog):
 				await ctx.send("❌ URL cleaner is **NOT** enabled.")
 		elif enable:
 			await self.bot.db.pool.execute(
-				"INSERT INTO url_cleaner_settings (discord_server_id) VALUES ($1) ON CONFLICT DO NOTHING", ctx.guild.id
+				"INSERT INTO url_cleaner_settings (discord_server_id) VALUES ($1) ON CONFLICT DO NOTHING", guild_id
 			)
 			await ctx.send("✅ URL cleaner **ENABLED**.")
 		elif not enable:
-			await self.bot.db.pool.execute(
-				"DELETE FROM url_cleaner_settings WHERE discord_server_id = $1", ctx.guild.id
-			)
+			await self.bot.db.pool.execute("DELETE FROM url_cleaner_settings WHERE discord_server_id = $1", guild_id)
 			await ctx.send("❌ URL cleaner **DISABLED**.")
 
 
