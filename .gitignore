@@ -149,6 +149,7 @@ cython_debug/
 logs/
 postgres-data
 .env
+cache/
 
 
 .vscode/
