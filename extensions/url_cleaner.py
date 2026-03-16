@@ -1,13 +1,11 @@
-import logging
 import asyncio
-import re
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+import logging
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from core import Substiify, config
-from utils.url_rules import DEFAULT_RULES
+from utils.url_rules import URLRulesCleaner, load_compiled_rules, refresh_compiled_rules
 
 logger = logging.getLogger(__name__)
 save_message: dict[int, discord.Message] = {}
@@ -15,108 +13,77 @@ reply_to_original: dict[int, int] = {}
 resend_attempts: dict[int, int] = {}
 
 
-class _URLCleaner:
-	def __init__(self, rules: list[str]):
-		self.universal_rules = set()
-		self.rules_by_host = {}
-		self.host_rules = {}
-
-		self.create_rules(rules)
-
-	def escape_regexp(self, string):
-		"""Escape special characters for use in regex."""
-		return re.escape(string).replace(r"\*", ".*")
-
-	def create_rules(self, rules: list[str]):
-		for rule in rules:
-			split_rule = rule.split("@")
-			param_rule = re.compile(f"^{self.escape_regexp(split_rule[0])}$")
-
-			if len(split_rule) == 1:
-				self.universal_rules.add(param_rule)
-			else:
-				host_pattern = split_rule[1].replace("*.", r"(?:.*\.)?")
-				host_rule = re.compile(rf"^(www\.)?{host_pattern}$")
-				host_rule_str = host_rule.pattern
-
-				if host_rule_str not in self.host_rules:
-					self.host_rules[host_rule_str] = host_rule
-					self.rules_by_host[host_rule_str] = set()
-
-				self.rules_by_host[host_rule_str].add(param_rule)
-
-	def remove_param(self, rule, param: str, params_dict, removed_params: list):
-		"""Remove a specific param from params_dict if it matches the rule."""
-		if re.fullmatch(rule, param):
-			logger.debug(f"Removing URL param: {param}")
-			removed_params.append(param)
-			del params_dict[param]
-
-	def replacer(self, url: str):
-		"""Clean up the URL by removing tracking parameters based on rules."""
-		try:
-			parsed_url = urlparse(url)
-		except ValueError:
-			# if the URL is not parsable, return it as is.
-			return url, []
-		logger.debug(f"Cleaning URL: {url}")
-
-		query_params = parse_qs(parsed_url.query)
-		removed_params = []
-
-		for rule in self.universal_rules:
-			for param in list(query_params.keys()):
-				self.remove_param(rule, param, query_params, removed_params)
-
-		hostname = parsed_url.hostname
-		if hostname:
-			for host_rule_str, host_rule in self.host_rules.items():
-				if re.fullmatch(host_rule, hostname):
-					logger.debug(f"Hostname: [{hostname}] matched host rule: {host_rule_str}")
-					for rule in self.rules_by_host[host_rule_str]:
-						for param in list(query_params.keys()):
-							self.remove_param(rule, param, query_params, removed_params)
-
-		if removed_params:
-			new_query = urlencode(query_params, doseq=True)
-			cleaned_url = urlunparse(parsed_url._replace(query=new_query))
-			return cleaned_url, removed_params
-
-		return url, []
-
-	def clean_message_urls(self, message: str):
-		"""Extract URLs from the message, clean them, and return the cleaned URLs with removed parameters."""
-		url_pattern = re.compile(r"(https?://[^\s<]+)")
-		cleaned_urls = []
-		removed_trackers = []
-
-		def process_url(match):
-			url, removed = self.replacer(match.group(0))
-			cleaned_urls.append(url)
-			removed_trackers.extend(removed)
-
-		url_pattern.sub(process_url, message)
-		return cleaned_urls, removed_trackers
-
-
 class URLCleaner(commands.Cog):
 	def __init__(self, bot: Substiify):
 		self.bot = bot
-		self.cleaner = _URLCleaner(DEFAULT_RULES)
+		self.cleaner: URLRulesCleaner | None = None
 		self.cooldown = commands.CooldownMapping.from_cooldown(2, 6.0, commands.BucketType.user)
+		self._rules_ready = asyncio.Event()
+		self._initialization_task = asyncio.create_task(self._initialize_cleaner())
+		self.refresh_rules.start()
+
+	async def _initialize_cleaner(self) -> None:
+		try:
+			self.cleaner = URLRulesCleaner(await load_compiled_rules())
+			logger.info("Loaded URL cleaning rules")
+		except Exception as exc:
+			logger.error(f"Failed to initialize URL cleaning rules: {exc}")
+		finally:
+			self._rules_ready.set()
+
+	async def cog_load(self) -> None:
+		await self._rules_ready.wait()
+
+	async def cog_unload(self) -> None:
+		self.refresh_rules.cancel()
+		if not self._initialization_task.done():
+			self._initialization_task.cancel()
+
+	@tasks.loop(hours=24)
+	async def refresh_rules(self) -> None:
+		await self._rules_ready.wait()
+		try:
+			self.cleaner = URLRulesCleaner(await refresh_compiled_rules())
+			logger.info("Refreshed URL cleaning rules cache")
+		except Exception as exc:
+			logger.warning(f"Failed to refresh URL cleaning rules: {exc}")
+
+	@refresh_rules.before_loop
+	async def before_refresh_rules(self) -> None:
+		await self.bot.wait_until_ready()
+		await self._rules_ready.wait()
+
+	def _build_tracking_embed(self, cleaned_urls: list[str], removed_trackers: list[str]) -> discord.Embed:
+		embed = discord.Embed(title="Please avoid sending links containing tracking parameters.")
+		cleaned_urls_str = "\n".join(cleaned_urls)
+		if removed_trackers:
+			tracker_list = ", ".join([f"`{tracker}`" for tracker in removed_trackers])
+			verb = "are" if len(removed_trackers) > 1 else "is"
+			response = f"{tracker_list} {verb} used for tracking."
+		else:
+			response = "Tracking elements were removed from this link."
+		response += f"\n Here's the link without trackers:\n{cleaned_urls_str}"
+		embed.description = response
+		embed.set_footer(text="You can edit your message to remove trackers, and this message will disappear.")
+		return embed
+
+	async def _clean_urls(self, message_content: str) -> tuple[list[str], list[str]]:
+		await self._rules_ready.wait()
+		if self.cleaner is None:
+			return [], []
+		return self.cleaner.clean_message_urls(message_content)
 
 	@commands.Cog.listener()
 	async def on_message(self, message: discord.Message):
 		if message.author.bot:
 			return
 
-		if message.content.startswith(config.BOT_PREFIX):
+		if config.BOT_PREFIX and message.content.startswith(config.BOT_PREFIX):
 			return
 
 		if not message.guild:
 			return
 
-		# check if server has URL cleaner enabled
 		url_cleaner_settings = await self.bot.db.pool.fetchrow(
 			"SELECT * FROM url_cleaner_settings WHERE discord_server_id = $1", message.guild.id
 		)
