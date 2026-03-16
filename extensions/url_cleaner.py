@@ -91,24 +91,19 @@ class URLCleaner(commands.Cog):
 			return
 
 		bucket = self.cooldown.get_bucket(message)
+		if bucket is None:
+			return
+
 		retry_after = bucket.update_rate_limit()
 		if retry_after:
 			logger.debug(f"User {message.author.id} on cooldown, skipping URL cleaning.")
 			return
 
-		cleaned_urls, removed_trackers = self.cleaner.clean_message_urls(message.content)
+		cleaned_urls, removed_trackers = await self._clean_urls(message.content)
 
 		if removed_trackers:
 			removed_trackers.sort()
-
-			embed = discord.Embed(title="Please avoid sending links containing tracking parameters.")
-			tracker_list = ", ".join([f"`{tracker}`" for tracker in removed_trackers])
-			verb = "are" if len(removed_trackers) > 1 else "is"
-			cleaned_urls_str = "\n".join(cleaned_urls)
-			response = f"{tracker_list} {verb} used for tracking."
-			response += f"\n Here's the link without trackers:\n{cleaned_urls_str}"
-			embed.description = response
-			embed.set_footer(text="You can edit your message to remove trackers, and this message will disappear.")
+			embed = self._build_tracking_embed(cleaned_urls, removed_trackers)
 			try:
 				reply = await message.reply(embed=embed, mention_author=False)
 				save_message[message.id] = reply
@@ -122,8 +117,7 @@ class URLCleaner(commands.Cog):
 	@commands.Cog.listener()
 	async def on_message_edit(self, before: discord.Message, after: discord.Message):
 		if after.id in save_message:
-			# no need to check if enabled as else we would not have saved the message
-			_, removed_trackers = self.cleaner.clean_message_urls(after.content)
+			_, removed_trackers = await self._clean_urls(after.content)
 			if not removed_trackers:
 				reply_message = save_message.pop(after.id)
 				await reply_message.delete()
@@ -138,21 +132,17 @@ class URLCleaner(commands.Cog):
 			reply_to_original.pop(reply_message.id, None)
 			resend_attempts.pop(message.id, None)
 
-		# If a bot reply was deleted, attempt to resend it if the original still has trackers
 		if message.id in reply_to_original:
 			original_id = reply_to_original.pop(message.id)
 
-			# Clear stale mapping if present
 			if original_id in save_message and save_message[original_id].id == message.id:
 				save_message.pop(original_id, None)
 
-			# Try to fetch the original message
 			try:
 				original_msg = await message.channel.fetch_message(original_id)
 			except discord.NotFound:
 				return
 
-			# Ensure URL cleaner is still enabled for the guild
 			if not original_msg.guild:
 				return
 			url_cleaner_settings = await self.bot.db.pool.fetchrow(
@@ -161,7 +151,7 @@ class URLCleaner(commands.Cog):
 			if not url_cleaner_settings:
 				return
 
-			cleaned_urls, removed_trackers = self.cleaner.clean_message_urls(original_msg.content)
+			cleaned_urls, removed_trackers = await self._clean_urls(original_msg.content)
 			if not removed_trackers:
 				return
 
@@ -169,21 +159,13 @@ class URLCleaner(commands.Cog):
 				"Bot's URL cleanup message has been deleted, but message still has trackers! Attempting to resend"
 			)
 
-			# Limit resend attempts to avoid loops
 			attempts = resend_attempts.get(original_id, 0)
 			if attempts >= 3:
 				return
 			resend_attempts[original_id] = attempts + 1
 
 			removed_trackers.sort()
-			embed = discord.Embed(title="Please avoid sending links containing tracking parameters.")
-			tracker_list = ", ".join([f"`{tracker}`" for tracker in removed_trackers])
-			verb = "are" if len(removed_trackers) > 1 else "is"
-			cleaned_urls_str = "\n".join(cleaned_urls)
-			response = f"{tracker_list} {verb} used for tracking."
-			response += f"\n Here's the link without trackers:\n{cleaned_urls_str}"
-			embed.description = response
-			embed.set_footer(text="You can edit your message to remove trackers, and this message will disappear.")
+			embed = self._build_tracking_embed(cleaned_urls, removed_trackers)
 
 			try:
 				await asyncio.sleep(6)
