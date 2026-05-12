@@ -57,10 +57,12 @@ class Karma(commands.Cog):
 			return
 
 		post = await self._get_post_from_db(payload.message_id)
+		message = None
 		if post is None:
-			user = await self.check_payload(payload)
-			if user is None:
+			result = await self.check_payload(payload)
+			if result is None:
 				return
+			user, message = result
 
 			await self.bot.db.pool.execute(dbc.USER_INSERT_QUERY, user.id, user.display_name, user.display_avatar.url)
 			user_id = user.id
@@ -73,14 +75,18 @@ class Karma(commands.Cog):
 		if payload.emoji.id not in [*upvote_emotes, *downvote_emotes]:
 			return
 
-		server = self.bot.get_guild(payload.guild_id)
-		if server is None:
-			logger.warning(f"Server {payload.guild_id} not found in cache for karma reaction. Fetching from API.")
-			server = await self.bot.fetch_guild(payload.guild_id)
-		channel = self.bot.get_channel(payload.channel_id)
-		if channel is None:
-			logger.warning(f"Channel {payload.channel_id} not found in cache for karma reaction. Fetching from API.")
-			channel = await self.bot.fetch_channel(payload.channel_id)
+		try:
+			server = self.bot.get_guild(payload.guild_id)
+			if server is None:
+				logger.warning(f"Server {payload.guild_id} not found in cache for karma reaction. Fetching from API.")
+				server = await self.bot.fetch_guild(payload.guild_id)
+			channel = self.bot.get_channel(payload.channel_id)
+			if channel is None:
+				logger.warning(f"Channel {payload.channel_id} not found in cache for karma reaction. Fetching from API.")
+				channel = await self.bot.fetch_channel(payload.channel_id)
+		except Exception as e:
+			logger.warning(f"Failed to fetch guild/channel for karma reaction: {e}")
+			return
 
 		await self.bot.db._insert_server(server)
 		await self.bot.db._insert_server_channel(channel)
@@ -97,7 +103,7 @@ class Karma(commands.Cog):
 			(upvote, downvote) = (downvote, upvote)
 
 		await self._upsert_karma(payload, user_id, karma_amount)
-		await self._upsert_post_votes(payload, user_id, upvote, downvote)
+		await self._upsert_post_votes(payload, user_id, upvote, downvote, message=message)
 
 	async def _get_post_from_db(self, message_id: int) -> Record:
 		stmt = "SELECT * FROM post WHERE discord_message_id = $1"
@@ -107,48 +113,63 @@ class Karma(commands.Cog):
 		await self.bot.db.pool.execute(UPSERT_KARMA_QUERY, user_id, payload.guild_id, amount)
 
 	async def _upsert_post_votes(
-		self, payload: discord.RawReactionActionEvent, user_id: int, upvote: int, downvote: int
+		self, payload: discord.RawReactionActionEvent, user_id: int, upvote: int, downvote: int, message: discord.Message | None = None
 	):
-		channel = self.bot.get_channel(payload.channel_id)
-		if channel is None:
-			channel = await self.bot.fetch_channel(payload.channel_id)
-		message: discord.Message = await channel.fetch_message(payload.message_id)
+		if message is None:
+			await self.bot.db.pool.execute(
+				"UPDATE post SET upvotes = post.upvotes + $1, downvotes = post.downvotes + $2 WHERE discord_message_id = $3",
+				upvote, downvote, payload.message_id,
+			)
+			return
 
 		await self.bot.db.pool.execute(
 			UPSERT_POST_VOTES_QUERY,
 			user_id,
 			payload.guild_id,
-			channel.id,
+			payload.channel_id,
 			payload.message_id,
 			message.created_at.replace(tzinfo=None),
 			upvote,
 			downvote,
 		)
 
-	async def check_payload(self, payload: discord.RawReactionActionEvent) -> discord.Member | None:
+	async def check_payload(self, payload: discord.RawReactionActionEvent) -> tuple[discord.Member, discord.Message] | None:
 		if payload.event_type == "REACTION_ADD" and payload.member.bot:
 			return None
-		try:
-			message = await self.__get_message_from_payload(payload)
-		except discord.errors.NotFound:
+		message = await self.__get_message_from_payload(payload)
+		if message is None:
 			return None
 		if message.author.bot:
 			return None
 		reaction_user = payload.member or self.bot.get_user(payload.user_id)
 		if not reaction_user:
 			logger.warning(f"User {payload.user_id} not found in cache for karma reaction. Fetching from API.")
-			reaction_user = await self.bot.fetch_user(payload.user_id)
+			try:
+				reaction_user = await self.bot.fetch_user(payload.user_id)
+			except Exception as e:
+				logger.warning(f"Failed to fetch user {payload.user_id} for karma reaction: {e}")
+				return None
 		if reaction_user == message.author:
 			return None
-		return message.author
+		return message.author, message
 
 	async def __get_message_from_payload(self, payload: discord.RawReactionActionEvent) -> discord.Message | None:
-		potential_message = [message for message in self.bot.cached_messages if message.id == payload.message_id]
-		cached_message = potential_message[0] if potential_message else None
-		if not cached_message:
+		cached_message = discord.utils.get(self.bot.cached_messages, id=payload.message_id)
+		if cached_message is not None:
+			return cached_message
+		channel = self.bot.get_channel(payload.channel_id)
+		if channel is None:
+			logger.debug(f"Channel {payload.channel_id} not in cache, cannot fetch message for karma reaction.")
+			return None
+		try:
 			logger.debug(f"Message {payload.message_id} not found in cache for karma reaction. Fetching from API.")
-			cached_message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
-		return cached_message
+			return await channel.fetch_message(payload.message_id)
+		except discord.errors.NotFound:
+			logger.debug(f"Message {payload.message_id} not found (deleted).")
+			return None
+		except Exception as e:
+			logger.warning(f"Failed to fetch message {payload.message_id} for karma reaction: {e}")
+			return None
 
 	async def _get_user_karma(self, user_id: int, guild_id: int) -> int:
 		stmt = "SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2"
