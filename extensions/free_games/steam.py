@@ -28,7 +28,8 @@ class SteamGame(Game):
 		self.start_date: datetime = datetime.now()
 		self.end_date: datetime | None = end_date
 		price_overview = app_details.get("price_overview", {})
-		self.original_price: str = price_overview.get("initial_formatted", "$0.00")
+		initial_cents = price_overview.get("initial", 0)
+		self.original_price: str = f"${initial_cents / 100:.2f}" if initial_cents else "$0.00"
 		self.discount_price: str = "Free"
 		self.cover_image_url: str = app_details.get("header_image", "")
 		self.store_link: str = f"{STEAM_STORE_URL}/{app_id}"
@@ -74,7 +75,7 @@ class Steam(Platform):
 
 	@staticmethod
 	async def _fetch_search_results() -> list[dict]:
-		params = {"specials": "1", "maxprice": "free", "ndl": "1", "json": "1"}
+		params = {"specials": "1", "maxprice": "free", "ndl": "1", "json": "1", "cc": "us"}
 		try:
 			async with aiohttp.ClientSession() as session:
 				async with session.get(STEAM_SEARCH_URL, params=params) as response:
@@ -108,7 +109,7 @@ class Steam(Platform):
 	async def _fetch_app_details(app_id: str, session: aiohttp.ClientSession) -> tuple[str, dict | None]:
 		async with STEAM_SEMAPHORE:
 			try:
-				async with session.get(STEAM_APPDETAILS_URL, params={"appids": app_id}) as response:
+				async with session.get(STEAM_APPDETAILS_URL, params={"appids": app_id, "cc": "us"}) as response:
 					data = await response.json()
 					app_data = data.get(str(app_id), {})
 					if not app_data.get("success", False):
