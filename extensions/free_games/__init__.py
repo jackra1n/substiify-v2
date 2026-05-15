@@ -26,25 +26,6 @@ class FreeGames(commands.Cog):
 		self.bot = bot
 		self.check_free_games.start()
 
-		# run migration to add any new stores to existing server configs
-		self.bot.loop.create_task(self._migrate_existing_store_options())
-
-	async def _migrate_existing_store_options(self):
-		await self.bot.wait_until_ready()
-		for store_name in STORES:
-			migration_stmt = """
-				INSERT INTO store_options (free_games_channel_id, store_name)
-				SELECT DISTINCT so.free_games_channel_id, $1
-				FROM store_options so
-				WHERE NOT EXISTS (
-					SELECT 1 FROM store_options so2
-					WHERE so2.free_games_channel_id = so.free_games_channel_id
-					AND so2.store_name = $1
-				)
-				ON CONFLICT (free_games_channel_id, store_name) DO NOTHING;
-			"""
-			await self.bot.db.pool.execute(migration_stmt, store_name)
-
 	@commands.is_owner()
 	@commands.command(hidden=True)
 	async def fgc(self, ctx: commands.Context, action: str):
@@ -99,6 +80,10 @@ class FreeGames(commands.Cog):
 
 		if total_sent_messages:
 			logger.info(f"Sent [{total_sent_messages}] new free games messages")
+
+	@check_free_games.before_loop
+	async def before_check_free_games(self):
+		await self.bot.wait_until_ready()
 
 	async def _is_game_in_history(self, game: Game) -> bool:
 		game_in_history_stmt = """
