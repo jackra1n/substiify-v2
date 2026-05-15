@@ -26,7 +26,7 @@ class FreeGames(commands.Cog):
 		self.bot = bot
 		self.check_free_games.start()
 
-		# Run migration to add any new stores to existing server configs
+		# run migration to add any new stores to existing server configs
 		self.bot.loop.create_task(self._migrate_existing_store_options())
 
 	async def _migrate_existing_store_options(self):
