@@ -147,9 +147,12 @@ class FreeGames(commands.Cog):
 		if platform:
 			all_platforms = [p for p in all_platforms if p.name == platform]
 
+		logger.info(f"Sending free games for platforms: {[p.name for p in all_platforms]}")
+
 		total_free_games_count = 0
 		for platform_cls in all_platforms:
 			current_free_games: list[Game] = await platform_cls.get_free_games()
+			logger.info(f"  {platform_cls.name}: found {len(current_free_games)} free games")
 			total_free_games_count += len(current_free_games)
 
 			for game in current_free_games:
