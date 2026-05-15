@@ -76,7 +76,7 @@ echo "  Destination: $BACKUP_FILE_PATH"
 docker run --rm --network=host \
     -e PGPASSWORD="$DB_PASSWORD" \
     -v "$BACKUP_DEST_DIR":/backups \
-    postgres:16 \
+    postgres:18 \
     pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -F c -b -v -f "/backups/$BACKUP_FILENAME" "$DB_NAME"
 
 # Check if docker command was successful
