@@ -1,143 +1,21 @@
 from __future__ import annotations
 
 import logging
-from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
 
-import aiohttp
 import discord
 from discord.ext import commands, tasks
 
 import core
+from .base import Game, Platform
+from .epic_games import EpicGames
+from .steam import Steam
 
 logger = logging.getLogger(__name__)
 
-
-class Game(ABC):
-	title: str
-	start_date: datetime
-	end_date: datetime
-	original_price: str
-	discount_price: str
-	cover_image_url: str
-	store_link: str
-	platform: Platform
-
-
-class Platform(ABC):
-	api_url: str
-	logo_path: str
-	name: str
-
-	@staticmethod
-	@abstractmethod
-	async def get_free_games() -> list[Game]:
-		pass
-
-	@staticmethod
-	@abstractmethod
-	def _create_game(game_info_json: str) -> Game:
-		pass
-
-
-class EpicGamesGame(Game):
-	def __init__(self, game_info_json: str) -> None:
-		self.title: str = game_info_json["title"]
-		self.start_date: datetime = self._create_start_date(game_info_json)
-		self.end_date: datetime = self._create_end_date(game_info_json)
-		self.original_price: str = game_info_json["price"]["totalPrice"]["fmtPrice"]["originalPrice"]
-		self.discount_price: str = self._create_discount_price(game_info_json["price"])
-		self.cover_image_url: str = self._create_thumbnail(game_info_json["keyImages"])
-		self.store_link: str = self._create_store_link(game_info_json)
-		self.platform: Platform = EpicGames
-
-	def _create_store_link(self, game_info_json: str) -> str:
-		offer_mappings = game_info_json["offerMappings"]
-		page_slug = None
-		if offer_mappings:
-			page_slug = game_info_json["offerMappings"][0]["pageSlug"]
-		if page_slug is None and game_info_json["catalogNs"]["mappings"]:
-			page_slug = game_info_json["catalogNs"]["mappings"][0]["pageSlug"]
-		if page_slug is None and game_info_json["productSlug"]:
-			page_slug = game_info_json["productSlug"]
-		if "bundles" in [category["path"] for category in game_info_json["categories"]]:
-			page_slug = "bundles/" + page_slug
-		else:
-			page_slug = "p/" + page_slug
-
-		return f"https://www.epicgames.com/store/en-US/{page_slug}"
-
-	def _create_start_date(self, game_info_json: str) -> datetime:
-		return self._parse_date(game_info_json, "startDate")
-
-	def _create_end_date(self, game_info_json: str) -> datetime:
-		return self._parse_date(game_info_json, "endDate")
-
-	def _parse_date(self, game_info_json: str, date_field: str) -> datetime:
-		date_str = game_info_json["promotions"]["promotionalOffers"][0]["promotionalOffers"][0][date_field]
-		return datetime.strptime(date_str.split("T")[0], "%Y-%m-%d")
-
-	def _create_discount_price(self, game_price_str: str) -> str:
-		discount_price = game_price_str["totalPrice"]["discountPrice"]
-		return "Free" if discount_price == 0 else discount_price
-
-	def _create_thumbnail(self, key_images: str) -> str:
-		for image in key_images:
-			if "OfferImageWide" in image["type"]:
-				return image["url"]
-		return key_images[0]["url"]
-
-
-class EpicGames(Platform):
-	api_url: str = "https://store-site-backend-static.ak.epicgames.com/freeGamesPromotions"
-	logo_path: str = "https://media.discordapp.net/attachments/1073161276802482196/1073161428804055140/epic.png"
-	name: str = "epicgames"
-
-	@staticmethod
-	async def get_free_games() -> list[Game]:
-		"""
-		Get all free games from Epic Games
-		"""
-		all_games = ""
-		try:
-			async with aiohttp.ClientSession() as session:
-				async with session.get(EpicGames.api_url) as response:
-					json_response = await response.json()
-					all_games = json_response["data"]["Catalog"]["searchStore"]["elements"]
-		except Exception as ex:
-			logger.error(f"Error while getting list of all Epic games: {ex}")
-
-		current_free_games: list[Game] = []
-		for game in all_games:
-			# Check if game has promotions
-			if game["promotions"] is None:
-				continue
-			if not game["promotions"]["promotionalOffers"]:
-				continue
-			if not game["price"]:
-				continue
-			if not game["price"]["totalPrice"]:
-				continue
-			# Check if game is free
-			if game["price"]["totalPrice"]["discountPrice"] != 0:
-				continue
-			# Check if game has the required categories
-			categories = [category["path"] for category in game["categories"]]
-			must_have_categories = ["freegames", "games"]
-			if not all(category in categories for category in must_have_categories):
-				continue
-			# Check if the game is _currently_ free
-			if game["status"] != "ACTIVE":
-				continue
-			try:
-				current_free_games.append(EpicGamesGame(game))
-			except Exception as ex:
-				logger.error(f"Error while creating 'Game' object: {ex}")
-		return current_free_games
-
-
-STORES = {
-	"epicgames": EpicGames,
+STORES: dict[str, type[Platform]] = {
+	EpicGames.name: EpicGames,
+	Steam.name: Steam,
 }
 
 
@@ -147,6 +25,25 @@ class FreeGames(commands.Cog):
 	def __init__(self, bot: core.Substiify):
 		self.bot = bot
 		self.check_free_games.start()
+
+		# Run migration to add any new stores to existing server configs
+		self.bot.loop.create_task(self._migrate_existing_store_options())
+
+	async def _migrate_existing_store_options(self):
+		await self.bot.wait_until_ready()
+		for store_name in STORES:
+			migration_stmt = """
+				INSERT INTO store_options (free_games_channel_id, store_name)
+				SELECT DISTINCT so.free_games_channel_id, $1
+				FROM store_options so
+				WHERE NOT EXISTS (
+					SELECT 1 FROM store_options so2
+					WHERE so2.free_games_channel_id = so.free_games_channel_id
+					AND so2.store_name = $1
+				)
+				ON CONFLICT (free_games_channel_id, store_name) DO NOTHING;
+			"""
+			await self.bot.db.pool.execute(migration_stmt, store_name)
 
 	@commands.is_owner()
 	@commands.command(hidden=True)
@@ -167,7 +64,8 @@ class FreeGames(commands.Cog):
 
 		current_free_games: list[Game] = []
 		for platform in platforms:
-			current_free_games += await STORES[platform].get_free_games()
+			if platform in STORES:
+				current_free_games += await STORES[platform].get_free_games()
 		logger.debug(f"Found {len(current_free_games)} free games")
 
 		freegames_and_options_stmt = """
@@ -226,13 +124,6 @@ class FreeGames(commands.Cog):
 	@commands.hybrid_group(aliases=["fg"], usage="freegames [settings|send]")
 	@commands.cooldown(3, 30)
 	async def freegames(self, ctx: commands.Context):
-		"""
-		Get free games from various platforms.
-		See subcommands for more information.
-		By default, this command will check if the user has manage channels permission and then send the settings menu.
-		If the user doesn't have the permission, it will send the free games to the current channel.
-		"""
-		# check if the user has manage channels permission
 		if ctx.author.guild_permissions.manage_channels or ctx.author.id == self.bot.owner_id:
 			await ctx.invoke(self.bot.get_command("freegames settings"))
 		else:
@@ -242,11 +133,6 @@ class FreeGames(commands.Cog):
 	@commands.guild_only()
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
 	async def settings(self, ctx: commands.Context):
-		"""
-		Show settings for the free games command.
-		If you can't see the channel you want to set it's because the menu is limited to 25 options.
-		In order to force the channel to show up, use the command in the channel you want to set.
-		"""
 		embed = discord.Embed(title="Free Games Settings", color=core.constants.SECONDARY_COLOR)
 		embed.description = "Here you can configure where free games should be sent and which platforms to check."
 
@@ -257,19 +143,13 @@ class FreeGames(commands.Cog):
 	@freegames.command()
 	@commands.cooldown(2, 30)
 	async def send(self, ctx: commands.Context, platform: str = None):
-		"""
-		Show all free games that are currently available.
-		`:param platform:` The platform to get the free games from. If not specified, all platforms will be checked.
-		Valid platforms are: `epicgames`. More platforms will be added in the future.
-		"""
-		platforms: list[Platform] = Platform.__subclasses__()
-		if any(platform == platform.__name__.lower() for platform in platforms):
-			platforms = [platform]
+		all_platforms: list[type[Platform]] = Platform.__subclasses__()
+		if platform:
+			all_platforms = [p for p in all_platforms if p.name == platform]
 
 		total_free_games_count = 0
-		for platform in platforms:
-			platform: Platform
-			current_free_games: list[Game] = await platform.get_free_games()
+		for platform_cls in all_platforms:
+			current_free_games: list[Game] = await platform_cls.get_free_games()
 			total_free_games_count += len(current_free_games)
 
 			for game in current_free_games:
@@ -286,10 +166,16 @@ class FreeGames(commands.Cog):
 
 	def _create_game_embed(self, game: Game) -> discord.Embed:
 		embed = discord.Embed(title=game.title, url=game.store_link, color=core.constants.SECONDARY_COLOR)
-		date_timestamp = discord.utils.format_dt(game.end_date, "d")
-		desc_string = f"~~{game.original_price}~~ " if game.original_price != "0" else ""
-		desc_string += f"**{game.discount_price}** until {date_timestamp}"
-		embed.description = desc_string
+		desc_parts: list[str] = []
+		if game.original_price != "0":
+			desc_parts.append(f"~~{game.original_price}~~")
+		desc_parts.append(f"**{game.discount_price}**")
+		if game.end_date:
+			date_timestamp = discord.utils.format_dt(game.end_date, "d")
+			desc_parts.append(f"until {date_timestamp}")
+		else:
+			desc_parts.append("now!")
+		embed.description = " ".join(desc_parts)
 		embed.set_thumbnail(url=game.platform.logo_path)
 		embed.set_image(url=game.cover_image_url)
 		return embed
@@ -329,12 +215,10 @@ async def _create_channels_select_options(ctx: commands.Context) -> list[discord
 		default=is_selected,
 	)
 
-	# At the top add disabled and current channel options
 	channel_options.append(disabled_option)
 	channel_options.append(current_channel_option)
 
 	channels_list = [channel for channel in ctx.guild.text_channels if channel != ctx.channel]
-	# First add only channels where the bot can read and send messages
 	for channel in channels_list[:]:
 		if len(channel_options) >= 25:
 			break
@@ -349,7 +233,6 @@ async def _create_channels_select_options(ctx: commands.Context) -> list[discord
 		channel_options.append(channel_option)
 		channels_list.remove(channel)
 
-	# Then if there are less than 25 options, add the rest
 	for channel in channels_list[:]:
 		if len(channel_options) >= 25:
 			break
@@ -416,7 +299,8 @@ class ChannelsSelector(discord.ui.Select):
 				INSERT INTO store_options (free_games_channel_id, store_name) VALUES ($1, $2)
 				ON CONFLICT (free_games_channel_id, store_name) DO NOTHING;
 			"""
-			await bot.db.pool.execute(fg_settings_stmt, fg_id, "epicgames")
+			for store_name in STORES:
+				await bot.db.pool.execute(fg_settings_stmt, fg_id, store_name)
 
 		self.options = await _create_channels_select_options(self.view.ctx)
 		return await interaction.response.edit_message(embed=embed, view=self.view)

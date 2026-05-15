@@ -24,7 +24,12 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 async def setup(bot: core.Substiify) -> None:
-	extensions: list[str] = [f".{f.stem}" for f in pathlib.Path("extensions").glob("*[a-zA-Z].py")]
+	extensions_dir = pathlib.Path("extensions")
+	extensions: list[str] = [f".{f.stem}" for f in extensions_dir.glob("*[a-zA-Z].py")]
+	for d in extensions_dir.iterdir():
+		if d.is_dir() and (d / "__init__.py").exists() and d.name[0].isalpha():
+			extensions.append(f".{d.name}")
+
 	loaded: list[str] = []
 
 	for extension in extensions:
@@ -39,7 +44,11 @@ async def setup(bot: core.Substiify) -> None:
 
 
 async def teardown(bot: core.Substiify) -> None:
-	extensions: list[str] = [f".{f.stem}" for f in pathlib.Path("extensions").glob("*[a-zA-Z].py")]
+	extensions_dir = pathlib.Path("extensions")
+	extensions: list[str] = [f".{f.stem}" for f in extensions_dir.glob("*[a-zA-Z].py")]
+	for d in extensions_dir.iterdir():
+		if d.is_dir() and (d / "__init__.py").exists() and d.name[0].isalpha():
+			extensions.append(f".{d.name}")
 
 	for extension in extensions:
 		try:
