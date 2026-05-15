@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 
 import aiohttp
 
@@ -12,19 +13,25 @@ logger = logging.getLogger(__name__)
 
 STEAM_SEARCH_URL = "https://store.steampowered.com/search/results/"
 STEAM_APPDETAILS_URL = "https://store.steampowered.com/api/appdetails"
-STEAM_SEARCH_SEMAPHORE = asyncio.Semaphore(5)
+STEAM_STORE_URL = "https://store.steampowered.com/app"
+STEAM_SEMAPHORE = asyncio.Semaphore(5)
+
+END_DATE_RE = re.compile(
+	r'class="game_purchase_discount_quantity[^"]*"[^>]*>\s*Free to keep when you get it before\s+(.+?)\s*\.',
+	re.DOTALL | re.IGNORECASE,
+)
 
 
 class SteamGame(Game):
-	def __init__(self, app_id: str, app_details: dict) -> None:
+	def __init__(self, app_id: str, app_details: dict, end_date: datetime | None = None) -> None:
 		self.title: str = app_details["name"]
 		self.start_date: datetime = datetime.now()
-		self.end_date: datetime | None = None
+		self.end_date: datetime | None = end_date
 		price_overview = app_details.get("price_overview", {})
 		self.original_price: str = price_overview.get("initial_formatted", "$0.00")
 		self.discount_price: str = "Free"
 		self.cover_image_url: str = app_details.get("header_image", "")
-		self.store_link: str = f"https://store.steampowered.com/app/{app_id}"
+		self.store_link: str = f"{STEAM_STORE_URL}/{app_id}"
 		self.platform: Platform = Steam
 
 
@@ -47,14 +54,22 @@ class Steam(Platform):
 
 		app_details_list = await Steam._fetch_app_details_batch(app_ids)
 
+		free_promo_ids = [app_id for app_id, details in app_details_list if Steam._is_free_promo(details)]
+
+		store_pages = {}
+		if free_promo_ids:
+			store_pages = await Steam._fetch_store_pages_batch(free_promo_ids)
+
 		current_free_games: list[Game] = []
 		for app_id, details in app_details_list:
-			if Steam._is_free_promo(details):
-				try:
-					game = SteamGame(app_id, details)
-					current_free_games.append(game)
-				except Exception as ex:
-					logger.error(f"Error while creating SteamGame for app_id {app_id}: {ex}")
+			if not Steam._is_free_promo(details):
+				continue
+			try:
+				end_date = Steam._parse_end_date_from_html(store_pages.get(app_id, ""))
+				game = SteamGame(app_id, details, end_date=end_date)
+				current_free_games.append(game)
+			except Exception as ex:
+				logger.error(f"Error while creating SteamGame for app_id {app_id}: {ex}")
 		return current_free_games
 
 	@staticmethod
@@ -91,7 +106,7 @@ class Steam(Platform):
 
 	@staticmethod
 	async def _fetch_app_details(app_id: str, session: aiohttp.ClientSession) -> tuple[str, dict | None]:
-		async with STEAM_SEARCH_SEMAPHORE:
+		async with STEAM_SEMAPHORE:
 			try:
 				async with session.get(STEAM_APPDETAILS_URL, params={"appids": app_id}) as response:
 					data = await response.json()
@@ -113,6 +128,54 @@ class Steam(Platform):
 				if data is not None:
 					results.append((app_id, data))
 		return results
+
+	@staticmethod
+	async def _fetch_store_page(app_id: str, session: aiohttp.ClientSession) -> tuple[str, str]:
+		async with STEAM_SEMAPHORE:
+			try:
+				async with session.get(f"{STEAM_STORE_URL}/{app_id}/") as response:
+					html = await response.text()
+					return app_id, html
+			except Exception as ex:
+				logger.error(f"Error fetching store page for {app_id}: {ex}")
+				return app_id, ""
+
+	@staticmethod
+	async def _fetch_store_pages_batch(app_ids: list[str]) -> dict[str, str]:
+		results: dict[str, str] = {}
+		async with aiohttp.ClientSession() as session:
+			tasks = [Steam._fetch_store_page(app_id, session) for app_id in app_ids]
+			responses = await asyncio.gather(*tasks)
+			for app_id, html in responses:
+				if html:
+					results[app_id] = html
+		return results
+
+	@staticmethod
+	def _parse_end_date_from_html(html: str) -> datetime | None:
+		if not html:
+			return None
+		match = END_DATE_RE.search(html)
+		if not match:
+			return None
+
+		date_str = match.group(1).strip()
+		date_str = re.sub(r"\s*@\s*", " ", date_str)
+		date_str = re.sub(r"(\d)(am|pm)", r"\1 \2", date_str, flags=re.IGNORECASE)
+		date_str = date_str.upper()
+
+		now = datetime.now()
+		try:
+			parsed = datetime.strptime(date_str, "%d %b %I:%M %p")
+		except ValueError:
+			logger.debug(f"Could not parse Steam end date: {date_str!r}")
+			return None
+
+		parsed = parsed.replace(year=now.year)
+		if parsed < now - timedelta(days=1):
+			parsed = parsed.replace(year=now.year + 1)
+
+		return parsed
 
 	@staticmethod
 	def _is_free_promo(details: dict) -> bool:
