@@ -180,6 +180,8 @@ class Steam(Platform):
 
 	@staticmethod
 	def _is_free_promo(details: dict) -> bool:
+		if details.get("type") != "game":
+			return False
 		price_overview = details.get("price_overview")
 		if not price_overview:
 			return False
