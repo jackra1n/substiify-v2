@@ -3,8 +3,6 @@ services:
     image: postgres:18
     container_name: substiify-postgres
     restart: unless-stopped
-    ports:
-      - ${DB_PORT:-5440}:5432
     volumes:
       - ${POSTGRES_DATA_PATH:-./postgres-data}:/var/lib/postgresql
     environment:
@@ -30,4 +28,3 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-

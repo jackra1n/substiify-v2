@@ -66,24 +66,19 @@ fi
 
 echo "Starting PostgreSQL backup..."
 echo "  Database: $DB_NAME"
-echo "  Host: $DB_HOST:$DB_PORT"
+echo "  Container: substiify-postgres"
 echo "  User: $DB_USER"
 echo "  Destination: $BACKUP_FILE_PATH"
 
-# Run pg_dump inside a temporary Docker container
-# - Mounts the backup destination directory into the container
-# - Uses custom-format (-F c) which is compressed and suitable for pg_restore
-docker run --rm --network=host \
-    -e PGPASSWORD="$DB_PASSWORD" \
-    -v "$BACKUP_DEST_DIR":/backups \
-    postgres:18 \
-    pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -F c -b -v -f "/backups/$BACKUP_FILENAME" "$DB_NAME"
+# Run pg_dump inside the running database container
+docker exec -i -e PGPASSWORD="$DB_PASSWORD" substiify-postgres \
+    pg_dump -U "$DB_USER" -F c -b -v "$DB_NAME" > "$BACKUP_FILE_PATH"
 
 # Check if docker command was successful
 if [ $? -ne 0 ]; then
     echo "Error: Docker pg_dump command failed." >&2
-    # Consider removing the potentially incomplete backup file
-    # rm -f "$BACKUP_FILE_PATH"
+    # Remove the potentially incomplete backup file
+    rm -f "$BACKUP_FILE_PATH"
     exit 1
 fi
 
