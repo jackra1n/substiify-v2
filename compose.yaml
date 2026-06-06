@@ -17,8 +17,9 @@ services:
     image: ghcr.io/jackra1n/substiify-v2:release
     container_name: substiify
     restart: unless-stopped
+    env_file:
+      - .env
     volumes:
-      - ${ENV_FILE:-.env}:/bot/.env
       - ${LOGS_PATH:-./logs}:/bot/logs
       - /etc/localtime:/etc/localtime:ro
     depends_on:
