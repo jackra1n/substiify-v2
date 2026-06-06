@@ -12,6 +12,11 @@ services:
       - POSTGRES_USER=${DB_USER:-postgres}
       - POSTGRES_PASSWORD=${DB_PASSWORD:?error}
       - TZ=${POSTGRES_TZ:-Europe/Berlin}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   substiify:
     image: ghcr.io/jackra1n/substiify-v2:release
@@ -23,4 +28,6 @@ services:
       - ${LOGS_PATH:-./logs}:/bot/logs
       - /etc/localtime:/etc/localtime:ro
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+
