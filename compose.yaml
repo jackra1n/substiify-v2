@@ -4,13 +4,13 @@ services:
     container_name: substiify-postgres
     restart: unless-stopped
     ports:
-      - ${POSTGRES_HOST_PORT:-5440}:5432
+      - ${DB_PORT:-5440}:5432
     volumes:
       - ${POSTGRES_DATA_PATH:-./postgres-data}:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=${POSTGRES_DB:-substiify}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?error}
+      - POSTGRES_DB=${DB_NAME:-substiify}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:?error}
       - TZ=${POSTGRES_TZ:-Europe/Berlin}
 
   substiify:
