@@ -50,12 +50,16 @@ class Substiify(commands.Bot):
 		logger.info(f"Logged on as {colored_name} (ID: {self.user.id})")
 
 	async def on_command_completion(self, ctx: commands.Context) -> None:
-		logger.info(f"[{ctx.command.qualified_name}] executed for -> [{ctx.author}]")
-
 		parameters = ctx.kwargs.values() if ctx.kwargs else ctx.args[2:]
 		parameters_string = ", ".join([str(parameter) if parameter is not None else "" for parameter in parameters])
 		if parameters_string == "":
 			parameters_string = None
+
+		if parameters_string is None:
+			logger.info(f"[{ctx.command.qualified_name}] executed for -> [{ctx.author}]")
+		else:
+			log_parameters = parameters_string[:60] + "…" if len(parameters_string) > 60 else parameters_string
+			logger.info(f"[{ctx.command.qualified_name}] executed for -> [{ctx.author}] with params: {log_parameters}")
 
 		server_id = ctx.guild.id if ctx.guild else None
 		query = """INSERT INTO command_history
