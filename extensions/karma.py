@@ -56,6 +56,15 @@ class Karma(commands.Cog):
 		if payload.guild_id is None:
 			return
 
+		if payload.emoji.id is None:
+			return
+
+		upvote_emotes = await self._get_karma_upvote_emotes(payload.guild_id)
+		downvote_emotes = await self._get_karma_downvote_emotes(payload.guild_id)
+
+		if payload.emoji.id not in [*upvote_emotes, *downvote_emotes]:
+			return
+
 		post = await self._get_post_from_db(payload.message_id)
 		message = None
 		if post is None:
@@ -68,12 +77,6 @@ class Karma(commands.Cog):
 			user_id = user.id
 		else:
 			user_id = post["discord_user_id"]
-
-		upvote_emotes = await self._get_karma_upvote_emotes(payload.guild_id)
-		downvote_emotes = await self._get_karma_downvote_emotes(payload.guild_id)
-
-		if payload.emoji.id not in [*upvote_emotes, *downvote_emotes]:
-			return
 
 		try:
 			server = self.bot.get_guild(payload.guild_id)
