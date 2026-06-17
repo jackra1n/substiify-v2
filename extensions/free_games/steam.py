@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 from datetime import datetime, timedelta
@@ -79,7 +80,15 @@ class Steam(Platform):
 		try:
 			async with aiohttp.ClientSession() as session:
 				async with session.get(STEAM_SEARCH_URL, params=params) as response:
-					data = await response.json()
+					text = await response.text()
+					try:
+						data = json.loads(text)
+					except json.JSONDecodeError:
+						logger.error(
+							f"Steam search returned non-JSON response (status {response.status}, "
+							f"content-type {response.headers.get('Content-Type')!r}): {text[:200]!r}"
+						)
+						return []
 					return data.get("items", [])
 		except Exception as ex:
 			logger.error(f"Error while fetching Steam search results: {ex}")
@@ -110,7 +119,7 @@ class Steam(Platform):
 		async with STEAM_SEMAPHORE:
 			try:
 				async with session.get(STEAM_APPDETAILS_URL, params={"appids": app_id, "cc": "us"}) as response:
-					data = await response.json()
+					data = json.loads(await response.text())
 					app_data = data.get(str(app_id), {})
 					if not app_data.get("success", False):
 						return app_id, None
