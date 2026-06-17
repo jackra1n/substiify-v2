@@ -6,9 +6,10 @@ import discord
 import core
 import database
 import utils
-from core.custom_logger import CustomLogFormatter, RemoveNoise
+from core.custom_logger import CustomLogFormatter, RemoveNoise, add_rotating_file_handler
 
 discord.utils.setup_logging(formatter=CustomLogFormatter(), level=20)
+add_rotating_file_handler(level=logging.INFO)
 logging.getLogger("discord.gateway").addFilter(RemoveNoise())
 
 

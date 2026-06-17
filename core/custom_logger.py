@@ -1,4 +1,6 @@
 import logging
+import os
+from logging.handlers import RotatingFileHandler
 
 
 class CustomLogFormatter(logging.Formatter):
@@ -32,6 +34,53 @@ class CustomLogFormatter(logging.Formatter):
 		log_fmt = self.FORMATS.get(record.levelno)
 		formatter = logging.Formatter(log_fmt, self.dt_fmt, style="{")
 		return formatter.format(record)
+
+
+class PlainLogFormatter(logging.Formatter):
+	"""Same layout as CustomLogFormatter but without ANSI colors, for log files."""
+
+	dt_fmt = "%Y-%m-%d %H:%M:%S"
+
+	base_fmt = "[{asctime}] [{levelname:<7}] {name}: {message}"
+	source_fmt = "[{asctime}] [{levelname:<7}] {lineno}@{name}: {message}"
+
+	FORMATS = {
+		logging.DEBUG: base_fmt,
+		logging.INFO: base_fmt,
+		logging.WARNING: source_fmt,
+		logging.ERROR: source_fmt,
+		logging.CRITICAL: source_fmt,
+	}
+
+	def format(self, record):
+		log_fmt = self.FORMATS.get(record.levelno, self.base_fmt)
+		formatter = logging.Formatter(log_fmt, self.dt_fmt, style="{")
+		return formatter.format(record)
+
+
+def add_rotating_file_handler(
+	log_dir: str = "logs",
+	filename: str = "substiify.log",
+	level: int = logging.INFO,
+	max_bytes: int = 5 * 1024 * 1024,
+	backup_count: int = 5,
+) -> RotatingFileHandler:
+	"""Attach a rotating file handler to the root logger.
+
+	Rotates at `max_bytes` (default 5 MB), keeping `backup_count` old files
+	(substiify.log.1 ... substiify.log.5).
+	"""
+	os.makedirs(log_dir, exist_ok=True)
+	handler = RotatingFileHandler(
+		filename=os.path.join(log_dir, filename),
+		maxBytes=max_bytes,
+		backupCount=backup_count,
+		encoding="utf-8",
+	)
+	handler.setFormatter(PlainLogFormatter())
+	handler.setLevel(level)
+	logging.getLogger().addHandler(handler)
+	return handler
 
 
 class RemoveNoise(logging.Filter):
