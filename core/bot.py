@@ -179,6 +179,3 @@ class Substiify(commands.Bot):
 		except Exception:
 			logger.exception("Failed to persist command error for %s", ctx.command.qualified_name)
 
-	async def close(self) -> None:
-		await self.db.pool.close()
-		await super().close()
