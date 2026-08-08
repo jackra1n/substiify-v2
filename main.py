@@ -17,7 +17,7 @@ async def main() -> None:
 	bot_token = core.config.validate()
 	utils.ux.print_system_info()
 
-	async with database.Database() as db, core.Substiify(database=db) as substiify:
+	async with database.Database(core.config.POSTGRES_DSN) as db, core.Substiify(database=db) as substiify:
 		await substiify.start(bot_token)
 
 

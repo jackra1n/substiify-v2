@@ -1,19 +1,13 @@
 import asyncio
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Self
+from typing import Any, Self
 
 import asyncpg
 import discord
 
-import core
 
 from .db_constants import CHANNEL_INSERT_QUERY, MESSAGEABLE_INSERT_QUERY, SERVER_INSERT_QUERY, USER_INSERT_QUERY
-
-if TYPE_CHECKING:
-	_Pool = asyncpg.Pool[asyncpg.Record]
-else:
-	_Pool = asyncpg.Pool
 
 
 __all__ = ("Database",)
@@ -23,7 +17,10 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 class Database:
-	pool: _Pool
+	pool: asyncpg.Pool
+
+	def __init__(self, dsn: str) -> None:
+		self.dsn = dsn
 
 	async def __aenter__(self) -> Self:
 		await self.setup()
@@ -39,20 +36,10 @@ class Database:
 
 	async def setup(self) -> None:
 		try:
-			self.pool = await asyncpg.create_pool(dsn=core.config.POSTGRES_DSN)
-		except Exception:
-			host = core.config.DB_HOST or "<unset>"
-			port = core.config.DB_PORT or "<unset>"
-			dbname = core.config.DB_NAME or "<unset>"
-			user = core.config.DB_USER or "<unset>"
-			logger.error(
-				"Failed to connect to Postgres (host=%s port=%s db=%s user=%s). ",
-				host,
-				port,
-				dbname,
-				user,
-			)
-			raise RuntimeError("Database initialization failed; see previous error for details.")
+			self.pool = await asyncpg.create_pool(dsn=self.dsn)
+		except Exception as exc:
+			logger.error("Failed to connect to Postgres.")
+			raise RuntimeError("Database initialization failed; see previous error for details.") from exc
 
 		db_schema = os.path.join("resources", "CreateDatabase.sql")
 		with open(db_schema) as fp:
