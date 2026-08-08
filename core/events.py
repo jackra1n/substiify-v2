@@ -15,16 +15,6 @@ class Events(commands.Cog):
 	def __init__(self, bot: core.Substiify):
 		self.bot = bot
 
-	@commands.Cog.listener()
-	async def on_command(self, ctx: commands.Context):
-		if isinstance(ctx.channel, discord.abc.PrivateChannel):
-			await self.bot.db.pool.execute(
-				dbc.USER_INSERT_QUERY, ctx.author.id, ctx.author.name, ctx.author.display_avatar.url
-			)
-			await self.bot.db._insert_server_channel(ctx.channel)
-		elif isinstance(ctx.channel, (discord.abc.GuildChannel, discord.Thread)):
-			await self.bot.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
-
 	#
 	# GUILD EVENTS
 	#

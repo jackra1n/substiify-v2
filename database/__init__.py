@@ -60,20 +60,49 @@ class Database:
 
 		logger.info("Successfully initialised the Database.")
 
-	async def _insert_foundation(self, user: discord.Member, server: discord.Guild, channel: discord.abc.Messageable):
-		await self.pool.execute(USER_INSERT_QUERY, user.id, user.name, user.display_avatar.url)
-		await self._insert_server(server)
+	async def prepare_command_context(
+		self,
+		user: discord.User | discord.Member,
+		guild: discord.Guild | None,
+		channel: discord.abc.Messageable,
+	) -> None:
+		async with self.pool.acquire() as connection:
+			async with connection.transaction():
+				if guild is None:
+					await connection.execute(USER_INSERT_QUERY, user.id, user.name, user.display_avatar.url)
+					await self._insert_server_channel(channel, connection=connection)
+				else:
+					await self._insert_foundation(user, guild, channel, connection=connection)
+
+	async def _insert_foundation(
+		self,
+		user: discord.User | discord.Member,
+		server: discord.Guild,
+		channel: discord.abc.Messageable,
+		*,
+		connection: asyncpg.Connection | None = None,
+	) -> None:
+		executor = connection or self.pool
+		await executor.execute(USER_INSERT_QUERY, user.id, user.name, user.display_avatar.url)
+		await self._insert_server(server, connection=connection)
 
 		if pchannel := channel.parent if isinstance(channel, discord.Thread) else None:
-			await self.pool.execute(MESSAGEABLE_INSERT_QUERY, pchannel.id, pchannel.name, pchannel.guild.id, None)
+			await executor.execute(MESSAGEABLE_INSERT_QUERY, pchannel.id, pchannel.name, pchannel.guild.id, None)
 
 		p_chan_id = pchannel.id if pchannel else None
-		await self.pool.execute(MESSAGEABLE_INSERT_QUERY, channel.id, channel.name, channel.guild.id, p_chan_id)
+		await executor.execute(MESSAGEABLE_INSERT_QUERY, channel.id, channel.name, channel.guild.id, p_chan_id)
 
-	async def _insert_server(self, guild: discord.Guild):
-		await self.pool.execute(SERVER_INSERT_QUERY, guild.id, guild.name)
+	async def _insert_server(self, guild: discord.Guild, *, connection: asyncpg.Connection | None = None) -> None:
+		executor = connection or self.pool
+		await executor.execute(SERVER_INSERT_QUERY, guild.id, guild.name)
 
-	async def _insert_server_channel(self, channel: discord.abc.Messageable):
+	async def _insert_server_channel(
+		self,
+		channel: discord.abc.Messageable,
+		*,
+		connection: asyncpg.Connection | None = None,
+	) -> None:
 		server_id = channel.guild.id if channel.guild else None
 		channel_name = getattr(channel, "name", None) or str(channel)
-		await self.pool.execute(CHANNEL_INSERT_QUERY, channel.id, channel_name, server_id)
+		executor = connection or self.pool
+		await executor.execute(CHANNEL_INSERT_QUERY, channel.id, channel_name, server_id)

@@ -25,6 +25,10 @@ class Substiify(commands.Bot):
 			owner_id=276462585690193921,
 			max_messages=3000,
 		)
+		self.before_invoke(self._prepare_command_context)
+
+	async def _prepare_command_context(self, ctx: commands.Context) -> None:
+		await self.db.prepare_command_context(ctx.author, ctx.guild, ctx.channel)
 
 	async def setup_hook(self) -> None:
 		await self.load_extension("core.events")
@@ -178,4 +182,3 @@ class Substiify(commands.Bot):
 			)
 		except Exception:
 			logger.exception("Failed to persist command error for %s", ctx.command.qualified_name)
-
