@@ -8,9 +8,60 @@ from core import Substiify, config
 from utils.url_rules import URLRulesCleaner, load_compiled_rules, refresh_compiled_rules
 
 logger = logging.getLogger(__name__)
-save_message: dict[int, discord.Message] = {}
-reply_to_original: dict[int, int] = {}
-resend_attempts: dict[int, int] = {}
+MAX_TRACKED_MESSAGES = 3000
+
+
+class _ReplyTracker:
+	def __init__(self, limit: int) -> None:
+		self.limit = limit
+		self.replies: dict[int, discord.Message] = {}
+		self.original_by_reply: dict[int, int] = {}
+		self.resend_attempts: dict[int, int] = {}
+
+	def remember(self, original_id: int, reply: discord.Message, *, reset_attempts: bool = True) -> None:
+		previous_reply = self.replies.pop(original_id, None)
+		if previous_reply is not None:
+			self.original_by_reply.pop(previous_reply.id, None)
+
+		self.replies[original_id] = reply
+		self.original_by_reply[reply.id] = original_id
+		if reset_attempts:
+			self.resend_attempts.pop(original_id, None)
+
+		while len(self.replies) > self.limit:
+			oldest_original_id = next(iter(self.replies))
+			self.pop_original(oldest_original_id)
+
+	def get_reply(self, original_id: int) -> discord.Message | None:
+		return self.replies.get(original_id)
+
+	def pop_original(self, original_id: int) -> discord.Message | None:
+		reply = self.replies.pop(original_id, None)
+		if reply is not None:
+			self.original_by_reply.pop(reply.id, None)
+		self.resend_attempts.pop(original_id, None)
+		return reply
+
+	def pop_reply(self, reply_id: int) -> int | None:
+		original_id = self.original_by_reply.pop(reply_id, None)
+		if original_id is None:
+			return None
+		reply = self.replies.get(original_id)
+		if reply is not None and reply.id == reply_id:
+			self.replies.pop(original_id)
+		return original_id
+
+	def attempts(self, original_id: int) -> int:
+		return self.resend_attempts.get(original_id, 0)
+
+	def clear_attempts(self, original_id: int) -> None:
+		self.resend_attempts.pop(original_id, None)
+
+	def increment_attempts(self, original_id: int) -> None:
+		self.resend_attempts[original_id] = self.attempts(original_id) + 1
+
+	def __len__(self) -> int:
+		return len(self.replies)
 
 
 class URLCleaner(commands.Cog):
@@ -18,6 +69,7 @@ class URLCleaner(commands.Cog):
 		self.bot = bot
 		self.cleaner: URLRulesCleaner | None = None
 		self.cooldown = commands.CooldownMapping.from_cooldown(2, 6.0, commands.BucketType.user)
+		self._replies = _ReplyTracker(MAX_TRACKED_MESSAGES)
 		self._rules_ready = asyncio.Event()
 		self._initialization_task = asyncio.create_task(self._initialize_cleaner())
 		self.refresh_rules.start()
@@ -106,8 +158,7 @@ class URLCleaner(commands.Cog):
 			embed = self._build_tracking_embed(cleaned_urls, removed_trackers)
 			try:
 				reply = await message.reply(embed=embed, mention_author=False)
-				save_message[message.id] = reply
-				reply_to_original[reply.id] = message.id
+				self._replies.remember(message.id, reply)
 			except discord.Forbidden:
 				logger.error(
 					f"Unable to send url_cleaner message in {message.guild} {message.channel}, missing permissions."
@@ -116,53 +167,50 @@ class URLCleaner(commands.Cog):
 
 	@commands.Cog.listener()
 	async def on_message_edit(self, before: discord.Message, after: discord.Message):
-		if after.id in save_message:
+		reply_message = self._replies.get_reply(after.id)
+		if reply_message is not None:
 			_, removed_trackers = await self._clean_urls(after.content)
 			if not removed_trackers:
-				reply_message = save_message.pop(after.id)
+				self._replies.pop_original(after.id)
 				await reply_message.delete()
-				reply_to_original.pop(reply_message.id, None)
-				resend_attempts.pop(after.id, None)
 
 	@commands.Cog.listener()
 	async def on_message_delete(self, message: discord.Message):
-		if message.id in save_message:
-			reply_message = save_message.pop(message.id)
+		reply_message = self._replies.pop_original(message.id)
+		if reply_message is not None:
 			await reply_message.delete()
-			reply_to_original.pop(reply_message.id, None)
-			resend_attempts.pop(message.id, None)
 
-		if message.id in reply_to_original:
-			original_id = reply_to_original.pop(message.id)
-
-			if original_id in save_message and save_message[original_id].id == message.id:
-				save_message.pop(original_id, None)
-
+		original_id = self._replies.pop_reply(message.id)
+		if original_id is not None:
 			try:
 				original_msg = await message.channel.fetch_message(original_id)
 			except discord.NotFound:
+				self._replies.clear_attempts(original_id)
 				return
 
 			if not original_msg.guild:
+				self._replies.clear_attempts(original_id)
 				return
 			url_cleaner_settings = await self.bot.db.pool.fetchrow(
 				"SELECT * FROM url_cleaner_settings WHERE discord_server_id = $1", original_msg.guild.id
 			)
 			if not url_cleaner_settings:
+				self._replies.clear_attempts(original_id)
 				return
 
 			cleaned_urls, removed_trackers = await self._clean_urls(original_msg.content)
 			if not removed_trackers:
+				self._replies.clear_attempts(original_id)
 				return
 
 			logger.warning(
 				"Bot's URL cleanup message has been deleted, but message still has trackers! Attempting to resend"
 			)
 
-			attempts = resend_attempts.get(original_id, 0)
-			if attempts >= 3:
+			if self._replies.attempts(original_id) >= 3:
+				self._replies.clear_attempts(original_id)
 				return
-			resend_attempts[original_id] = attempts + 1
+			self._replies.increment_attempts(original_id)
 
 			removed_trackers.sort()
 			embed = self._build_tracking_embed(cleaned_urls, removed_trackers)
@@ -170,13 +218,14 @@ class URLCleaner(commands.Cog):
 			try:
 				await asyncio.sleep(6)
 				new_reply = await original_msg.reply(embed=embed, mention_author=False)
-				save_message[original_id] = new_reply
-				reply_to_original[new_reply.id] = original_id
+				self._replies.remember(original_id, new_reply, reset_attempts=False)
 			except discord.Forbidden:
 				logger.error(
 					f"Unable to resend url_cleaner message in {original_msg.guild} {original_msg.channel}, missing permissions."
 				)
-				return
+			finally:
+				if self._replies.get_reply(original_id) is None:
+					self._replies.clear_attempts(original_id)
 
 	@commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
 	@commands.guild_only()
