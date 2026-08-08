@@ -143,7 +143,8 @@ CREATE TABLE IF NOT EXISTS free_game_history (
 CREATE TABLE IF NOT EXISTS url_cleaner_settings (
     id SERIAL PRIMARY KEY,
     discord_server_id BIGINT REFERENCES discord_server(discord_server_id) ON DELETE CASCADE,
-    mode VARCHAR(20) NOT NULL DEFAULT 'whitelist' CHECK (mode IN ('whitelist', 'blacklist'))
+    mode VARCHAR(20) NOT NULL DEFAULT 'whitelist' CHECK (mode IN ('whitelist', 'blacklist')),
+    CONSTRAINT url_cleaner_settings_discord_server_id_key UNIQUE (discord_server_id)
 );
 
 CREATE TABLE IF NOT EXISTS url_cleaner_channels (
@@ -152,3 +153,31 @@ CREATE TABLE IF NOT EXISTS url_cleaner_channels (
     discord_channel_id BIGINT REFERENCES discord_channel(discord_channel_id) ON DELETE CASCADE,
     UNIQUE (url_cleaner_settings_id, discord_channel_id)
 );
+
+WITH canonical_settings AS (
+    SELECT discord_server_id, MIN(id) AS canonical_id
+    FROM url_cleaner_settings
+    WHERE discord_server_id IS NOT NULL
+    GROUP BY discord_server_id
+    HAVING COUNT(*) > 1
+),
+copied_channels AS (
+    INSERT INTO url_cleaner_channels (url_cleaner_settings_id, discord_channel_id)
+    SELECT canonical.canonical_id, channels.discord_channel_id
+    FROM canonical_settings AS canonical
+    JOIN url_cleaner_settings AS duplicate
+      ON duplicate.discord_server_id = canonical.discord_server_id
+     AND duplicate.id <> canonical.canonical_id
+    JOIN url_cleaner_channels AS channels
+      ON channels.url_cleaner_settings_id = duplicate.id
+    ON CONFLICT (url_cleaner_settings_id, discord_channel_id) DO NOTHING
+    RETURNING 1
+)
+DELETE FROM url_cleaner_settings AS duplicate
+USING canonical_settings AS canonical
+WHERE duplicate.discord_server_id = canonical.discord_server_id
+  AND duplicate.id <> canonical.canonical_id
+  AND (SELECT COUNT(*) FROM copied_channels) >= 0;
+
+CREATE UNIQUE INDEX IF NOT EXISTS url_cleaner_settings_discord_server_id_key
+ON url_cleaner_settings (discord_server_id);

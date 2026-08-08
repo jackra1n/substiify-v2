@@ -203,7 +203,10 @@ class URLCleaner(commands.Cog):
 				await ctx.send("❌ URL cleaner is **NOT** enabled.")
 		elif enable:
 			await self.bot.db.pool.execute(
-				"INSERT INTO url_cleaner_settings (discord_server_id) VALUES ($1) ON CONFLICT DO NOTHING", guild_id
+				"""INSERT INTO url_cleaner_settings (discord_server_id)
+				   VALUES ($1)
+				   ON CONFLICT (discord_server_id) DO NOTHING""",
+				guild_id,
 			)
 			await ctx.send("✅ URL cleaner **ENABLED**.")
 		elif not enable:

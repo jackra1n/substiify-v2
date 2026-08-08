@@ -85,7 +85,9 @@ class Karma(commands.Cog):
 				server = await self.bot.fetch_guild(payload.guild_id)
 			channel = self.bot.get_channel(payload.channel_id)
 			if channel is None:
-				logger.warning(f"Channel {payload.channel_id} not found in cache for karma reaction. Fetching from API.")
+				logger.warning(
+					f"Channel {payload.channel_id} not found in cache for karma reaction. Fetching from API."
+				)
 				channel = await self.bot.fetch_channel(payload.channel_id)
 		except Exception as e:
 			logger.warning(f"Failed to fetch guild/channel for karma reaction: {e}")
@@ -116,12 +118,19 @@ class Karma(commands.Cog):
 		await self.bot.db.pool.execute(UPSERT_KARMA_QUERY, user_id, payload.guild_id, amount)
 
 	async def _upsert_post_votes(
-		self, payload: discord.RawReactionActionEvent, user_id: int, upvote: int, downvote: int, message: discord.Message | None = None
+		self,
+		payload: discord.RawReactionActionEvent,
+		user_id: int,
+		upvote: int,
+		downvote: int,
+		message: discord.Message | None = None,
 	):
 		if message is None:
 			await self.bot.db.pool.execute(
 				"UPDATE post SET upvotes = post.upvotes + $1, downvotes = post.downvotes + $2 WHERE discord_message_id = $3",
-				upvote, downvote, payload.message_id,
+				upvote,
+				downvote,
+				payload.message_id,
 			)
 			return
 
@@ -136,7 +145,9 @@ class Karma(commands.Cog):
 			downvote,
 		)
 
-	async def check_payload(self, payload: discord.RawReactionActionEvent) -> tuple[discord.Member, discord.Message] | None:
+	async def check_payload(
+		self, payload: discord.RawReactionActionEvent
+	) -> tuple[discord.Member, discord.Message] | None:
 		if payload.event_type == "REACTION_ADD" and payload.member.bot:
 			return None
 		message = await self.__get_message_from_payload(payload)
@@ -363,9 +374,7 @@ class Karma(commands.Cog):
 			embed.description = "You don't have enough karma!"
 			return await ctx.send(embed=embed)
 
-		await self.bot.db.pool.execute(
-			dbc.USER_INSERT_QUERY, user.id, user.display_name, user.display_avatar.url
-		)
+		await self.bot.db.pool.execute(dbc.USER_INSERT_QUERY, user.id, user.display_name, user.display_avatar.url)
 		await self.bot.db.pool.execute(
 			dbc.USER_INSERT_QUERY,
 			ctx.author.id,
@@ -1100,13 +1109,6 @@ class KasinoBetModal(discord.ui.Modal):
 		bot: core.Substiify = interaction.client
 		kasino_id: int = self.kasino["id"]
 		amount: int = self.bet_amount_input.value
-		bettor_karma: int = await bot.db.pool.fetchval(
-			"SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2",
-			interaction.user.id,
-			interaction.guild.id,
-		)
-		user_bet: Record = self.user_bet
-
 		try:
 			amount = int(amount)
 		except ValueError:
@@ -1119,30 +1121,43 @@ class KasinoBetModal(discord.ui.Modal):
 				"The kasino is locked! No more bets are taken in. Time to wait and see...", ephemeral=True
 			)
 
-		if bettor_karma < amount:
-			return await interaction.response.send_message("You don't have enough karma!", ephemeral=True)
+		output = "increased" if self.user_bet is not None else "added"
 
-		total_bet = amount
-		output = "added"
-
-		if user_bet is not None:
-			total_bet = user_bet["amount"] + amount
-			output = "increased"
-
-		stmt_bet = """INSERT INTO kasino_bet (kasino_id, discord_user_id, amount, option) VALUES ($1, $2, $3, $4)
-                      ON CONFLICT (kasino_id, discord_user_id) DO UPDATE SET amount = kasino_bet.amount + $3;"""
-		stmt_update_user_karma = (
-			"UPDATE karma SET amount = karma.amount - $1 WHERE discord_user_id = $2 AND discord_server_id = $3;"
-		)
+		stmt_bet = """INSERT INTO kasino_bet (kasino_id, discord_user_id, amount, option)
+					  VALUES ($1, $2, $3, $4)
+					  ON CONFLICT (kasino_id, discord_user_id)
+					  DO UPDATE SET amount = kasino_bet.amount + EXCLUDED.amount
+					  RETURNING amount"""
+		stmt_update_user_karma = """UPDATE karma
+								  SET amount = amount - $1
+								  WHERE discord_user_id = $2
+									AND discord_server_id = $3
+									AND amount >= $1
+								  RETURNING amount"""
 		async with bot.db.pool.acquire() as conn:
 			async with conn.transaction():
-				await conn.execute(stmt_bet, kasino_id, interaction.user.id, amount, self.option)
-				await conn.execute(stmt_update_user_karma, amount, interaction.user.id, interaction.guild.id)
+				remaining_karma = await conn.fetchval(
+					stmt_update_user_karma,
+					amount,
+					interaction.user.id,
+					interaction.guild.id,
+				)
+				if remaining_karma is not None:
+					total_bet = await conn.fetchval(
+						stmt_bet,
+						kasino_id,
+						interaction.user.id,
+						amount,
+						self.option,
+					)
+
+		if remaining_karma is None:
+			return await interaction.response.send_message("You don't have enough karma!", ephemeral=True)
 
 		output_embed = discord.Embed(color=discord.Colour.from_rgb(209, 25, 25))
 		output_embed.title = f"**Successfully {output} bet on option {self.option}, on kasino with ID {kasino_id} for {amount} karma! Total bet is now: {total_bet} Karma**"
 		output_embed.color = discord.Colour.from_rgb(52, 79, 235)
-		output_embed.description = f"Remaining karma: {bettor_karma - amount}"
+		output_embed.description = f"Remaining karma: {remaining_karma}"
 
 		await interaction.response.send_message(embed=output_embed, ephemeral=True)
 		logger.info(f"Bet[user: {interaction.user}, amount: {amount}, option: {self.option}, kasino: {kasino_id}]")
