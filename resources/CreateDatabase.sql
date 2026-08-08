@@ -31,6 +31,20 @@ CREATE TABLE IF NOT EXISTS command_history (
   date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS command_error (
+  id SERIAL PRIMARY KEY,
+  command_name VARCHAR(255),
+  error_type VARCHAR(255),
+  error_message TEXT,
+  raw_message TEXT,
+  discord_user_id BIGINT REFERENCES discord_user(discord_user_id),
+  discord_server_id BIGINT REFERENCES discord_server(discord_server_id),
+  discord_channel_id BIGINT REFERENCES discord_channel(discord_channel_id),
+  discord_message_id BIGINT,
+  is_dm BOOLEAN NOT NULL DEFAULT FALSE,
+  date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS giveaway (
   id SERIAL PRIMARY KEY,
   start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

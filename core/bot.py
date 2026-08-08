@@ -8,6 +8,7 @@ from discord.ext import commands
 
 import core
 from database import Database
+from database import db_constants as dbc
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,8 @@ class Substiify(commands.Bot):
 			)
 			await ctx.reply(embed=embed)
 			return
-		logger.error(f"[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]")
+		logger.error(f"[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]", exc_info=error)
+		await self._save_command_error(ctx, error)
 		if isinstance(error, commands.CheckFailure):
 			embed = discord.Embed(
 				title="Insufficient permissions",
@@ -149,6 +151,33 @@ class Substiify(commands.Bot):
 				pass
 			except discord.HTTPException:
 				pass
+
+	async def _save_command_error(self, ctx: commands.Context, error: Exception) -> None:
+		try:
+			await self.db.pool.execute(
+				dbc.USER_INSERT_QUERY, ctx.author.id, ctx.author.name, ctx.author.display_avatar.url
+			)
+			if ctx.guild:
+				await self.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
+			else:
+				await self.db._insert_server_channel(ctx.channel)
+			await self.db.pool.execute(
+				"""INSERT INTO command_error
+				   (command_name, error_type, error_message, raw_message, discord_user_id,
+				    discord_server_id, discord_channel_id, discord_message_id, is_dm)
+				   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+				ctx.command.qualified_name,
+				type(error).__name__,
+				str(error),
+				ctx.message.content,
+				ctx.author.id,
+				ctx.guild.id if ctx.guild else None,
+				ctx.channel.id,
+				ctx.message.id,
+				ctx.guild is None,
+			)
+		except Exception:
+			logger.exception("Failed to persist command error for %s", ctx.command.qualified_name)
 
 	async def close(self) -> None:
 		await self.db.pool.close()

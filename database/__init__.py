@@ -73,5 +73,7 @@ class Database:
 	async def _insert_server(self, guild: discord.Guild):
 		await self.pool.execute(SERVER_INSERT_QUERY, guild.id, guild.name)
 
-	async def _insert_server_channel(self, channel: discord.abc.GuildChannel):
-		await self.pool.execute(CHANNEL_INSERT_QUERY, channel.id, channel.name, channel.guild.id)
+	async def _insert_server_channel(self, channel: discord.abc.Messageable):
+		server_id = channel.guild.id if channel.guild else None
+		channel_name = getattr(channel, "name", None) or str(channel)
+		await self.pool.execute(CHANNEL_INSERT_QUERY, channel.id, channel_name, server_id)
