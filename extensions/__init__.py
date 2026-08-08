@@ -13,45 +13,31 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import logging
-import pathlib
-
 from discord.ext import commands
 
 import core
 
-logger: logging.Logger = logging.getLogger(__name__)
+EXTENSIONS = (
+	"extensions.feedback",
+	"extensions.free_games",
+	"extensions.fun",
+	"extensions.help",
+	"extensions.karma",
+	"extensions.music",
+	"extensions.owner",
+	"extensions.url_cleaner",
+	"extensions.util",
+)
 
 
 async def setup(bot: core.Substiify) -> None:
-	extensions_dir = pathlib.Path("extensions")
-	extensions: list[str] = [f".{f.stem}" for f in extensions_dir.glob("*[a-zA-Z].py")]
-	for d in extensions_dir.iterdir():
-		if d.is_dir() and (d / "__init__.py").exists() and d.name[0].isalpha():
-			extensions.append(f".{d.name}")
-
-	loaded: list[str] = []
-
-	for extension in extensions:
-		try:
-			await bot.load_extension(extension, package="extensions")
-		except Exception as e:
-			logger.error('Unable to load extension: "%s" > %s', extension, e)
-		else:
-			loaded.append(f"extensions{extension}")
-
-	logger.info("Loaded the following extensions: %s", loaded)
+	for extension in EXTENSIONS:
+		await bot.load_extension(extension)
 
 
 async def teardown(bot: core.Substiify) -> None:
-	extensions_dir = pathlib.Path("extensions")
-	extensions: list[str] = [f".{f.stem}" for f in extensions_dir.glob("*[a-zA-Z].py")]
-	for d in extensions_dir.iterdir():
-		if d.is_dir() and (d / "__init__.py").exists() and d.name[0].isalpha():
-			extensions.append(f".{d.name}")
-
-	for extension in extensions:
+	for extension in reversed(EXTENSIONS):
 		try:
-			await bot.unload_extension(extension, package="extensions")
+			await bot.unload_extension(extension)
 		except commands.ExtensionNotLoaded:
 			pass
