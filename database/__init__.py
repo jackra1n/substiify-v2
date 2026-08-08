@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-from typing import Any, Self
+from typing import Any, Protocol, Self
 
 import asyncpg
 import discord
@@ -14,6 +14,11 @@ __all__ = ("Database",)
 
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+
+class _DiscordChannel(Protocol):
+	@property
+	def id(self) -> int: ...
 
 
 class Database:
@@ -51,7 +56,7 @@ class Database:
 		self,
 		user: discord.User | discord.Member,
 		guild: discord.Guild | None,
-		channel: discord.abc.Messageable,
+		channel: _DiscordChannel,
 	) -> None:
 		async with self.pool.acquire() as connection:
 			async with connection.transaction():
@@ -65,7 +70,7 @@ class Database:
 		self,
 		user: discord.User | discord.Member,
 		server: discord.Guild,
-		channel: discord.abc.Messageable,
+		channel: _DiscordChannel,
 		*,
 		connection: asyncpg.Connection | None = None,
 	) -> None:
@@ -77,7 +82,8 @@ class Database:
 			await executor.execute(MESSAGEABLE_INSERT_QUERY, pchannel.id, pchannel.name, pchannel.guild.id, None)
 
 		p_chan_id = pchannel.id if pchannel else None
-		await executor.execute(MESSAGEABLE_INSERT_QUERY, channel.id, channel.name, channel.guild.id, p_chan_id)
+		channel_name = getattr(channel, "name", None) or str(channel)
+		await executor.execute(MESSAGEABLE_INSERT_QUERY, channel.id, channel_name, server.id, p_chan_id)
 
 	async def _insert_server(self, guild: discord.Guild, *, connection: asyncpg.Connection | None = None) -> None:
 		executor = connection or self.pool
@@ -85,11 +91,12 @@ class Database:
 
 	async def _insert_server_channel(
 		self,
-		channel: discord.abc.Messageable,
+		channel: _DiscordChannel,
 		*,
 		connection: asyncpg.Connection | None = None,
 	) -> None:
-		server_id = channel.guild.id if channel.guild else None
+		guild = getattr(channel, "guild", None)
+		server_id = guild.id if guild is not None else None
 		channel_name = getattr(channel, "name", None) or str(channel)
 		executor = connection or self.pool
 		await executor.execute(CHANNEL_INSERT_QUERY, channel.id, channel_name, server_id)

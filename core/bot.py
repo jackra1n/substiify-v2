@@ -18,9 +18,12 @@ class Substiify(commands.Bot):
 		self.db = database
 		self.version = core.__version__
 		self.start_time = datetime.datetime.now(datetime.timezone.utc)
+		prefix = core.config.BOT_PREFIX
+		if not prefix:
+			raise RuntimeError("BOT_PREFIX must be configured before creating the bot")
 		intents = discord.Intents().all()
 		super().__init__(
-			command_prefix=commands.when_mentioned_or(core.config.BOT_PREFIX),
+			command_prefix=commands.when_mentioned_or(prefix),
 			intents=intents,
 			owner_id=276462585690193921,
 			max_messages=3000,
@@ -46,25 +49,34 @@ class Substiify(commands.Bot):
 	async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
 		logging.info(f"Wavelink Node connected: {payload.node!r} | Resumed: {payload.resumed}")
 
-	async def on_ready(self: commands.Bot) -> None:
+	async def on_ready(self) -> None:
+		user = self.user
+		if user is None:
+			logger.error("Ready event received without a bot user.")
+			return
 		servers = len(self.guilds)
 		activity_name = f"{core.config.BOT_PREFIX}help | {servers} servers"
 		activity = discord.Activity(type=discord.ActivityType.listening, name=activity_name)
 		await self.change_presence(activity=activity)
-		colored_name = f"\x1b[96m{self.user}\x1b[0m"
-		logger.info(f"Logged on as {colored_name} (ID: {self.user.id})")
+		colored_name = f"\x1b[96m{user}\x1b[0m"
+		logger.info(f"Logged on as {colored_name} (ID: {user.id})")
 
 	async def on_command_completion(self, ctx: commands.Context) -> None:
+		command = ctx.command
+		if command is None:
+			logger.warning("Command completion received without a command.")
+			return
+		command_name = command.qualified_name
 		parameters = ctx.kwargs.values() if ctx.kwargs else ctx.args[2:]
 		parameters_string = ", ".join([str(parameter) if parameter is not None else "" for parameter in parameters])
 		if parameters_string == "":
 			parameters_string = None
 
 		if parameters_string is None:
-			logger.info(f"[{ctx.command.qualified_name}] executed for -> [{ctx.author}]")
+			logger.info(f"[{command_name}] executed for -> [{ctx.author}]")
 		else:
 			log_parameters = parameters_string[:60] + "…" if len(parameters_string) > 60 else parameters_string
-			logger.info(f"[{ctx.command.qualified_name}] executed for -> [{ctx.author}] with params: {log_parameters}")
+			logger.info(f"[{command_name}] executed for -> [{ctx.author}] with params: {log_parameters}")
 
 		server_id = ctx.guild.id if ctx.guild else None
 		query = """INSERT INTO command_history
@@ -72,7 +84,7 @@ class Substiify(commands.Bot):
                    VALUES ($1, $2, $3, $4, $5, $6)"""
 		await self.db.pool.execute(
 			query,
-			ctx.command.qualified_name,
+			command_name,
 			parameters_string,
 			ctx.author.id,
 			server_id,
@@ -148,7 +160,7 @@ class Substiify(commands.Bot):
 			error_msg = f"Error in DMs by {ctx.author} -> {ctx.command.qualified_name}"
 		embed = discord.Embed(title=error_msg, description=f"```{error}```", color=discord.Color.red())
 		channel = self.get_channel(ERRORS_CHANNEL_ID)
-		if channel is not None:
+		if isinstance(channel, discord.abc.Messageable):
 			try:
 				await channel.send(embed=embed)
 			except discord.Forbidden:
@@ -157,6 +169,11 @@ class Substiify(commands.Bot):
 				pass
 
 	async def _save_command_error(self, ctx: commands.Context, error: Exception) -> None:
+		command = ctx.command
+		if command is None:
+			logger.error("Cannot persist a command error without a command.")
+			return
+		command_name = command.qualified_name
 		try:
 			await self.db.pool.execute(
 				dbc.USER_INSERT_QUERY, ctx.author.id, ctx.author.name, ctx.author.display_avatar.url
@@ -170,7 +187,7 @@ class Substiify(commands.Bot):
 				   (command_name, error_type, error_message, raw_message, discord_user_id,
 				    discord_server_id, discord_channel_id, discord_message_id, is_dm)
 				   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
-				ctx.command.qualified_name,
+				command_name,
 				type(error).__name__,
 				str(error),
 				ctx.message.content,
@@ -181,4 +198,4 @@ class Substiify(commands.Bot):
 				ctx.guild is None,
 			)
 		except Exception:
-			logger.exception("Failed to persist command error for %s", ctx.command.qualified_name)
+			logger.exception("Failed to persist command error for %s", command_name)
