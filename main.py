@@ -14,10 +14,11 @@ logging.getLogger("discord.gateway").addFilter(RemoveNoise())
 
 
 async def main() -> None:
+	bot_token = core.config.validate()
 	utils.ux.print_system_info()
 
 	async with database.Database() as db, core.Substiify(database=db) as substiify:
-		await substiify.start(core.config.BOT_TOKEN)
+		await substiify.start(bot_token)
 
 
 if __name__ == "__main__":
