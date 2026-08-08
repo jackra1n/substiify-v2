@@ -24,7 +24,12 @@ class FreeGames(commands.Cog):
 
 	def __init__(self, bot: core.Substiify):
 		self.bot = bot
+
+	async def cog_load(self) -> None:
 		self.check_free_games.start()
+
+	async def cog_unload(self) -> None:
+		self.check_free_games.cancel()
 
 	@commands.is_owner()
 	@commands.command(hidden=True)
@@ -37,7 +42,13 @@ class FreeGames(commands.Cog):
 			await ctx.message.add_reaction("✅")
 
 	@tasks.loop(hours=1)
-	async def check_free_games(self):
+	async def check_free_games(self) -> None:
+		try:
+			await self._check_free_games()
+		except Exception:
+			logger.exception("Free games check failed.")
+
+	async def _check_free_games(self) -> None:
 		all_enabled_platforms_stmt = """SELECT DISTINCT store_name FROM store_options;"""
 		all_enabled_platforms = await self.bot.db.pool.fetch(all_enabled_platforms_stmt)
 		platforms = [record["store_name"] for record in all_enabled_platforms]
@@ -45,8 +56,12 @@ class FreeGames(commands.Cog):
 
 		current_free_games: list[Game] = []
 		for platform in platforms:
-			if platform in STORES:
+			if platform not in STORES:
+				continue
+			try:
 				current_free_games += await STORES[platform].get_free_games()
+			except Exception:
+				logger.exception("Failed to check %s for free games.", platform)
 		logger.debug(f"Found {len(current_free_games)} free games")
 
 		freegames_and_options_stmt = """
@@ -58,28 +73,36 @@ class FreeGames(commands.Cog):
 
 		total_sent_messages = 0
 		for game in current_free_games:
-			if await self._is_game_in_history(game):
-				continue
-			logger.info(f"Starting to send new free game: {game.title}")
-			await self._add_game_to_history(game)
-			embed = self._create_game_embed(game)
-
-			for fg_setting in freegames_and_options:
-				channel: discord.TextChannel = self.bot.get_channel(fg_setting["discord_channel_id"])
-				if not channel:
-					continue
-				if fg_setting["store_name"] == game.platform.name:
-					try:
-						await channel.send(embed=embed)
-						total_sent_messages += 1
-					except Exception as ex:
-						srv_chnl = (
-							f"[server: {fg_setting['discord_server_id']}, channel: {fg_setting['discord_channel_id']}]"
-						)
-						logger.error(f"Fail while sending free game for {srv_chnl} -> {ex}")
+			try:
+				total_sent_messages += await self._send_free_game(game, freegames_and_options)
+			except Exception:
+				logger.exception("Failed to process free game %s.", game.title)
 
 		if total_sent_messages:
 			logger.info(f"Sent [{total_sent_messages}] new free games messages")
+
+	async def _send_free_game(self, game: Game, freegames_and_options) -> int:
+		if await self._is_game_in_history(game):
+			return 0
+		logger.info(f"Starting to send new free game: {game.title}")
+		await self._add_game_to_history(game)
+		embed = self._create_game_embed(game)
+
+		sent_messages = 0
+		for fg_setting in freegames_and_options:
+			channel: discord.TextChannel = self.bot.get_channel(fg_setting["discord_channel_id"])
+			if not channel or fg_setting["store_name"] != game.platform.name:
+				continue
+			try:
+				await channel.send(embed=embed)
+				sent_messages += 1
+			except Exception:
+				logger.exception(
+					"Failed to send free game to server %s, channel %s.",
+					fg_setting["discord_server_id"],
+					fg_setting["discord_channel_id"],
+				)
+		return sent_messages
 
 	@check_free_games.before_loop
 	async def before_check_free_games(self):

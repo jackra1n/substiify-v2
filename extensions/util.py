@@ -21,7 +21,12 @@ class Util(commands.Cog):
 
 	def __init__(self, bot: core.Substiify):
 		self.bot = bot
+
+	async def cog_load(self) -> None:
 		self.giveaway_task.start()
+
+	async def cog_unload(self) -> None:
+		self.giveaway_task.cancel()
 
 	@commands.hybrid_group(aliases=["give"])
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -212,32 +217,44 @@ class Util(commands.Cog):
 		await ctx.message.delete()
 
 	@tasks.loop(seconds=30)
-	async def giveaway_task(self):
-		giveaways = await self.bot.db.pool.fetch("SELECT * FROM giveaway")
-		for giveaway in giveaways:
-			now = datetime.datetime.utcnow()
-			end_date = giveaway["end_date"]
-			if now < end_date:
-				continue
-			channel = await self.bot.fetch_channel(giveaway["discord_channel_id"])
-			try:
-				msg = await channel.fetch_message(giveaway["discord_message_id"])
-			except discord.NotFound:
-				await self.bot.db.pool.execute("DELETE FROM giveaway WHERE id = $1", giveaway["id"])
-				return await channel.send(
-					"Could not find the giveaway message! Deleting the giveaway.", delete_after=180
-				)
-			author_id = giveaway["discord_user_id"]
-			author = self.bot.get_user(author_id) or await self.bot.fetch_user(author_id)
-			reaction = discord.utils.find(lambda r: str(r.emoji) == "🎉", msg.reactions)
-			users = [] if reaction is None else [u async for u in reaction.users() if not u.bot]
-			prize = giveaway["prize"]
-			winners = self.get_giveaway_winners(msg)
-			embed = self.create_giveaway_embed(author, prize, winners)
+	async def giveaway_task(self) -> None:
+		try:
+			giveaways = await self.bot.db.pool.fetch("SELECT * FROM giveaway")
+		except Exception:
+			logger.exception("Failed to load active giveaways.")
+			return
 
-			await self.pick_winner(users, channel, prize, embed, msg, winners)
-			await msg.edit(embed=embed)
+		for giveaway in giveaways:
+			try:
+				await self._process_giveaway(giveaway)
+			except Exception:
+				logger.exception("Failed to process giveaway %s.", giveaway["id"])
+
+	async def _process_giveaway(self, giveaway) -> None:
+		now = datetime.datetime.utcnow()
+		end_date = giveaway["end_date"]
+		if now < end_date:
+			return
+
+		channel = await self.bot.fetch_channel(giveaway["discord_channel_id"])
+		try:
+			msg = await channel.fetch_message(giveaway["discord_message_id"])
+		except discord.NotFound:
 			await self.bot.db.pool.execute("DELETE FROM giveaway WHERE id = $1", giveaway["id"])
+			await channel.send("Could not find the giveaway message! Deleting the giveaway.", delete_after=180)
+			return
+
+		author_id = giveaway["discord_user_id"]
+		author = self.bot.get_user(author_id) or await self.bot.fetch_user(author_id)
+		reaction = discord.utils.find(lambda r: str(r.emoji) == "🎉", msg.reactions)
+		users = [] if reaction is None else [u async for u in reaction.users() if not u.bot]
+		prize = giveaway["prize"]
+		winners = self.get_giveaway_winners(msg)
+		embed = self.create_giveaway_embed(author, prize, winners)
+
+		await self.pick_winner(users, channel, prize, embed, msg, winners)
+		await msg.edit(embed=embed)
+		await self.bot.db.pool.execute("DELETE FROM giveaway WHERE id = $1", giveaway["id"])
 
 	async def pick_winner(
 		self,

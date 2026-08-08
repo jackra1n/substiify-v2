@@ -18,12 +18,17 @@ class Owner(commands.Cog):
 
 	def __init__(self, bot: core.Substiify):
 		self.bot = bot
-		self.status_task.start()
 		self.message_server = None
 		self.message_channel = None
 		self.message_text = None
 		self.message_embed = False
 		self.embed_title = None
+
+	async def cog_load(self) -> None:
+		self.status_task.start()
+
+	async def cog_unload(self) -> None:
+		self.status_task.cancel()
 
 	async def set_default_status(self):
 		if self.bot.is_ready():
@@ -33,8 +38,11 @@ class Owner(commands.Cog):
 			await self.bot.change_presence(activity=activity)
 
 	@tasks.loop(minutes=30)
-	async def status_task(self):
-		await self.set_default_status()
+	async def status_task(self) -> None:
+		try:
+			await self.set_default_status()
+		except Exception:
+			logger.exception("Failed to update the bot status.")
 
 	@commands.is_owner()
 	@commands.command(hidden=True)
