@@ -1,0 +1,25 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["pep621"],
+  "dependencyDashboard": false,
+  "rangeStrategy": "bump",
+  "platformAutomerge": false,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": false,
+    "schedule": ["at any time"]
+  },
+  "packageRules": [
+    {
+      "matchDepTypes": [
+        "project.dependencies",
+        "dependency-groups",
+        "build-system.requires"
+      ],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr"
+    }
+  ]
+}
