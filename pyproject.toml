@@ -81,7 +81,7 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
-    "ty>=0.0.78",
+    "ty>=0.0.80",
 ]
 
 [tool.setuptools.dynamic]
