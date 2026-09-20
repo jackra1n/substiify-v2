@@ -9,7 +9,6 @@ from discord.ext import commands
 
 import core
 import utils
-from database import db_constants as dbc
 
 logger = logging.getLogger(__name__)
 
@@ -21,12 +20,63 @@ UPSERT_POST_VOTES_QUERY = """INSERT INTO post (discord_user_id, discord_server_i
                              ON CONFLICT (discord_message_id) DO UPDATE SET upvotes = post.upvotes + $6, downvotes = post.downvotes + $7"""
 
 
+class KasinoStateError(ValueError):
+	pass
+
+
+def _check_kasino(kasino: Record | None, guild_id: int, *, allow_settled: bool = False) -> None:
+	if kasino is None:
+		raise KasinoStateError("Kasino not found. This message may be out of date.")
+	if kasino["discord_server_id"] != guild_id:
+		raise KasinoStateError("That kasino is not in this server.")
+	if kasino["settled_at"] is not None and not allow_settled:
+		raise KasinoStateError("This kasino has already closed. No more changes are allowed.")
+
+
+async def _lock_karma_rows(conn, guild_id: int, user_ids) -> None:
+	# Always lock in user-ID order, including inserts for participants with no balance row.
+	for user_id in sorted(set(user_ids)):
+		await conn.execute(
+			"""INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, 0)
+			ON CONFLICT (discord_user_id, discord_server_id) DO NOTHING""",
+			user_id,
+			guild_id,
+		)
+		await conn.fetchval(
+			"SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2 FOR UPDATE",
+			user_id,
+			guild_id,
+		)
+
+
+def _calculate_payouts(bets: list[Record], winning_option: int) -> dict[int, int]:
+	if winning_option == 3:
+		return {bet["discord_user_id"]: bet["amount"] for bet in bets}
+	payouts = {bet["discord_user_id"]: 0 for bet in bets}
+	total_pool = sum(bet["amount"] for bet in bets)
+	winners = [bet for bet in bets if bet["option"] == winning_option]
+	winner_pool = sum(bet["amount"] for bet in winners)
+	if not winner_pool:
+		return payouts
+	remainders = []
+	for bet in winners:
+		user_id = bet["discord_user_id"]
+		payouts[user_id], remainder = divmod(bet["amount"] * total_pool, winner_pool)
+		remainders.append((remainder, user_id))
+	# Largest remainders win the indivisible units; equal remainders favor the lower user ID.
+	remainders.sort(key=lambda entry: (-entry[0], entry[1]))
+	for _, user_id in remainders[: total_pool - sum(payouts.values())]:
+		payouts[user_id] += 1
+	return payouts
+
+
 class Karma(commands.Cog):
 	COG_EMOJI = "☯️"
 
 	def __init__(self, bot: core.Substiify, vote_channels: list[int]):
 		self.bot = bot
 		self.vote_channels = vote_channels
+		self.kasino_message_locks: dict[int, asyncio.Lock] = {}
 
 	@commands.Cog.listener()
 	async def on_message(self, message: discord.Message):
@@ -73,7 +123,7 @@ class Karma(commands.Cog):
 				return
 			user, message = result
 
-			await self.bot.db.pool.execute(dbc.USER_INSERT_QUERY, user.id, user.display_name, user.display_avatar.url)
+			await self.bot.db.upsert_user(user)
 			user_id = user.id
 		else:
 			user_id = post["discord_user_id"]
@@ -93,8 +143,8 @@ class Karma(commands.Cog):
 			logger.warning(f"Failed to fetch guild/channel for karma reaction: {e}")
 			return
 
-		await self.bot.db._insert_server(server)
-		await self.bot.db._insert_server_channel(channel)
+		await self.bot.db.upsert_server(server)
+		await self.bot.db.upsert_channel(channel)
 
 		is_upvote = payload.emoji.id in upvote_emotes
 
@@ -140,7 +190,7 @@ class Karma(commands.Cog):
 			payload.guild_id,
 			payload.channel_id,
 			payload.message_id,
-			message.created_at.replace(tzinfo=None),
+			message.created_at,
 			upvote,
 			downvote,
 		)
@@ -252,9 +302,10 @@ class Karma(commands.Cog):
 			embed.description = f"Votes are **already active** in {ctx.channel.mention}!"
 			return await ctx.send(embed=embed)
 
-		stmt = """INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote)
-					VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO UPDATE SET upvote = $5"""
-		await self.bot.db.pool.execute(stmt, channel.id, channel.name, channel.guild.id, None, True)
+		await self.bot.db.upsert_channel(channel)
+		await self.bot.db.pool.execute(
+			"UPDATE discord_channel SET upvote = True WHERE discord_channel_id = $1", channel.id
+		)
 
 		embed.description = f"Votes **enabled** in {channel.mention}!"
 		await ctx.send(embed=embed)
@@ -267,9 +318,10 @@ class Karma(commands.Cog):
 		Disables votes in the current channel. Requires Manage Channels permission.
 		"""
 		channel = channel or ctx.channel
-		stmt = """INSERT INTO discord_channel (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id, upvote)
-                  VALUES ($1, $2, $3, $4, $5) ON CONFLICT (discord_channel_id) DO UPDATE SET upvote = $5"""
-		await self.bot.db.pool.execute(stmt, channel.id, channel.name, channel.guild.id, None, False)
+		await self.bot.db.upsert_channel(channel)
+		await self.bot.db.pool.execute(
+			"UPDATE discord_channel SET upvote = False WHERE discord_channel_id = $1", channel.id
+		)
 
 		if channel.id in self.vote_channels:
 			self.vote_channels.remove(channel.id)
@@ -357,7 +409,7 @@ class Karma(commands.Cog):
 			embed.description = "You can't donate to bots!"
 			return await ctx.send(embed=embed)
 
-		if amount <= 0:
+		if not 0 < amount <= 2**63 - 1:
 			embed.description = f"You cannot donate {amount} karma!"
 			return await ctx.send(embed=embed)
 
@@ -365,30 +417,45 @@ class Karma(commands.Cog):
 			embed.description = f"`{user}` is not a member of this server!"
 			return await ctx.send(embed=embed)
 
-		donator_karma = await self._get_user_karma(ctx.author.id, ctx.guild.id)
-		if donator_karma is None:
-			embed.description = "You don't have any karma!"
-			return await ctx.send(embed=embed)
-
-		if donator_karma < amount:
+		if not await self.donate_karma(ctx.author, user, ctx.guild, amount):
 			embed.description = "You don't have enough karma!"
 			return await ctx.send(embed=embed)
-
-		await self.bot.db.pool.execute(dbc.USER_INSERT_QUERY, user.id, user.display_name, user.display_avatar.url)
-		await self.bot.db.pool.execute(
-			dbc.USER_INSERT_QUERY,
-			ctx.author.id,
-			ctx.author.display_name,
-			ctx.author.display_avatar.url,
-		)
-
-		await self.bot.db.pool.executemany(
-			UPSERT_KARMA_QUERY, [(user.id, ctx.guild.id, amount), (ctx.author.id, ctx.guild.id, -amount)]
-		)
 
 		embed = discord.Embed(color=discord.Colour.green())
 		embed.description = f"{ctx.author.mention} has donated {amount} karma to {user.mention}!"
 		await ctx.send(embed=embed)
+
+	async def donate_karma(
+		self, donor: discord.User, recipient: discord.User, guild: discord.Guild, amount: int
+	) -> bool:
+		"""Transfer karma atomically; a failed conditional debit never credits the recipient."""
+		if not 0 < amount <= 2**63 - 1:
+			raise ValueError("Donation amount must be a positive BIGINT.")
+		users = {user.id: user for user in (donor, recipient)}
+		async with self.bot.db.pool.acquire(timeout=5) as conn:
+			async with conn.transaction():
+				# Metadata upserts lock users too; reciprocal transfers use the same order throughout.
+				for user_id in sorted(users):
+					await self.bot.db.upsert_user(users[user_id], connection=conn)
+				await self.bot.db.upsert_server(guild, connection=conn)
+				await _lock_karma_rows(conn, guild.id, users)
+				remaining = await conn.fetchval(
+					"""UPDATE karma SET amount = amount - $1
+					WHERE discord_user_id = $2 AND discord_server_id = $3 AND amount >= $1
+					RETURNING amount""",
+					amount,
+					donor.id,
+					guild.id,
+				)
+				if remaining is None:
+					return False
+				await conn.execute(
+					"UPDATE karma SET amount = amount + $1 WHERE discord_user_id = $2 AND discord_server_id = $3",
+					amount,
+					recipient.id,
+					guild.id,
+				)
+		return True
 
 	def _find_guild_user(self, guild: discord.Guild, arg: str) -> discord.Member | None:
 		members = guild.members
@@ -726,18 +793,22 @@ class Karma(commands.Cog):
 		"""Opens a karma kasino which allows people to bet on a question with two options.
 		Check "karma" and "votes" commands for more info on karma.
 		"""
-		async with ctx.typing():
-			to_embed = discord.Embed(description="Opening kasino, hold on tight...")
-			kasino_msg = await ctx.send(embed=to_embed)
-			stmt_kasino = """INSERT INTO kasino (discord_server_id, discord_channel_id, discord_message_id, question, option1, option2)
-                         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"""
-			kasino_id = await self.bot.db.pool.fetchval(
-				stmt_kasino, ctx.guild.id, ctx.channel.id, kasino_msg.id, question, op_a, op_b
-			)
-			# TODO: Add kasino backup
+		await ctx.defer()
+		await self.bot.db.prepare_command_context(ctx.author, ctx.guild, ctx.channel)
+		kasino_msg = await _notify(ctx.send(embed=discord.Embed(description="Opening kasino...")))
+		if kasino_msg is None:
+			return
+		kasino_id = await self.bot.db.pool.fetchval(
+			"""INSERT INTO kasino (discord_server_id, discord_channel_id, discord_message_id, question, option1, option2)
+			VALUES ($1, $2, $3, $4, $5, $6) RETURNING id""",
+			ctx.guild.id,
+			ctx.channel.id,
+			kasino_msg.id,
+			question,
+			op_a,
+			op_b,
+		)
 		await _update_kasino_msg(ctx.bot, kasino_id)
-		if not ctx.interaction:
-			await ctx.message.delete()
 
 	@kasino.command(name="close", usage="close <kasino_id> <winning_option>")
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -747,29 +818,20 @@ class Karma(commands.Cog):
 	)
 	async def kasino_close(self, ctx: commands.Context, kasino_id: int, winner: int):
 		"""Closes a karma kasino and announces the winner. To cancel the kasino, use 3 as the winner."""
-		kasino = await self.bot.db.pool.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
-
-		if kasino is None:
-			return await ctx.reply(f"Kasino with ID {kasino_id} is not open.")
-
-		if kasino["discord_server_id"] != ctx.guild.id:
-			return await ctx.reply(f"Kasino with ID {kasino_id} is not in this server.")
-
-		if winner not in {1, 2, 3}:
-			return await ctx.reply("Winner has to be 1, 2 or 3 (abort)")
-
-		if ctx.interaction:
-			await ctx.interaction.response.defer()
-
-		if winner in {1, 2}:
-			await self.win_kasino(kasino_id, winner)
-		elif winner == 3:
-			await self.abort_kasino(kasino_id)
-
-		await self.send_conclusion(ctx, kasino_id, winner)
-		await self.remove_kasino(kasino_id)
-		if ctx.interaction:
-			await ctx.interaction.followup.send("Kasino closed.", ephemeral=True)
+		await ctx.defer()
+		try:
+			kasino, bets, newly_settled = await self.settle_kasino(kasino_id, ctx.guild.id, winner)
+		except KasinoStateError as error:
+			return await _notify(ctx.reply(str(error), ephemeral=True))
+		await _update_kasino_msg(self.bot, kasino_id)
+		await _notify(
+			ctx.send(
+				content=None if newly_settled else "Already closed; showing the saved result. No karma was paid again.",
+				embed=_kasino_conclusion(kasino, bets),
+			)
+		)
+		if newly_settled:
+			await self._notify_kasino_results(kasino, bets)
 
 	@kasino_close.error
 	async def kasino_close_error(self, ctx: commands.Context, error):
@@ -786,11 +848,13 @@ class Karma(commands.Cog):
 	@kasino.command(name="list", aliases=["l"], usage="list")
 	async def kasino_list(self, ctx: commands.Context):
 		"""Lists all open kasinos on the server."""
+		await ctx.defer()
 		embed = discord.Embed(title="Open kasinos")
-		stmt_kasinos = "SELECT * FROM kasino WHERE locked = False AND discord_server_id = $1 ORDER BY id ASC;"
+		stmt_kasinos = """SELECT * FROM kasino
+			WHERE settled_at IS NULL AND discord_server_id = $1 ORDER BY id ASC"""
 		all_kasinos: list[Record] = await self.bot.db.pool.fetch(stmt_kasinos, ctx.guild.id)
 		embed_kasinos = "".join(
-			f"`{entry['id']}` - [{entry['question']}]({self._create_kasino_message_url(entry)})\n"
+			f"`{entry['id']}` - [{entry['question']}]({self._create_kasino_message_url(entry)}){' (locked)' if entry['locked'] else ''}\n"
 			for entry in all_kasinos
 		)
 		embed.description = embed_kasinos or "No open kasinos found."
@@ -804,23 +868,22 @@ class Karma(commands.Cog):
 	@app_commands.describe(kasino_id="The ID of the kasino you want to resend.")
 	async def resend_kasino(self, ctx: commands.Context, kasino_id: int):
 		"""Resends a kasino message if it got lost in the channel."""
-		kasino = await self.bot.db.pool.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
-		if kasino is None:
-			await ctx.send("Kasino not found.")
-			return
-		k_channel_id = kasino["discord_channel_id"]
-		k_message_id = kasino["discord_message_id"]
-		async with ctx.typing():
-			k_channel = await self.bot.fetch_channel(k_channel_id)
-			try:
-				kasino_msg = await k_channel.fetch_message(k_message_id)
-				await kasino_msg.delete()
-			except discord.NotFound:
-				pass
-			new_kasino_msg = await ctx.send(embed=discord.Embed(description="Loading..."))
-			stmt_update_kasino = "UPDATE kasino SET discord_channel_id = $1, discord_message_id = $2 WHERE id = $3;"
-			await self.bot.db.pool.execute(stmt_update_kasino, ctx.channel.id, new_kasino_msg.id, kasino_id)
-			await _update_kasino_msg(ctx.bot, kasino_id)
+		await ctx.defer()
+		try:
+			kasino = await self.bot.db.pool.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
+			_check_kasino(kasino, ctx.guild.id, allow_settled=True)
+		except KasinoStateError as error:
+			return await _notify(ctx.send(str(error), ephemeral=True))
+		await self.bot.db.prepare_command_context(ctx.author, ctx.guild, ctx.channel)
+		message = await _update_kasino_msg(self.bot, kasino_id, resend_channel=ctx.channel)
+		if message is None:
+			await _notify(
+				ctx.send(
+					"Could not resend the kasino message. The saved state is unchanged; try again.", ephemeral=True
+				)
+			)
+		elif ctx.interaction:
+			await _notify(ctx.send(f"Kasino message sent: {message.jump_url}", ephemeral=True))
 
 	async def _get_karma_downvote_emotes(self, guild_id: int) -> list[int]:
 		stmt_downvotes = (
@@ -831,176 +894,254 @@ class Karma(commands.Cog):
 		server_downvote_emotes.append(int(core.constants.DOWNVOTE_EMOTE_ID))
 		return server_downvote_emotes
 
-	async def send_conclusion(self, ctx: commands.Context, kasino_id: int, winner: int):
-		kasino = await self.bot.db.pool.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
-		total_karma = await self.bot.db.pool.fetchval(
-			"SELECT SUM(amount) FROM kasino_bet WHERE kasino_id = $1", kasino_id
-		)
-		to_embed = discord.Embed(color=discord.Colour.from_rgb(52, 79, 235))
+	async def place_kasino_bet(
+		self, kasino_id: int, guild_id: int, user_id: int, option: int, amount: int
+	) -> tuple[int, int, bool]:
+		if option not in {1, 2} or not 0 < amount <= 2**63 - 1:
+			raise KasinoStateError("Choose option 1 or 2 and a positive karma amount within the supported range.")
+		async with self.bot.db.pool.acquire(timeout=5) as conn:
+			async with conn.transaction():
+				kasino = await conn.fetchrow("SELECT * FROM kasino WHERE id = $1 FOR UPDATE", kasino_id)
+				_check_kasino(kasino, guild_id)
+				if kasino["locked"]:
+					raise KasinoStateError("This kasino is locked. No more bets are accepted.")
+				bet = await conn.fetchrow(
+					"SELECT * FROM kasino_bet WHERE kasino_id = $1 AND discord_user_id = $2",
+					kasino_id,
+					user_id,
+				)
+				if bet is not None and bet["option"] != option:
+					raise KasinoStateError("Your existing bet is on the other option. You cannot change sides.")
+				remaining = await conn.fetchval(
+					"""UPDATE karma SET amount = amount - $1
+					WHERE discord_user_id = $2 AND discord_server_id = $3 AND amount >= $1
+					RETURNING amount""",
+					amount,
+					user_id,
+					guild_id,
+				)
+				if remaining is None:
+					raise KasinoStateError("You don't have enough karma!")
+				total_bet = await conn.fetchval(
+					"""INSERT INTO kasino_bet (kasino_id, discord_user_id, amount, option)
+					VALUES ($1, $2, $3, $4)
+					ON CONFLICT (kasino_id, discord_user_id)
+					DO UPDATE SET amount = kasino_bet.amount + EXCLUDED.amount
+					RETURNING amount""",
+					kasino_id,
+					user_id,
+					amount,
+					option,
+				)
+		return total_bet, remaining, bet is not None
 
-		if winner in [1, 2]:
-			winner_option = kasino["option1"] if winner == 1 else kasino["option2"]
-			to_embed.title = f':tada: "{winner_option}" was correct! :tada:'
-			to_embed.description = f"""Question: {kasino["question"]}
-                                       If you have chosen {winner}, you just won karma!
-                                       Distributed to the winners: **{total_karma} Karma**'
-                                    """
-		elif winner == 3:
-			kasino_question: str = kasino["question"]
-			to_embed.title = f'🎲 "{kasino_question}" has been cancelled.'
-			to_embed.description = f"Amount bet will be refunded to each user.\nReturned: {total_karma} Karma"
+	async def settle_kasino(
+		self, kasino_id: int, guild_id: int, winning_option: int
+	) -> tuple[Record, list[Record], bool]:
+		"""Persist the entire settlement before any Discord work; retries only read its result."""
+		if winning_option not in {1, 2, 3}:
+			raise KasinoStateError("Winner has to be 1, 2 or 3 (abort).")
+		async with self.bot.db.pool.acquire(timeout=5) as conn:
+			async with conn.transaction():
+				kasino = await conn.fetchrow("SELECT * FROM kasino WHERE id = $1 FOR UPDATE", kasino_id)
+				_check_kasino(kasino, guild_id, allow_settled=True)
+				bets = await conn.fetch(
+					"SELECT * FROM kasino_bet WHERE kasino_id = $1 ORDER BY discord_user_id", kasino_id
+				)
+				if kasino["settled_at"] is not None:
+					if kasino["winning_option"] != winning_option:
+						raise KasinoStateError(
+							f"This kasino already closed with result {kasino['winning_option']}; its result cannot change."
+						)
+					return kasino, bets, False
+				payouts = _calculate_payouts(bets, winning_option)
+				await _lock_karma_rows(conn, guild_id, payouts)
+				for user_id, payout in payouts.items():
+					await conn.execute(
+						"UPDATE kasino_bet SET payout = $1 WHERE kasino_id = $2 AND discord_user_id = $3",
+						payout,
+						kasino_id,
+						user_id,
+					)
+					if payout:
+						await conn.execute(
+							"UPDATE karma SET amount = amount + $1 WHERE discord_user_id = $2 AND discord_server_id = $3",
+							payout,
+							user_id,
+							guild_id,
+						)
+				kasino = await conn.fetchrow(
+					"""UPDATE kasino SET settled_at = NOW(), winning_option = $2, locked = True
+					WHERE id = $1 RETURNING *""",
+					kasino_id,
+					winning_option,
+				)
+				bets = await conn.fetch(
+					"SELECT * FROM kasino_bet WHERE kasino_id = $1 ORDER BY discord_user_id", kasino_id
+				)
+		return kasino, bets, True
 
-		to_embed.set_footer(text=f"as decided by {ctx.author}", icon_url=ctx.author.display_avatar)
-		to_embed.set_thumbnail(url="https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif")
-		await ctx.send(embed=to_embed)
-		logger.info(
-			f"Kasino closed [ID: {kasino_id}, winner: {winner}, server: {ctx.guild.id}, total_karma: {total_karma}]."
-		)
-		return
+	async def set_kasino_locked(self, kasino_id: int, guild_id: int, locked: bool) -> tuple[Record, bool]:
+		async with self.bot.db.pool.acquire(timeout=5) as conn:
+			async with conn.transaction():
+				kasino = await conn.fetchrow("SELECT * FROM kasino WHERE id = $1 FOR UPDATE", kasino_id)
+				_check_kasino(kasino, guild_id)
+				if kasino["locked"] == locked:
+					return kasino, False
+				kasino = await conn.fetchrow(
+					"UPDATE kasino SET locked = $2 WHERE id = $1 RETURNING *", kasino_id, locked
+				)
+		return kasino, True
 
-	async def remove_kasino(self, kasino_id: int) -> None:
-		kasino = await self.bot.db.pool.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
-		if kasino is None:
-			return
+	async def _notify_kasino_results(self, kasino: Record, bets: list[Record]) -> None:
+		# A fixed number of workers bounds Discord requests without allocating a task per bettor.
+		pending = iter(bets)
+
+		async def send_results():
+			for bet in pending:
+				payout = bet["payout"]
+				if kasino["winning_option"] == 3:
+					title = f"You have been refunded {payout} karma."
+				elif payout:
+					title = f"You have won {payout} karma!"
+				else:
+					title = f"You lost your {bet['amount']} karma bet."
+				embed = discord.Embed(
+					title=title,
+					description=f"Question: {kasino['question']}\nOriginal bet: {bet['amount']} karma.",
+					color=core.constants.PRIMARY_COLOR,
+				)
+				await _send_kasino_dm(self.bot, bet["discord_user_id"], embed)
+
 		try:
-			kasino_channel = await self.bot.fetch_channel(kasino["discord_channel_id"])
-			kasino_msg = await kasino_channel.fetch_message(kasino["discord_message_id"])
-			await kasino_msg.delete()
-		except discord.errors.NotFound:
-			pass
-		await self.bot.db.pool.execute("DELETE FROM kasino WHERE id = $1", kasino_id)
+			async with asyncio.timeout(60):
+				await asyncio.gather(*(send_results() for _ in range(min(5, len(bets)))))
+		except TimeoutError:
+			logger.warning("Timed out notifying kasino %s participants; settlement is saved.", kasino["id"])
 
-	async def abort_kasino(self, kasino_id: int) -> None:
-		stmt_kasino_and_bets = """SELECT * FROM kasino JOIN kasino_bet ON kasino.id = kasino_bet.kasino_id
-                                  WHERE kasino.id = $1"""
-		kasino_and_bets = await self.bot.db.pool.fetch(stmt_kasino_and_bets, kasino_id)
-		stmt_update_user_karma = """UPDATE karma SET amount = amount + $1
-                                    WHERE discord_user_id = $2 AND discord_server_id = $3"""
-		for bet in kasino_and_bets:
-			await self.bot.db.pool.execute(
-				stmt_update_user_karma, bet["amount"], bet["discord_user_id"], bet["discord_server_id"]
-			)
-			user_karma = await self._get_user_karma(bet["discord_user_id"], bet["discord_server_id"])
-			output = discord.Embed(
-				title=f"**You have been refunded {bet['amount']} karma.**",
-				color=discord.Colour.from_rgb(52, 79, 235),
-				description=f"Question was: {bet['question']}\n' f'Remaining karma: {user_karma}",
-			)
-			user = self.bot.get_user(bet["discord_user_id"]) or await self.bot.fetch_user(bet["discord_user_id"])
-			try:
-				await user.send(embed=output)
-			except discord.errors.Forbidden:
-				logger.warning(f"Could not send kasino abort to {user.id}")
 
-	async def win_kasino(self, kasino_id: int, winning_option: int) -> None:
-		"""Distributes karma to winners and notifies all participants of the kasino result."""
-		kasino: Record = await self.bot.db.pool.fetchrow(
-			"SELECT discord_server_id, question FROM kasino WHERE id = $1", kasino_id
-		)
-		if not kasino:
-			logger.error(f"Kasino {kasino_id} not found when trying to distribute winnings.")
-			return
+async def _notify(operation):
+	"""Discord delivery is best effort and must never undo a committed database operation."""
+	try:
+		async with asyncio.timeout(10):
+			return await operation
+	except discord.HTTPException, TimeoutError, OSError:
+		logger.warning("Could not deliver kasino notification.", exc_info=True)
+		return None
 
-		server_id: int = kasino["discord_server_id"]
-		question: str = kasino["question"]
 
-		all_bets: list[Record] = await self.bot.db.pool.fetch(
-			"SELECT discord_user_id, amount, option FROM kasino_bet WHERE kasino_id = $1", kasino_id
-		)
-		if not all_bets:
-			logger.warning(f"Kasino {kasino_id} closed with no bets placed.")
-			return
+async def _send_kasino_dm(bot: core.Substiify, user_id: int, embed: discord.Embed) -> None:
+	async def send():
+		user = bot.get_user(user_id) or await bot.fetch_user(user_id)
+		await user.send(embed=embed)
 
-		total_pool: int = sum(bet["amount"] for bet in all_bets)
-		winner_bets: list[Record] = [bet for bet in all_bets if bet["option"] == winning_option]
-		loser_bets: list[Record] = [bet for bet in all_bets if bet["option"] != winning_option]
-		winner_pool: int = sum(bet["amount"] for bet in winner_bets)
+	await _notify(send())
 
-		# Guard: No winners (everyone bet on the losing side)
-		if winner_pool == 0:
-			logger.info(f"Kasino {kasino_id}: No winners. All karma goes to the void.")
-			for bet in loser_bets:
-				await self._send_kasino_result_dm(bet["discord_user_id"], server_id, question, bet, win_amount=0)
-			return
 
-		stmt_update_karma = """
-			UPDATE karma SET amount = amount + $1
-			WHERE discord_user_id = $2 AND discord_server_id = $3
-		"""
-		for bet in winner_bets:
-			user_id: int = bet["discord_user_id"]
-			win_ratio: float = bet["amount"] / winner_pool
-			win_amount: int = round(win_ratio * total_pool)
-
-			await self.bot.db.pool.execute(stmt_update_karma, win_amount, user_id, server_id)
-			await self._send_kasino_result_dm(user_id, server_id, question, bet, win_amount)
-
-		for bet in loser_bets:
-			await self._send_kasino_result_dm(bet["discord_user_id"], server_id, question, bet, win_amount=0)
-
-	async def _send_kasino_result_dm(
-		self, user_id: int, server_id: int, question: str, bet: Record, win_amount: int
-	) -> None:
-		"""Send a DM to a user with their kasino result (win or loss)."""
-		user_karma = await self._get_user_karma(user_id, server_id)
-
-		if win_amount > 0:
-			title = f":tada: **You have won {win_amount} karma!** :tada:"
-			color = discord.Colour.from_rgb(66, 186, 50)
-			description = f"Of which `{bet['amount']}` you put down on the table"
+def _kasino_conclusion(kasino: Record, bets: list[Record]) -> discord.Embed:
+	total_pool = sum(bet["amount"] for bet in bets)
+	paid = sum(bet["payout"] for bet in bets)
+	winner = kasino["winning_option"]
+	if winner == 3:
+		title = f"Cancelled: {kasino['question']}"
+		description = f"All bets have been refunded.\nReturned: **{paid} karma**."
+	else:
+		title = f"Result: {kasino[f'option{winner}']}"
+		description = f"Question: {kasino['question']}\n"
+		if any(bet["option"] == winner for bet in bets):
+			description += f"Distributed to the winners: **{paid} karma**."
 		else:
-			title = f":chart_with_downwards_trend: **You have unfortunately lost {bet['amount']} karma...** :chart_with_downwards_trend:"
-			color = discord.Colour.from_rgb(209, 25, 25)
-			description = None
+			description += f"No one bet on the winning option. **{total_pool} karma** was forfeited; no payouts."
+	embed = discord.Embed(title=title, description=description, color=core.constants.PRIMARY_COLOR)
+	embed.set_footer(text=f"Closed kasino | ID: {kasino['id']}")
+	return embed
 
-		embed = discord.Embed(title=title, color=color, description=description)
-		embed.add_field(name="Question was:", value=question, inline=False)
-		embed.add_field(name="New karma balance:", value=user_karma, inline=False)
 
-		user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
+async def _update_kasino_msg(bot: core.Substiify, kasino_id: int, *, resend_channel=None) -> discord.Message | None:
+	# Serialize renders on this bot so a slow pre-settlement edit cannot overwrite the conclusion.
+	cog: Karma = bot.get_cog("Karma")
+	lock = cog.kasino_message_locks.setdefault(kasino_id, asyncio.Lock())
+	async with lock:
 		try:
-			await user.send(embed=embed)
-		except discord.errors.Forbidden:
-			logger.warning(f"Could not send kasino result DM to user {user_id}")
+			async with asyncio.timeout(30):
+				kasino = await bot.db.pool.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
+				if kasino is None:
+					return None
+				old_message = None
+				if resend_channel is not None:
+					_check_kasino(kasino, resend_channel.guild.id, allow_settled=True)
+					kasino_msg = await _notify(
+						resend_channel.send(embed=discord.Embed(description="Loading kasino..."))
+					)
+					if kasino_msg is None:
+						return None
+					moved = await bot.db.pool.fetchval(
+						"""UPDATE kasino SET discord_channel_id = $1, discord_message_id = $2
+						WHERE id = $3 AND discord_channel_id = $4 AND discord_message_id = $5
+						RETURNING id""",
+						resend_channel.id,
+						kasino_msg.id,
+						kasino_id,
+						kasino["discord_channel_id"],
+						kasino["discord_message_id"],
+					)
+					if moved is None:
+						await _notify(kasino_msg.delete())
+						return None
+					old_message = (kasino["discord_channel_id"], kasino["discord_message_id"])
+				else:
+					channel = bot.get_channel(kasino["discord_channel_id"]) or await bot.fetch_channel(
+						kasino["discord_channel_id"]
+					)
+					kasino_msg = await channel.fetch_message(kasino["discord_message_id"])
 
+				# Fetch one coherent current snapshot after channel/message network calls.
+				async with bot.db.pool.acquire(timeout=5) as conn:
+					async with conn.transaction(isolation="repeatable_read", readonly=True):
+						kasino = await conn.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
+						bets = await conn.fetch("SELECT * FROM kasino_bet WHERE kasino_id = $1", kasino_id)
+				if kasino is None:
+					return None
+				if kasino["discord_message_id"] != kasino_msg.id:
+					await _notify(kasino_msg.edit(view=None))
+					return None
+				if kasino["settled_at"] is not None:
+					embed = _kasino_conclusion(kasino, bets)
+					view = None
+				else:
+					bets_a_amount = sum(bet["amount"] for bet in bets if bet["option"] == 1)
+					bets_b_amount = sum(bet["amount"] for bet in bets if bet["option"] == 2)
+					a_odds, b_odds = _calculate_odds(bets_a_amount, bets_b_amount)
+					description = "Place your bets!"
+					if kasino["locked"]:
+						description = "The kasino is locked. No more bets are accepted."
+					description += f"\n**Participants:** `{len(bets)}`"
+					embed = discord.Embed(
+						title=f"{'[LOCKED] ' if kasino['locked'] else ''}{kasino['question']}",
+						description=description,
+						color=core.constants.PRIMARY_COLOR,
+					)
+					embed.set_footer(text=f"On the table: {bets_a_amount + bets_b_amount} Karma | ID: {kasino_id}")
+					for option, odds, amount in ((1, a_odds, bets_a_amount), (2, b_odds, bets_b_amount)):
+						embed.add_field(
+							name=f"**{option}:** {kasino[f'option{option}']}",
+							value=f"**Odds:** 1:{odds:.3f}\n**Pool:** {amount} Karma",
+						)
+					view = KasinoView(kasino)
+				await kasino_msg.edit(embed=embed, view=view)
+				if old_message is not None:
 
-async def _update_kasino_msg(bot: core.Substiify, kasino_id: int) -> discord.Message:
-	kasino = await bot.db.pool.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
-	kasino_channel = await bot.fetch_channel(kasino["discord_channel_id"])
-	kasino_msg = await kasino_channel.fetch_message(kasino["discord_message_id"])
+					async def delete_old_message():
+						channel_id, message_id = old_message
+						channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
+						message = await channel.fetch_message(message_id)
+						await message.delete()
 
-	# FIGURE OUT AMOUNTS AND ODDS
-	stmt_kasino_bets_sum = """SELECT SUM(amount) FROM kasino_bet WHERE kasino_id = $1 AND option = $2"""
-	bets_a_amount: int = await bot.db.pool.fetchval(stmt_kasino_bets_sum, kasino_id, 1) or 0
-	bets_b_amount: int = await bot.db.pool.fetchval(stmt_kasino_bets_sum, kasino_id, 2) or 0
-	a_odds, b_odds = _calculate_odds(bets_a_amount, bets_b_amount)
-
-	# CREATE MESSAGE
-	description = "The kasino has been opened! Place your bets! :game_die:"
-	if kasino["locked"]:
-		description = "The kasino is locked! No more bets are taken in. Time to wait and see..."
-
-	participants = await bot.db.pool.fetchval("SELECT COUNT(*) FROM kasino_bet WHERE kasino_id = $1", kasino_id)
-	description += f"\n**Participants:** `{participants}`"
-
-	title = f":game_die: {kasino['question']}"
-	color = discord.Colour.from_rgb(52, 79, 235)
-	if kasino["locked"]:
-		title = f"[LOCKED] {title}"
-		color = discord.Colour.from_rgb(209, 25, 25)
-
-	embed = discord.Embed(title=title, description=description, color=color)
-	embed.set_footer(text=f"On the table: {bets_a_amount + bets_b_amount} Karma | ID: {kasino_id}")
-	embed.set_thumbnail(url="https://cdn.betterttv.net/emote/602548a4d47a0b2db8d1a3b8/3x.gif")
-	embed.add_field(
-		name=f"**1:** {kasino['option1']}", value=f"**Odds:** 1:{round(a_odds, 3)}\n**Pool:** {bets_a_amount} Karma"
-	)
-	embed.add_field(
-		name=f"**2:** {kasino['option2']}", value=f"**Odds:** 1:{round(b_odds, 3)}\n**Pool:** {bets_b_amount} Karma"
-	)
-
-	await kasino_msg.edit(embed=embed, view=KasinoView(kasino))
-	return kasino_msg
+					await _notify(delete_old_message())
+				return kasino_msg
+		except Exception:
+			logger.warning("Could not refresh kasino %s; its database state is saved.", kasino_id, exc_info=True)
+			return None
 
 
 def _calculate_odds(bets_a_amount: int, bets_b_amount: int) -> tuple[float, float]:
@@ -1014,6 +1155,8 @@ class KasinoView(discord.ui.View):
 	def __init__(self, kasino: Record):
 		super().__init__(timeout=None)
 		self.kasino = kasino
+		if kasino["settled_at"] is not None:
+			return
 		if not kasino["locked"]:
 			self.add_item(KasinoBetButton(1))
 			self.add_item(KasinoBetButton(2))
@@ -1028,30 +1171,39 @@ class KasinoBetButton(discord.ui.Button):
 
 	async def callback(self, interaction: discord.Interaction):
 		bot: core.Substiify = interaction.client
-		if self.view.kasino["locked"]:
-			return await interaction.response.send_message(
-				"The kasino is locked! No more bets are taken in. Time to wait and see...", ephemeral=True
+		try:
+			# Modals cannot follow a defer, so bound this lookup below Discord's response deadline.
+			async with asyncio.timeout(2):
+				kasino = await bot.db.pool.fetchrow(
+					"""SELECT k.*, balance.amount AS bettor_karma, bet.option AS bet_option
+					FROM kasino k
+					LEFT JOIN karma balance ON balance.discord_user_id = $2
+						AND balance.discord_server_id = k.discord_server_id
+					LEFT JOIN kasino_bet bet ON bet.kasino_id = k.id AND bet.discord_user_id = $2
+					WHERE k.id = $1""",
+					self.view.kasino["id"],
+					interaction.user.id,
+				)
+			_check_kasino(kasino, interaction.guild_id)
+			if kasino["locked"]:
+				raise KasinoStateError("This kasino is locked. No more bets are accepted.")
+			if not kasino["bettor_karma"] or kasino["bettor_karma"] < 1:
+				raise KasinoStateError("You don't have enough karma!")
+			if kasino["bet_option"] is not None and kasino["bet_option"] != self.option:
+				raise KasinoStateError("Your existing bet is on the other option. You cannot change sides.")
+		except TimeoutError:
+			return await _notify(
+				interaction.response.send_message("The database is busy. Please try again.", ephemeral=True)
 			)
-
-		user_karma_query = "SELECT amount FROM karma WHERE discord_user_id = $1 AND discord_server_id = $2"
-		bettor_karma = await bot.db.pool.fetchval(user_karma_query, interaction.user.id, interaction.guild.id)
-		if bettor_karma is None:
-			return await interaction.response.send_message("You don't have any karma!", ephemeral=True)
-
-		stmt_bet = "SELECT * FROM kasino_bet WHERE kasino_id = $1 AND discord_user_id = $2;"
-		user_bet = await bot.db.pool.fetchrow(stmt_bet, self.view.kasino["id"], interaction.user.id)
-		if user_bet and user_bet["option"] != self.option:
-			return await interaction.response.send_message(
-				"You can't change your choice on the bet. No chickening out!", ephemeral=True
-			)
-
-		modal = KasinoBetModal(self.view.kasino, bettor_karma, user_bet, self.option)
-		await interaction.response.send_modal(modal)
+		except KasinoStateError as error:
+			return await _notify(interaction.response.send_message(str(error), ephemeral=True))
+		await _notify(interaction.response.send_modal(KasinoBetModal(kasino, kasino["bettor_karma"], self.option)))
 
 
 class KasinoLockButton(discord.ui.Button):
 	def __init__(self, kasino: Record):
 		locked = kasino["locked"]
+		self.expected_locked = locked
 		self.lock_settings = {
 			True: ("Unlock", "🔐", discord.ButtonStyle.red),
 			False: ("Lock", "🔒", discord.ButtonStyle.grey),
@@ -1060,42 +1212,59 @@ class KasinoLockButton(discord.ui.Button):
 		super().__init__(label=label, emoji=emoji, style=style)
 
 	async def callback(self, interaction: discord.Interaction):
+		await interaction.response.defer(ephemeral=True)
 		bot: core.Substiify = interaction.client
+		cog: Karma = bot.get_cog("Karma")
 		kasino_id = self.view.kasino["id"]
 		if not interaction.user.guild_permissions.manage_channels and not await bot.is_owner(interaction.user):
-			return await interaction.response.send_message(
-				"You don't have permission to lock the kasino!", ephemeral=True
+			return await _notify(
+				interaction.followup.send("You don't have permission to lock this kasino.", ephemeral=True)
 			)
-		is_locked = await bot.db.pool.fetchval("SELECT locked FROM kasino WHERE id = $1", kasino_id)
-		if is_locked:
-			label_str = f"""Are you sure you want to unlock kasino ID: `{kasino_id}`?
-					To make it fair, all people who bet will get a message so they can increase their bets!
-
-					To confirm, press the button below."""
-			embed = discord.Embed(
-				title="Unlock kasino", description=label_str, color=discord.Colour.from_rgb(52, 79, 235)
+		try:
+			kasino = await bot.db.pool.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
+			_check_kasino(kasino, interaction.guild_id)
+			if kasino["locked"] != self.expected_locked:
+				await _notify(
+					interaction.followup.send(
+						"The kasino lock state changed. Please use the refreshed buttons.",
+						ephemeral=True,
+					)
+				)
+				await _update_kasino_msg(bot, kasino_id)
+				return
+			if kasino["locked"]:
+				embed = discord.Embed(
+					title="Unlock kasino",
+					description=f"Unlock kasino {kasino_id}? Participants will be notified that they can increase their bets.",
+					color=core.constants.PRIMARY_COLOR,
+				)
+				return await _notify(
+					interaction.followup.send(
+						embed=embed,
+						view=KasinoConfirmUnlockView(kasino_id),
+						ephemeral=True,
+					)
+				)
+			_, changed = await cog.set_kasino_locked(kasino_id, interaction.guild_id, True)
+		except KasinoStateError as error:
+			return await _notify(interaction.followup.send(str(error), ephemeral=True))
+		await _notify(
+			interaction.followup.send(
+				"Kasino locked!" if changed else "Kasino is already locked.",
+				ephemeral=True,
 			)
-			await interaction.response.send_message(
-				embed=embed, view=KasinoConfirmUnlockView(kasino_id), ephemeral=True
-			)
-		else:
-			await bot.db.pool.execute("UPDATE kasino SET locked = True WHERE id = $1", kasino_id)
-			await _update_kasino_msg(bot, kasino_id)
-			self.label, self.emoji, self.style = self.lock_settings[True]
-			await interaction.message.edit(view=self.view)
-			await interaction.response.send_message("Kasino locked!", ephemeral=True)
+		)
+		await _update_kasino_msg(bot, kasino_id)
 
 
 class KasinoBetModal(discord.ui.Modal):
-	def __init__(self, kasino: Record, bettor_karma: int, user_bet: Record, option: int):
+	def __init__(self, kasino: Record, bettor_karma: int, option: int):
 		title = utils.ux.strip_emotes(kasino["question"])
 		if len(title) > 45:
 			title = title[:42] + "..."
 		super().__init__(title=title)
 		self.option = option
-		self.kasino = kasino
-		self.bettor_karma = bettor_karma
-		self.user_bet = user_bet
+		self.kasino_id = kasino["id"]
 		option_str = kasino[f"option{option}"]
 		label_str = f"Bet for option: {option_str}"
 		if len(label_str) > 45:
@@ -1106,62 +1275,32 @@ class KasinoBetModal(discord.ui.Modal):
 		self.add_item(self.bet_amount_input)
 
 	async def on_submit(self, interaction: discord.Interaction) -> None:
+		await interaction.response.defer(ephemeral=True)
 		bot: core.Substiify = interaction.client
-		kasino_id: int = self.kasino["id"]
-		amount: int = self.bet_amount_input.value
+		cog: Karma = bot.get_cog("Karma")
 		try:
-			amount = int(amount)
+			amount = int(self.bet_amount_input.value)
 		except ValueError:
-			return await interaction.response.send_message("Invalid amount", ephemeral=True)
-		if amount < 1:
-			return await interaction.response.send_message("You tried to bet < 1 karma! Silly you!", ephemeral=True)
-
-		if self.kasino["locked"]:
-			return await interaction.response.send_message(
-				"The kasino is locked! No more bets are taken in. Time to wait and see...", ephemeral=True
+			return await _notify(interaction.followup.send("Invalid amount.", ephemeral=True))
+		try:
+			await bot.db.prepare_command_context(interaction.user, interaction.guild, interaction.channel)
+			total_bet, remaining_karma, increased = await cog.place_kasino_bet(
+				self.kasino_id,
+				interaction.guild_id,
+				interaction.user.id,
+				self.option,
+				amount,
 			)
-
-		output = "increased" if self.user_bet is not None else "added"
-
-		stmt_bet = """INSERT INTO kasino_bet (kasino_id, discord_user_id, amount, option)
-					  VALUES ($1, $2, $3, $4)
-					  ON CONFLICT (kasino_id, discord_user_id)
-					  DO UPDATE SET amount = kasino_bet.amount + EXCLUDED.amount
-					  RETURNING amount"""
-		stmt_update_user_karma = """UPDATE karma
-								  SET amount = amount - $1
-								  WHERE discord_user_id = $2
-									AND discord_server_id = $3
-									AND amount >= $1
-								  RETURNING amount"""
-		async with bot.db.pool.acquire() as conn:
-			async with conn.transaction():
-				remaining_karma = await conn.fetchval(
-					stmt_update_user_karma,
-					amount,
-					interaction.user.id,
-					interaction.guild.id,
-				)
-				if remaining_karma is not None:
-					total_bet = await conn.fetchval(
-						stmt_bet,
-						kasino_id,
-						interaction.user.id,
-						amount,
-						self.option,
-					)
-
-		if remaining_karma is None:
-			return await interaction.response.send_message("You don't have enough karma!", ephemeral=True)
-
-		output_embed = discord.Embed(color=discord.Colour.from_rgb(209, 25, 25))
-		output_embed.title = f"**Successfully {output} bet on option {self.option}, on kasino with ID {kasino_id} for {amount} karma! Total bet is now: {total_bet} Karma**"
-		output_embed.color = discord.Colour.from_rgb(52, 79, 235)
-		output_embed.description = f"Remaining karma: {remaining_karma}"
-
-		await interaction.response.send_message(embed=output_embed, ephemeral=True)
-		logger.info(f"Bet[user: {interaction.user}, amount: {amount}, option: {self.option}, kasino: {kasino_id}]")
-		await _update_kasino_msg(bot, kasino_id)
+		except KasinoStateError as error:
+			return await _notify(interaction.followup.send(str(error), ephemeral=True))
+		output = "Increased" if increased else "Added"
+		output_embed = discord.Embed(
+			title=f"{output} bet on option {self.option} for {amount} karma.",
+			description=f"Kasino ID: {self.kasino_id}\nTotal bet: {total_bet} karma\nRemaining karma: {remaining_karma}",
+			color=core.constants.PRIMARY_COLOR,
+		)
+		await _notify(interaction.followup.send(embed=output_embed, ephemeral=True))
+		await _update_kasino_msg(bot, self.kasino_id)
 
 
 class KasinoConfirmUnlockView(discord.ui.View):
@@ -1171,31 +1310,47 @@ class KasinoConfirmUnlockView(discord.ui.View):
 
 	@discord.ui.button(label="Unlock", style=discord.ButtonStyle.blurple)
 	async def unlock(self, interaction: discord.Interaction, button: discord.ui.Button):
+		await interaction.response.defer(ephemeral=True)
 		bot: core.Substiify = interaction.client
+		cog: Karma = bot.get_cog("Karma")
 		if not interaction.user.guild_permissions.manage_channels and not await bot.is_owner(interaction.user):
-			return await interaction.response.send_message(
-				"You don't have permission to unlock the kasino!", ephemeral=True
+			return await _notify(
+				interaction.followup.send("You don't have permission to unlock this kasino.", ephemeral=True)
 			)
+		try:
+			kasino, changed = await cog.set_kasino_locked(self.kasino_id, interaction.guild_id, False)
+		except KasinoStateError as error:
+			return await _notify(interaction.followup.send(str(error), ephemeral=True))
+		if not changed:
+			return await _notify(interaction.followup.send("Kasino is already unlocked.", ephemeral=True))
+		await _notify(
+			interaction.followup.send(
+				"Kasino unlocked. Participant notifications will be attempted.",
+				ephemeral=True,
+			)
+		)
+		await _update_kasino_msg(bot, self.kasino_id)
 		kasino = await bot.db.pool.fetchrow("SELECT * FROM kasino WHERE id = $1", self.kasino_id)
-		is_locked = kasino["locked"]
-		if not is_locked:
-			return await interaction.response.send_message("Kasino is already unlocked!", ephemeral=True)
-		await bot.db.pool.execute("UPDATE kasino SET locked = False WHERE id = $1", self.kasino_id)
-		kasino_msg = await _update_kasino_msg(bot, self.kasino_id)
-		kasino_members = await bot.db.pool.fetch(
-			"SELECT discord_user_id FROM kasino_bet WHERE kasino_id = $1", self.kasino_id
+		if kasino is None or kasino["settled_at"] is not None or kasino["locked"]:
+			return
+		kasino_members = iter(
+			await bot.db.pool.fetch("SELECT discord_user_id FROM kasino_bet WHERE kasino_id = $1", self.kasino_id)
 		)
 		embed = discord.Embed(
-			title=f"🎲 Kasino `[ID: {self.kasino_id}]` unlocked!",
-			description=f"{kasino['question']}\n[Jump to kasino]({kasino_msg.jump_url})",
-			color=discord.Colour.from_rgb(52, 79, 235),
+			title=f"Kasino {self.kasino_id} unlocked!",
+			description=f"{kasino['question']}\n[Jump to kasino]({cog._create_kasino_message_url(kasino)})",
+			color=core.constants.PRIMARY_COLOR,
 		)
-		embed.set_footer(text=f"Unlocked by {interaction.user}", icon_url=interaction.user.display_avatar)
 
-		for member in kasino_members:
-			user = bot.get_user(member["discord_user_id"]) or await bot.fetch_user(member["discord_user_id"])
-			await user.send(embed=embed)
-		await interaction.response.send_message("Kasino unlocked! All kasino members messaged.", ephemeral=True)
+		async def send_notifications():
+			for member in kasino_members:
+				await _send_kasino_dm(bot, member["discord_user_id"], embed)
+
+		try:
+			async with asyncio.timeout(60):
+				await asyncio.gather(*(send_notifications() for _ in range(5)))
+		except TimeoutError:
+			logger.warning("Timed out notifying participants of kasino %s unlock.", self.kasino_id)
 
 
 class NotEnoughArguments(commands.UserInputError):
