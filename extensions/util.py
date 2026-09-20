@@ -102,10 +102,7 @@ class Util(commands.Cog):
 			)
 			return
 
-		setup_complete = f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}"
-		await self._safe_notify(ctx, embed=discord.Embed(description=setup_complete))
-
-		end = datetime.datetime.utcnow() + datetime.timedelta(seconds=time)
+		end = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=time)
 		end_string = end.strftime("%d.%m.%Y %H:%M")
 
 		# Validate winners
@@ -119,20 +116,24 @@ class Util(commands.Cog):
 
 		embed = self.create_giveaway_embed(hosted_by, prize, winners)
 		base_desc = embed.description or ""
-		embed.description = f"{base_desc}\nReact with :tada: to enter!\nEnds <t:{int(end.replace(tzinfo=datetime.timezone.utc).timestamp())}:R>"
+		embed.description = f"{base_desc}\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
 		embed.set_footer(text=f"Giveaway ends on {end_string}")
 
+		await self.bot.db.prepare_command_context(hosted_by, ctx.guild, channel)
 		new_msg = await channel.send(embed=embed)
 		stmt = """INSERT INTO giveaway (discord_user_id, end_date, prize, discord_server_id, discord_channel_id, discord_message_id)
                   VALUES ($1, $2, $3, $4, $5, $6)"""
-		await self.bot.db.pool.execute(stmt, hosted_by.id, end, prize, ctx.guild.id, channel.id, new_msg.id)
 		try:
 			await new_msg.add_reaction("🎉")
-		except discord.Forbidden:
-			embed = discord.Embed(
-				description="I couldn't add the 🎉 reaction due to missing permissions.", color=discord.Colour.red()
-			)
-			await self._safe_notify(ctx, embed=embed)
+			await self.bot.db.pool.execute(stmt, hosted_by.id, end, prize, ctx.guild.id, channel.id, new_msg.id)
+		except Exception:
+			try:
+				await new_msg.delete()
+			except discord.HTTPException:
+				logger.exception("Could not remove failed giveaway message %s", new_msg.id)
+			raise
+		setup_complete = f"Setup finished. Giveaway for **'{prize}'** will be in {channel.mention}"
+		await self._safe_notify(ctx, embed=discord.Embed(description=setup_complete))
 
 	@giveaway.command(usage="reroll <message_id>")
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -176,7 +177,7 @@ class Util(commands.Cog):
 		embed = discord.Embed(title="Active Giveaways", description="")
 		for giveaway in giveaways:
 			end_date = giveaway["end_date"]
-			embed.description += f"[{giveaway['prize']}](https://discord.com/channels/{giveaway['discord_server_id']}/{giveaway['discord_channel_id']}/{giveaway['discord_message_id']}) - Ends <t:{int(end_date.replace(tzinfo=datetime.timezone.utc).timestamp())}:R>\n"
+			embed.description += f"[{giveaway['prize']}](https://discord.com/channels/{giveaway['discord_server_id']}/{giveaway['discord_channel_id']}/{giveaway['discord_message_id']}) - Ends <t:{int(end_date.timestamp())}:R>\n"
 		await ctx.send(embed=embed)
 
 	@commands.command(name="giveawayInfo", hidden=True)
@@ -231,7 +232,7 @@ class Util(commands.Cog):
 				logger.exception("Failed to process giveaway %s.", giveaway["id"])
 
 	async def _process_giveaway(self, giveaway) -> None:
-		now = datetime.datetime.utcnow()
+		now = datetime.datetime.now(datetime.timezone.utc)
 		end_date = giveaway["end_date"]
 		if now < end_date:
 			return

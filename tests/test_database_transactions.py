@@ -4,12 +4,15 @@ import unittest
 from types import SimpleNamespace
 from typing import cast
 from uuid import uuid4
+from unittest.mock import AsyncMock
 
 import asyncpg
 import discord
 
 from core.bot import Substiify
 from database import Database
+from extensions.free_games import FreeGames
+from extensions.free_games.base import Game
 from extensions.karma import Karma, KasinoStateError
 
 
@@ -87,7 +90,51 @@ class DatabaseTransactions(unittest.IsolatedAsyncioTestCase):
 	async def test_unchanged_metadata_does_not_rewrite_rows(self):
 		before = await self.db.pool.fetchval("SELECT xmin::text FROM discord_user WHERE discord_user_id=11")
 		await self.db.prepare_command_context(self.users[0], self.guild, self.channel)
-		self.assertEqual(await self.db.pool.fetchval("SELECT xmin::text FROM discord_user WHERE discord_user_id=11"), before)
+		self.assertEqual(
+			await self.db.pool.fetchval("SELECT xmin::text FROM discord_user WHERE discord_user_id=11"), before
+		)
+
+	async def test_failed_delivery_retries_only_missing_destination(self):
+		second = SimpleNamespace(id=31, name="second", guild=self.guild)
+		await self.db.upsert_channel(second)
+		channels = {
+			30: SimpleNamespace(id=30, send=AsyncMock(side_effect=TimeoutError())),
+			31: SimpleNamespace(id=31, send=AsyncMock()),
+		}
+		cog = FreeGames(cast(Substiify, SimpleNamespace(db=self.db, get_channel=channels.get)))
+		game = Game()
+		game.title = "promotion"
+		game.start_date = game.end_date = None
+		game.store_link = "https://example.invalid/game"
+		game.platform = SimpleNamespace(name="store", logo_path="https://example.invalid/logo")
+		game.original_price = "$10"
+		game.discount_price = "Free"
+		game.cover_image_url = "https://example.invalid/cover"
+		settings = [
+			{"discord_channel_id": channel_id, "discord_server_id": 20, "store_name": "store"}
+			for channel_id in channels
+		]
+		with self.assertLogs("extensions.free_games", level="ERROR"):
+			self.assertEqual(await cog._send_free_game(game, settings), 1)
+		channels[30].send.side_effect = None
+		self.assertEqual(await cog._send_free_game(game, settings), 1)
+		self.assertEqual(await cog._send_free_game(game, settings), 0)
+		self.assertEqual(channels[30].send.await_count, 2)
+		self.assertEqual(channels[31].send.await_count, 1)
+
+	async def test_delivery_claims_are_exclusive_and_expire(self):
+		cog = FreeGames(cast(Substiify, SimpleNamespace(db=self.db)))
+		game = Game()
+		game.start_date = game.end_date = None
+		game.store_link = "https://example.invalid/game"
+		game.platform = SimpleNamespace(name="store")
+		claims = await asyncio.gather(*(cog._claim_delivery(game, 30) for _ in range(3)))
+		self.assertEqual(sum(claim is not None for claim in claims), 1)
+		previous = next(claim for claim in claims if claim is not None)
+		await self.db.pool.execute("UPDATE free_game_delivery SET claimed_until=NOW()-INTERVAL '1 second'")
+		replacement = await cog._claim_delivery(game, 30)
+		self.assertIsNotNone(replacement)
+		self.assertNotEqual(previous, replacement)
 
 
 if __name__ == "__main__":
