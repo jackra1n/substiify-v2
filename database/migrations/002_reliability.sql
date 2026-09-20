@@ -1,16 +1,28 @@
--- Existing naive values were written as UTC by the bot. Preserve their instants.
-ALTER TABLE command_history ALTER COLUMN date TYPE TIMESTAMPTZ USING date AT TIME ZONE 'UTC';
-ALTER TABLE command_error ALTER COLUMN date TYPE TIMESTAMPTZ USING date AT TIME ZONE 'UTC';
+-- Database defaults stored local wall time, unlike application-written UTC.
+-- The migration runner captures the legacy session zone before the runtime UTC
+-- override. LEGACY_DATABASE_TIMEZONE overrides it after a server/role zone change.
+ALTER TABLE command_history ALTER COLUMN date TYPE TIMESTAMPTZ
+    USING date AT TIME ZONE current_setting('substiify.legacy_database_timezone');
+ALTER TABLE command_error ALTER COLUMN date TYPE TIMESTAMPTZ
+    USING date AT TIME ZONE current_setting('substiify.legacy_database_timezone');
 ALTER TABLE giveaway
-    ALTER COLUMN start_date TYPE TIMESTAMPTZ USING start_date AT TIME ZONE 'UTC',
+    ALTER COLUMN start_date TYPE TIMESTAMPTZ
+        USING start_date AT TIME ZONE current_setting('substiify.legacy_database_timezone'),
     ALTER COLUMN end_date TYPE TIMESTAMPTZ USING end_date AT TIME ZONE 'UTC';
 ALTER TABLE post ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
-ALTER TABLE kasino ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
-ALTER TABLE feedback ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+ALTER TABLE kasino ALTER COLUMN created_at TYPE TIMESTAMPTZ
+    USING created_at AT TIME ZONE current_setting('substiify.legacy_database_timezone');
+ALTER TABLE feedback ALTER COLUMN created_at TYPE TIMESTAMPTZ
+    USING created_at AT TIME ZONE current_setting('substiify.legacy_database_timezone');
 ALTER TABLE free_game_history
-    ALTER COLUMN start_date TYPE TIMESTAMPTZ USING start_date AT TIME ZONE 'UTC',
-    ALTER COLUMN end_date TYPE TIMESTAMPTZ USING end_date AT TIME ZONE 'UTC',
-    ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at AT TIME ZONE 'UTC';
+    -- Steam discovery used the bot's local clock; Epic dates came from UTC.
+    ALTER COLUMN start_date TYPE TIMESTAMPTZ USING start_date AT TIME ZONE
+        CASE WHEN store_name = 'steam' THEN current_setting('substiify.legacy_application_timezone') ELSE 'UTC' END,
+    -- Steam's English store pages expose Pacific wall time without an offset.
+    ALTER COLUMN end_date TYPE TIMESTAMPTZ USING end_date AT TIME ZONE
+        CASE WHEN store_name = 'steam' THEN 'America/Los_Angeles' ELSE 'UTC' END,
+    ALTER COLUMN created_at TYPE TIMESTAMPTZ
+        USING created_at AT TIME ZONE current_setting('substiify.legacy_database_timezone');
 
 ALTER TABLE kasino
     ADD COLUMN settled_at TIMESTAMPTZ,
