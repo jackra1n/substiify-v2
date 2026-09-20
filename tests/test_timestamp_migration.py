@@ -2,7 +2,6 @@ import os
 import unittest
 from datetime import UTC, datetime
 from importlib.resources import files
-from unittest.mock import patch
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -21,7 +20,11 @@ class TimestampMigration(unittest.IsolatedAsyncioTestCase):
 		await self.admin.execute(f'SET search_path TO "{self.schema}"')
 		await self.admin.execute(files("database").joinpath("migrations/001_initial.sql").read_text())
 		separator = "&" if "?" in self.dsn else "?"
-		self.db = Database(f"{self.dsn}{separator}search_path={self.schema}&timezone=Europe/Zurich")
+		self.schema_dsn = f"{self.dsn}{separator}search_path={self.schema}&timezone=Europe/Zurich"
+		self.db = Database(
+			f"{self.schema_dsn}&substiify.legacy_database_timezone=Europe/Zurich"
+			"&substiify.legacy_application_timezone=Asia/Tokyo"
+		)
 
 	async def asyncTearDown(self):
 		if hasattr(self.db, "pool"):
@@ -58,8 +61,7 @@ class TimestampMigration(unittest.IsolatedAsyncioTestCase):
 					store,
 					date,
 				)
-		with patch.dict(os.environ, {"LEGACY_DATABASE_TIMEZONE": "", "LEGACY_APPLICATION_TIMEZONE": "Asia/Tokyo"}):
-			await self.db.setup()
+		await self.db.setup()
 
 		for index, date in enumerate(dates, 1):
 			local = date.replace(tzinfo=ZoneInfo("Europe/Zurich")).astimezone(UTC)
@@ -94,9 +96,13 @@ class TimestampMigration(unittest.IsolatedAsyncioTestCase):
 			self.assertLess(abs((datetime.now(UTC) - created).total_seconds()), 5)
 
 	async def test_invalid_legacy_zone_leaves_existing_schema_untouched(self):
-		with patch.dict(os.environ, {"LEGACY_DATABASE_TIMEZONE": "not/a/timezone"}):
-			with self.assertRaises(asyncpg.InvalidParameterValueError):
-				await self.db.setup()
+		await self.admin.execute("INSERT INTO command_history DEFAULT VALUES")
+		self.db = Database(
+			f"{self.schema_dsn}&substiify.legacy_database_timezone=not/a/timezone"
+			"&substiify.legacy_application_timezone=Asia/Tokyo"
+		)
+		with self.assertRaises(asyncpg.InvalidParameterValueError):
+			await self.db.setup()
 		self.assertIsNone(await self.admin.fetchval("SELECT to_regclass('schema_migration')"))
 		self.assertEqual(
 			await self.admin.fetchval(

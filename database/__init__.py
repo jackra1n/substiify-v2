@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 from importlib.resources import files
 from typing import Any, Protocol, Self
 
@@ -67,15 +66,7 @@ class Database:
 
 	async def _migrate(self) -> None:
 		migrations = sorted(files("database").joinpath("migrations").iterdir(), key=lambda path: path.name)
-		# Bootstrap without the runtime UTC override: legacy defaults used the
-		# database/role timezone. All ordinary pooled connections still use UTC.
-		connection = await asyncpg.connect(
-			self.dsn,
-			timeout=5,
-			command_timeout=60,
-			server_settings={"statement_timeout": "60000", "lock_timeout": "5000"},
-		)
-		try:
+		async with self.pool.acquire() as connection:
 			async with connection.transaction():
 				# All instances serialize migration discovery and application together.
 				await connection.execute("SELECT pg_advisory_xact_lock(1937072755, 1)")
@@ -87,32 +78,12 @@ class Database:
 				known = {path.name for path in migrations if path.name.endswith(".sql")}
 				if applied - known:
 					raise RuntimeError("Database schema is newer than this application; refusing to start.")
-				if "002_reliability.sql" not in applied:
-					legacy_database_timezone = os.getenv("LEGACY_DATABASE_TIMEZONE") or await connection.fetchval(
-						"SHOW TimeZone"
-					)
-					# Steam discovery used datetime.now(); deployments with different
-					# bot/database zones can explicitly supply the bot's old zone.
-					legacy_application_timezone = os.getenv("LEGACY_APPLICATION_TIMEZONE") or legacy_database_timezone
-					for setting, timezone in (
-						("substiify.legacy_database_timezone", legacy_database_timezone),
-						("substiify.legacy_application_timezone", legacy_application_timezone),
-					):
-						await connection.fetchval("SELECT TIMESTAMP '2000-01-01' AT TIME ZONE $1", timezone)
-						await connection.execute("SELECT set_config($1, $2, true)", setting, timezone)
-					logger.info(
-						"Converting legacy timestamps using database zone %s and application zone %s",
-						legacy_database_timezone,
-						legacy_application_timezone,
-					)
 				for migration in migrations:
 					if migration.name not in known or migration.name in applied:
 						continue
 					await connection.execute(migration.read_text(encoding="utf-8"), timeout=60)
 					await connection.execute("INSERT INTO schema_migration(version) VALUES($1)", migration.name)
 					logger.info("Applied database migration %s", migration.name)
-		finally:
-			await connection.close(timeout=10)
 
 	async def prepare_command_context(
 		self,

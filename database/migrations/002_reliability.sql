@@ -1,6 +1,22 @@
+-- Existing installations are prepared with database-level timezone metadata
+-- before deployment. Fresh databases have no legacy timestamps to interpret.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM command_history
+        UNION ALL SELECT 1 FROM command_error
+        UNION ALL SELECT 1 FROM giveaway
+        UNION ALL SELECT 1 FROM kasino
+        UNION ALL SELECT 1 FROM feedback
+        UNION ALL SELECT 1 FROM free_game_history
+    ) THEN
+        PERFORM set_config('substiify.legacy_database_timezone', 'UTC', true);
+        PERFORM set_config('substiify.legacy_application_timezone', 'UTC', true);
+    END IF;
+END
+$$;
+
 -- Database defaults stored local wall time, unlike application-written UTC.
--- The migration runner captures the legacy session zone before the runtime UTC
--- override. LEGACY_DATABASE_TIMEZONE overrides it after a server/role zone change.
 ALTER TABLE command_history ALTER COLUMN date TYPE TIMESTAMPTZ
     USING date AT TIME ZONE current_setting('substiify.legacy_database_timezone');
 ALTER TABLE command_error ALTER COLUMN date TYPE TIMESTAMPTZ
