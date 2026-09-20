@@ -89,6 +89,7 @@ version = {file = "core/VERSION"}
 
 [tool.setuptools.package-data]
 core = ["VERSION"]
+database = ["migrations/*.sql"]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -240,7 +240,6 @@ class URLCleaner(commands.Cog):
 			return
 
 		guild_id = ctx.guild.id
-		await self.bot.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
 
 		if enable is None:
 			enabled = await self.bot.db.pool.fetchrow(

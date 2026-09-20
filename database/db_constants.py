@@ -4,6 +4,8 @@ USER_INSERT_QUERY = """INSERT INTO discord_user
                        ON CONFLICT (discord_user_id) DO UPDATE SET
                        username = EXCLUDED.username,
                        avatar = EXCLUDED.avatar
+                       WHERE (discord_user.username, discord_user.avatar)
+                         IS DISTINCT FROM (EXCLUDED.username, EXCLUDED.avatar)
                     """
 
 SERVER_INSERT_QUERY = """INSERT INTO discord_server
@@ -11,19 +13,18 @@ SERVER_INSERT_QUERY = """INSERT INTO discord_server
                          VALUES ($1, $2)
                          ON CONFLICT (discord_server_id) DO UPDATE SET
                          server_name = EXCLUDED.server_name
+                         WHERE discord_server.server_name IS DISTINCT FROM EXCLUDED.server_name
                       """
-
-CHANNEL_INSERT_QUERY = """INSERT INTO discord_channel
-                           (discord_channel_id, channel_name, discord_server_id)
-                           VALUES ($1, $2, $3)
-                           ON CONFLICT (discord_channel_id) DO UPDATE SET
-                           channel_name = EXCLUDED.channel_name
-                         """
 
 MESSAGEABLE_INSERT_QUERY = """INSERT INTO discord_channel
                           (discord_channel_id, channel_name, discord_server_id, parent_discord_channel_id)
                           VALUES ($1, $2, $3, $4)
                           ON CONFLICT (discord_channel_id) DO UPDATE SET
                           channel_name = EXCLUDED.channel_name,
-                          parent_discord_channel_id = EXCLUDED.parent_discord_channel_id
+                          parent_discord_channel_id = EXCLUDED.parent_discord_channel_id,
+                          discord_server_id = EXCLUDED.discord_server_id
+                          WHERE (discord_channel.channel_name, discord_channel.parent_discord_channel_id,
+                                 discord_channel.discord_server_id)
+                            IS DISTINCT FROM (EXCLUDED.channel_name, EXCLUDED.parent_discord_channel_id,
+                                              EXCLUDED.discord_server_id)
                        """

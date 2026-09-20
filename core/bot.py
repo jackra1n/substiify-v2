@@ -9,7 +9,6 @@ from discord.ext import commands
 
 import core
 from database import Database
-from database import db_constants as dbc
 
 logger = logging.getLogger(__name__)
 
@@ -217,13 +216,7 @@ class Substiify(commands.Bot):
 			return
 		command_name = command.qualified_name
 		try:
-			await self.db.pool.execute(
-				dbc.USER_INSERT_QUERY, ctx.author.id, ctx.author.name, ctx.author.display_avatar.url
-			)
-			if ctx.guild:
-				await self.db._insert_foundation(ctx.author, ctx.guild, ctx.channel)
-			else:
-				await self.db._insert_server_channel(ctx.channel)
+			await self.db.prepare_command_context(ctx.author, ctx.guild, ctx.channel)
 			await self.db.pool.execute(
 				"""INSERT INTO command_error
 				   (command_name, error_type, error_message, raw_message, discord_user_id,

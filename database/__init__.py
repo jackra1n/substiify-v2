@@ -1,24 +1,27 @@
 import asyncio
 import logging
-import os
+from importlib.resources import files
 from typing import Any, Protocol, Self
 
 import asyncpg
 import discord
 
-
-from .db_constants import CHANNEL_INSERT_QUERY, MESSAGEABLE_INSERT_QUERY, SERVER_INSERT_QUERY, USER_INSERT_QUERY
-
+from .db_constants import MESSAGEABLE_INSERT_QUERY, SERVER_INSERT_QUERY, USER_INSERT_QUERY
 
 __all__ = ("Database",)
-
-
-logger: logging.Logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class _DiscordChannel(Protocol):
 	@property
 	def id(self) -> int: ...
+
+
+class _DatabasePool(asyncpg.Pool):
+	"""Apply the acquisition deadline to both explicit and convenience queries."""
+
+	def acquire(self, *, timeout=5):
+		return super().acquire(timeout=timeout)
 
 
 class Database:
@@ -34,69 +37,99 @@ class Database:
 	async def __aexit__(self, *args: Any) -> None:
 		try:
 			await asyncio.wait_for(self.pool.close(), timeout=10)
-		except asyncio.TimeoutError:
-			logger.warning("Unable to gracefully shutdown database connection, forcefully continuing.")
+		except TimeoutError:
+			logger.warning("Database shutdown timed out; connections were terminated.")
 		else:
 			logger.info("Successfully closed Database connection.")
 
 	async def setup(self) -> None:
+		# Initialize an empty pool first so failures always leave a closable object.
+		self.pool = await _DatabasePool(
+			self.dsn,
+			min_size=0,
+			max_size=10,
+			max_queries=50000,
+			max_inactive_connection_lifetime=300,
+			loop=None,
+			connection_class=asyncpg.Connection,
+			record_class=asyncpg.Record,
+			timeout=5,
+			command_timeout=15,
+			server_settings={"timezone": "UTC", "statement_timeout": "15000", "lock_timeout": "5000"},
+		)
 		try:
-			self.pool = await asyncpg.create_pool(dsn=self.dsn)
-		except Exception as exc:
-			logger.error("Failed to connect to Postgres.")
-			raise RuntimeError("Database initialization failed; see previous error for details.") from exc
-
-		db_schema = os.path.join("resources", "CreateDatabase.sql")
-		with open(db_schema) as fp:
-			await self.pool.execute(fp.read())
-
+			await self._migrate()
+		except BaseException:
+			self.pool.terminate()
+			raise
 		logger.info("Successfully initialised the Database.")
+
+	async def _migrate(self) -> None:
+		migrations = sorted(files("database").joinpath("migrations").iterdir(), key=lambda path: path.name)
+		async with self.pool.acquire() as connection:
+			async with connection.transaction():
+				# All instances serialize migration discovery and application together.
+				await connection.execute("SELECT pg_advisory_xact_lock(1937072755, 1)")
+				await connection.execute("SET LOCAL statement_timeout = '60s'")
+				await connection.execute(
+					"CREATE TABLE IF NOT EXISTS schema_migration (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+				)
+				applied = {row["version"] for row in await connection.fetch("SELECT version FROM schema_migration")}
+				known = {path.name for path in migrations if path.name.endswith(".sql")}
+				if applied - known:
+					raise RuntimeError("Database schema is newer than this application; refusing to start.")
+				for migration in migrations:
+					if migration.name not in known or migration.name in applied:
+						continue
+					await connection.execute(migration.read_text(encoding="utf-8"), timeout=60)
+					await connection.execute("INSERT INTO schema_migration(version) VALUES($1)", migration.name)
+					logger.info("Applied database migration %s", migration.name)
 
 	async def prepare_command_context(
 		self,
 		user: discord.User | discord.Member,
 		guild: discord.Guild | None,
 		channel: _DiscordChannel,
-	) -> None:
-		async with self.pool.acquire() as connection:
-			async with connection.transaction():
-				if guild is None:
-					await connection.execute(USER_INSERT_QUERY, user.id, user.name, user.display_avatar.url)
-					await self._insert_server_channel(channel, connection=connection)
-				else:
-					await self._insert_foundation(user, guild, channel, connection=connection)
-
-	async def _insert_foundation(
-		self,
-		user: discord.User | discord.Member,
-		server: discord.Guild,
-		channel: _DiscordChannel,
 		*,
 		connection: asyncpg.Connection | None = None,
 	) -> None:
-		executor = connection or self.pool
+		if connection is None:
+			async with self.pool.acquire() as connection:
+				async with connection.transaction():
+					await self.prepare_command_context(user, guild, channel, connection=connection)
+			return
+		await self.upsert_user(user, connection=connection)
+		channel_guild = getattr(channel, "guild", None)
+		if guild is not None and (channel_guild is None or channel_guild.id != guild.id):
+			await self.upsert_server(guild, connection=connection)
+		await self.upsert_channel(channel, connection=connection)
+
+	async def upsert_user(
+		self, user: discord.User | discord.Member, *, connection: asyncpg.Connection | None = None
+	) -> None:
+		executor = connection if connection is not None else self.pool
 		await executor.execute(USER_INSERT_QUERY, user.id, user.name, user.display_avatar.url)
-		await self._insert_server(server, connection=connection)
 
-		if pchannel := channel.parent if isinstance(channel, discord.Thread) else None:
-			await executor.execute(MESSAGEABLE_INSERT_QUERY, pchannel.id, pchannel.name, pchannel.guild.id, None)
-
-		p_chan_id = pchannel.id if pchannel else None
-		channel_name = getattr(channel, "name", None) or str(channel)
-		await executor.execute(MESSAGEABLE_INSERT_QUERY, channel.id, channel_name, server.id, p_chan_id)
-
-	async def _insert_server(self, guild: discord.Guild, *, connection: asyncpg.Connection | None = None) -> None:
-		executor = connection or self.pool
+	async def upsert_server(self, guild: discord.Guild, *, connection: asyncpg.Connection | None = None) -> None:
+		executor = connection if connection is not None else self.pool
 		await executor.execute(SERVER_INSERT_QUERY, guild.id, guild.name)
 
-	async def _insert_server_channel(
-		self,
-		channel: _DiscordChannel,
-		*,
-		connection: asyncpg.Connection | None = None,
-	) -> None:
+	async def upsert_channel(self, channel: _DiscordChannel, *, connection: asyncpg.Connection | None = None) -> None:
+		if connection is None:
+			async with self.pool.acquire() as connection:
+				async with connection.transaction():
+					await self.upsert_channel(channel, connection=connection)
+			return
 		guild = getattr(channel, "guild", None)
-		server_id = guild.id if guild is not None else None
-		channel_name = getattr(channel, "name", None) or str(channel)
-		executor = connection or self.pool
-		await executor.execute(CHANNEL_INSERT_QUERY, channel.id, channel_name, server_id)
+		if guild is not None:
+			await self.upsert_server(guild, connection=connection)
+		parent = channel.parent if isinstance(channel, discord.Thread) else None
+		if parent is not None:
+			await connection.execute(MESSAGEABLE_INSERT_QUERY, parent.id, parent.name, parent.guild.id, None)
+		await connection.execute(
+			MESSAGEABLE_INSERT_QUERY,
+			channel.id,
+			getattr(channel, "name", None) or str(channel),
+			guild.id if guild is not None else None,
+			parent.id if parent is not None else None,
+		)

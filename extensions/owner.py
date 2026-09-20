@@ -8,7 +8,6 @@ from discord.ext import commands, tasks
 from discord.ext.commands import Greedy
 
 import core
-from database import db_constants as dbc
 
 logger = logging.getLogger(__name__)
 
@@ -270,30 +269,26 @@ class Owner(commands.Cog):
 		servers = self.bot.guilds
 
 		for server in servers:
-			await self.bot.db._insert_server(server)
+			await self.bot.db.upsert_server(server)
 
 			for channel in server.channels:
 				if not isinstance(channel, discord.TextChannel):
 					continue
 				print(f"inserting channel: {channel}...")
-				await self.bot.db._insert_server_channel(channel)
+				await self.bot.db.upsert_channel(channel)
 
 		for post in await self.bot.db.pool.fetch("SELECT * FROM post"):
 			user_id = post["discord_user_id"]
 			discord_user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
 			print(f"fetched user: {discord_user}...")
-			await self.bot.db.pool.execute(
-				dbc.USER_INSERT_QUERY, discord_user.id, discord_user.name, discord_user.display_avatar.url
-			)
+			await self.bot.db.upsert_user(discord_user)
 
 		for command in await self.bot.db.pool.fetch(
 			"SELECT discord_user_id FROM command_history GROUP BY discord_user_id"
 		):
 			user_id = command["discord_user_id"]
 			discord_user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
-			await self.bot.db.pool.execute(
-				dbc.USER_INSERT_QUERY, discord_user.id, discord_user.name, discord_user.display_avatar.url
-			)
+			await self.bot.db.upsert_user(discord_user)
 
 		await ctx.send("Database populated", delete_after=30)
 
@@ -306,7 +301,7 @@ class Owner(commands.Cog):
 		# fetch all users from the server
 		async for user in ctx.guild.fetch_members(limit=None):
 			print(f"inserting user: {user}...")
-			await self.bot.db.pool.execute(dbc.USER_INSERT_QUERY, user.id, user.name, user.display_avatar.url)
+			await self.bot.db.upsert_user(user)
 			stmt_insert_user_karma = """INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
                                         ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = $3"""
 			random_karma = random.randint(500, 3000)

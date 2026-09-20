@@ -45,7 +45,8 @@ def _is_expected_retry(record: logging.LogRecord) -> bool:
 		return error.status in (502, 503, 504)
 	# Exact types keep TLS/proxy errors and arbitrary OSError subclasses diagnostic.
 	return (
-		type(error) in (OSError, aiohttp.ClientOSError, aiohttp.ClientConnectorError)
+		isinstance(error, OSError)
+		and type(error) in (OSError, aiohttp.ClientOSError, aiohttp.ClientConnectorError)
 		and error.errno in _CONNECTION_ERRNOS
 	)
 
