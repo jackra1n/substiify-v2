@@ -114,8 +114,8 @@ class DatabaseTransactions(unittest.IsolatedAsyncioTestCase):
 			{"discord_channel_id": channel_id, "discord_server_id": 20, "store_name": "store"}
 			for channel_id in channels
 		]
-		with self.assertLogs("extensions.free_games", level="ERROR"):
-			self.assertEqual(await cog._send_free_game(game, settings), 1)
+		with self.assertRaises(TimeoutError):
+			await cog._send_free_game(game, settings)
 		channels[30].send.side_effect = None
 		self.assertEqual(await cog._send_free_game(game, settings), 1)
 		self.assertEqual(await cog._send_free_game(game, settings), 0)

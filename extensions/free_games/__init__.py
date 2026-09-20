@@ -4,6 +4,8 @@ import asyncio
 import logging
 from uuid import UUID, uuid4
 
+import aiohttp
+import asyncpg
 import discord
 from discord.ext import commands, tasks
 
@@ -13,6 +15,19 @@ from .epic_games import EpicGames
 from .steam import Steam
 
 logger = logging.getLogger(__name__)
+
+_RETRYABLE_ERRORS = (
+	OSError,
+	TimeoutError,
+	aiohttp.ClientError,
+	discord.GatewayNotFound,
+	discord.ConnectionClosed,
+	asyncpg.PostgresConnectionError,
+	asyncpg.CannotConnectNowError,
+	asyncpg.TooManyConnectionsError,
+	asyncpg.QueryCanceledError,
+	asyncpg.LockNotAvailableError,
+)
 
 STORES: dict[str, type[Platform]] = {
 	EpicGames.name: EpicGames,
@@ -25,6 +40,7 @@ class FreeGames(commands.Cog):
 
 	def __init__(self, bot: core.Substiify):
 		self.bot = bot
+		self.check_free_games.add_exception_type(*_RETRYABLE_ERRORS)
 
 	async def cog_load(self) -> None:
 		self.check_free_games.start()
@@ -46,6 +62,9 @@ class FreeGames(commands.Cog):
 	async def check_free_games(self) -> None:
 		try:
 			await self._check_free_games()
+		except _RETRYABLE_ERRORS:
+			# Let tasks.Loop back off and retry this iteration, not wait an hour.
+			raise
 		except Exception:
 			logger.exception("Free games check failed.")
 
@@ -56,11 +75,14 @@ class FreeGames(commands.Cog):
 		logger.debug(f"Checking free games for platforms: {platforms}")
 
 		current_free_games: list[Game] = []
+		retry_error = None
 		for platform in platforms:
 			if platform not in STORES:
 				continue
 			try:
 				current_free_games += await STORES[platform].get_free_games()
+			except _RETRYABLE_ERRORS as error:
+				retry_error = error
 			except Exception:
 				logger.exception("Failed to check %s for free games.", platform)
 		logger.debug(f"Found {len(current_free_games)} free games")
@@ -76,28 +98,39 @@ class FreeGames(commands.Cog):
 		for game in current_free_games:
 			try:
 				total_sent_messages += await self._send_free_game(game, freegames_and_options)
+			except _RETRYABLE_ERRORS as error:
+				retry_error = error
 			except Exception:
 				logger.exception("Failed to process free game %s.", game.title)
 
 		if total_sent_messages:
 			logger.info(f"Sent [{total_sent_messages}] new free games messages")
+		if retry_error is not None:
+			raise retry_error
 
 	async def _send_free_game(self, game: Game, freegames_and_options) -> int:
 		embed = self._create_game_embed(game)
 
 		sent_messages = 0
+		retry_error = None
 		for fg_setting in freegames_and_options:
 			channel: discord.TextChannel = self.bot.get_channel(fg_setting["discord_channel_id"])
 			if not channel or fg_setting["store_name"] != game.platform.name:
 				continue
 			try:
 				sent_messages += await self._deliver_free_game(game, channel.id, channel.send, embed)
+			except _RETRYABLE_ERRORS as error:
+				retry_error = error
 			except Exception:
 				logger.exception(
 					"Failed to send free game to server %s, channel %s.",
 					fg_setting["discord_server_id"],
 					fg_setting["discord_channel_id"],
 				)
+		# Other destinations get their chance before the worker retries. Already
+		# acknowledged deliveries are skipped by the durable per-channel ledger.
+		if retry_error is not None:
+			raise retry_error
 		return sent_messages
 
 	@check_free_games.before_loop
