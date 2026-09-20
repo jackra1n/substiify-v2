@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 class Util(commands.Cog):
 	COG_EMOJI = "📦"
-	GIVEAWAY_HTTP_TIMEOUT = 30
 	# The whole delivery attempt is bounded below its persisted lease, including DB checkpoints.
 	GIVEAWAY_DELIVERY_TIMEOUT = 60
 	GIVEAWAY_LEASE_SECONDS = 120
@@ -81,8 +80,7 @@ class Util(commands.Cog):
 		if hosted_by is None or hosted_by.bot:
 			hosted_by = ctx.author
 
-		async with asyncio.timeout(self.GIVEAWAY_HTTP_TIMEOUT):
-			channel = await self.bot.fetch_channel(channel.id)
+		channel = await self.bot.fetch_channel(channel.id)
 		perms = channel.permissions_for(ctx.me)
 		missing = []
 		if not perms.send_messages:
@@ -129,21 +127,18 @@ class Util(commands.Cog):
 		embed.set_footer(text=f"Giveaway ends on {end_string}")
 
 		await self.bot.db.prepare_command_context(hosted_by, ctx.guild, channel)
-		async with asyncio.timeout(self.GIVEAWAY_HTTP_TIMEOUT):
-			new_msg = await channel.send(embed=embed)
+		new_msg = await channel.send(embed=embed)
 		stmt = """INSERT INTO giveaway
 			(discord_user_id, end_date, prize, discord_server_id, discord_channel_id, discord_message_id, winners_count)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)"""
 		try:
-			async with asyncio.timeout(self.GIVEAWAY_HTTP_TIMEOUT):
-				await new_msg.add_reaction("🎉")
+			await new_msg.add_reaction("🎉")
 			await self.bot.db.pool.execute(
 				stmt, hosted_by.id, end, prize, ctx.guild.id, channel.id, new_msg.id, winners
 			)
 		except Exception:
 			try:
-				async with asyncio.timeout(self.GIVEAWAY_HTTP_TIMEOUT):
-					await new_msg.delete()
+				await new_msg.delete()
 			except discord.HTTPException, TimeoutError:
 				logger.exception("Could not remove failed giveaway message %s", new_msg.id)
 			raise
@@ -167,15 +162,10 @@ class Util(commands.Cog):
 		if giveaway is not None and (giveaway["cancelled_at"] or giveaway["unavailable_at"]):
 			return await self._safe_notify(ctx, content="This giveaway was cancelled or its source is unavailable.")
 		try:
-			async with asyncio.timeout(self.GIVEAWAY_HTTP_TIMEOUT):
-				msg = await ctx.fetch_message(message_id)
-				if (
-					msg.author.id != self.bot.user.id
-					or msg.guild.id != ctx.guild.id
-					or msg.channel.id != ctx.channel.id
-				):
-					return await self._safe_notify(ctx, content="This is not one of my giveaways in this channel.")
-				users = await self._giveaway_entrants(msg)
+			msg = await ctx.fetch_message(message_id)
+			if msg.author.id != self.bot.user.id or msg.guild.id != ctx.guild.id or msg.channel.id != ctx.channel.id:
+				return await self._safe_notify(ctx, content="This is not one of my giveaways in this channel.")
+			users = await self._giveaway_entrants(msg)
 		except discord.NotFound, discord.Forbidden, TimeoutError:
 			return await self._safe_notify(ctx, content="The giveaway source could not be read; no reroll was made.")
 		if giveaway is None:
@@ -260,15 +250,14 @@ class Util(commands.Cog):
 				content="No cancellable giveaway exists here. Selected, delivering or completed results cannot be cancelled.",
 			)
 		try:
-			async with asyncio.timeout(self.GIVEAWAY_HTTP_TIMEOUT):
-				msg = await ctx.fetch_message(message_id)
-				if msg.author.id != self.bot.user.id:
-					return await self._safe_notify(
-						ctx, content="Giveaway cancelled in the database; the source is not mine to edit."
-					)
-				await msg.edit(
-					embed=discord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!")
+			msg = await ctx.fetch_message(message_id)
+			if msg.author.id != self.bot.user.id:
+				return await self._safe_notify(
+					ctx, content="Giveaway cancelled in the database; the source is not mine to edit."
 				)
+			await msg.edit(
+				embed=discord.Embed(title="Giveaway Cancelled", description="The giveaway has been cancelled!")
+			)
 		except discord.HTTPException, TimeoutError:
 			logger.warning("Giveaway %s cancelled, but its source could not be updated.", giveaway["id"], exc_info=True)
 			return await self._safe_notify(ctx, content="Giveaway cancelled. Its source message could not be updated.")
@@ -309,19 +298,18 @@ class Util(commands.Cog):
 		if result is not None and result["completed_at"] is not None:
 			return
 		try:
-			async with asyncio.timeout(self.GIVEAWAY_HTTP_TIMEOUT):
-				channel = await self.bot.fetch_channel(giveaway["discord_channel_id"])
-				if getattr(channel, "guild", None) is None or channel.guild.id != giveaway["discord_server_id"]:
-					await self._mark_giveaway_unavailable(
-						giveaway["id"], "Source channel does not belong to the recorded server."
-					)
-					return
-				msg = await channel.fetch_message(giveaway["discord_message_id"])
-				if msg.author.id != self.bot.user.id:
-					await self._mark_giveaway_unavailable(giveaway["id"], "Source message is not owned by this bot.")
-					return
-				if result is None:
-					users = await self._giveaway_entrants(msg)
+			channel = await self.bot.fetch_channel(giveaway["discord_channel_id"])
+			if getattr(channel, "guild", None) is None or channel.guild.id != giveaway["discord_server_id"]:
+				await self._mark_giveaway_unavailable(
+					giveaway["id"], "Source channel does not belong to the recorded server."
+				)
+				return
+			msg = await channel.fetch_message(giveaway["discord_message_id"])
+			if msg.author.id != self.bot.user.id:
+				await self._mark_giveaway_unavailable(giveaway["id"], "Source message is not owned by this bot.")
+				return
+			if result is None:
+				users = await self._giveaway_entrants(msg)
 		except (discord.NotFound, discord.Forbidden) as error:
 			await self._mark_giveaway_unavailable(giveaway["id"], f"Source unavailable: {type(error).__name__}.")
 			return
