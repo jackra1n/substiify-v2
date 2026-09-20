@@ -46,29 +46,52 @@ class Feedback(commands.Cog):
 		if payload.emoji not in [ACCEPT_EMOJI, DENY_EMOJI]:
 			return
 
-		message = await self.bot.get_channel(payload.channel_id).fetch_message(payload.message_id)
+		feedback = await self.bot.db.pool.fetchrow(
+			"SELECT * FROM feedback WHERE discord_message_id = $1 AND discord_channel_id = $2",
+			payload.message_id,
+			payload.channel_id,
+		)
+		if feedback is None or feedback["accepted"] is not None:
+			return
+
+		channel = self.bot.get_channel(payload.channel_id) or await self.bot.fetch_channel(payload.channel_id)
+		message = await channel.fetch_message(payload.message_id)
 		if message.author != self.bot.user:
 			return
 
-		stmt_update_feedback = """UPDATE feedback SET accepted = $1 WHERE discord_message_id = $2"""
-		accepted = payload.emoji == ACCEPT_EMOJI
-		await self.bot.db.pool.execute(stmt_update_feedback, accepted, payload.message_id)
 		feedback = await self.bot.db.pool.fetchrow(
-			"SELECT * FROM feedback WHERE discord_message_id = $1", payload.message_id
+			"""UPDATE feedback SET accepted = $1
+			   WHERE id = $2 AND accepted IS NULL
+			   RETURNING *""",
+			payload.emoji == ACCEPT_EMOJI,
+			feedback["id"],
 		)
+		if feedback is None:
+			return
 
-		await self.edit_feedback_embed(feedback)
-		await self.send_user_reply(feedback)
+		# Only the winning decision attempts these effects; none can undo the decision.
+		try:
+			await self.edit_feedback_embed(feedback, message)
+		except Exception:
+			logger.exception("Feedback %s was decided, but its moderation embed could not be updated", feedback["id"])
+		try:
+			await self.send_user_reply(feedback)
+		except Exception:
+			logger.exception(
+				"Feedback %s was decided, but its user notification failed; no retry is queued", feedback["id"]
+			)
+		try:
+			await message.clear_reactions()
+		except Exception:
+			logger.exception(
+				"Feedback %s was decided, but its moderation reactions could not be cleared", feedback["id"]
+			)
 
-		await message.clear_reactions()
-
-	async def edit_feedback_embed(self, feedback: Record):
+	async def edit_feedback_embed(self, feedback: Record, message: discord.Message):
 		outcome = "accepted" if feedback["accepted"] else "denied"
 		color = discord.Colour.green() if outcome == "accepted" else discord.Colour.red()
 
-		channel = await self.bot.fetch_channel(feedback["discord_channel_id"])
-		message = await channel.fetch_message(feedback["discord_message_id"])
-		embed = message.embeds[0]
+		embed = message.embeds[0] if message.embeds else discord.Embed(description=f"```{feedback['content']}```")
 		embed.color = color
 		embed.title = f"{outcome.capitalize()} {feedback['feedback_type']} submission"
 
@@ -102,7 +125,7 @@ class Feedback(commands.Cog):
 	async def feedback(self, interaction: discord.Interaction, feedback_type: FeedbackType):
 		"""
 		Allows you to report a bug or suggest a feature or an improvement to the developer team.
-		After submitting your bug, you will get a message from the bot with the outcome of your submission.
+		After review, the bot will attempt to send you the outcome by DM.
 		"""
 		await interaction.response.send_modal(FeedbackModal(feedback_type))
 
@@ -146,36 +169,132 @@ class FeedbackModal(discord.ui.Modal):
 		self.add_item(self.feedback)
 
 	async def on_submit(self, interaction: discord.Interaction):
+		await interaction.response.defer(ephemeral=True, thinking=True)
 		channel_id = BUG_CHANNEL_ID if self.feedback_type == FeedbackType.BUG else SUGGESTION_CHANNEL_ID
-		channel: discord.TextChannel = interaction.client.get_channel(channel_id)
+		channel = interaction.client.get_channel(channel_id) or await interaction.client.fetch_channel(channel_id)
 		embed = discord.Embed(
 			title=f"New {self.feedback_type.value} submission",
 			description=f"```{self.feedback.value}```",
 			color=core.constants.CYAN_COLOR,
 		)
-		embed.set_footer(text=interaction.user, icon_url=interaction.user.display_avatar)
-		message = await channel.send(embed=embed)
+		embed.set_footer(text=str(interaction.user), icon_url=interaction.user.display_avatar)
 
-		stmt_feedback = """INSERT INTO feedback
-                           (feedback_type, content, discord_user_id, discord_server_id, discord_channel_id, discord_message_id)
-                           VALUES ($1, $2, $3, $4, $5, $6)"""
-		await interaction.client.db.pool.execute(
-			stmt_feedback,
-			self.feedback_type.value,
-			self.feedback.value,
-			interaction.user.id,
-			interaction.guild.id,
-			channel_id,
-			message.id,
+		try:
+			async with interaction.client.db.pool.acquire(timeout=5) as connection:
+				async with connection.transaction():
+					await interaction.client.db.prepare_command_context(
+						interaction.user, interaction.guild, channel, connection=connection
+					)
+					feedback_id = await connection.fetchval(
+						"""INSERT INTO feedback
+						   (feedback_type, content, discord_user_id, discord_server_id,
+						    discord_channel_id, discord_message_id)
+						   VALUES ($1, $2, $3, $4, $5, NULL) RETURNING id""",
+						self.feedback_type.value,
+						self.feedback.value,
+						interaction.user.id,
+						interaction.guild.id if interaction.guild is not None else None,
+						channel.id,
+					)
+		except Exception:
+			logger.exception("Could not confirm feedback draft persistence for user %s", interaction.user.id)
+			await self._respond(interaction, "I could not confirm your feedback was saved. Please try again later.")
+			return
+
+		try:
+			message = await channel.send(embed=embed)
+		except Exception:
+			logger.exception(
+				"Feedback %s is saved, but moderation send failed; delivery is unconfirmed and no retry is queued",
+				feedback_id,
+			)
+			await self._respond(
+				interaction,
+				f"Your feedback is saved (reference {feedback_id}), but I could not confirm delivery to the moderation "
+				"channel. It may not be reviewed until an administrator resolves this; no automatic retry is queued.",
+			)
+			return
+
+		try:
+			tracked_id = await interaction.client.db.pool.fetchval(
+				"""UPDATE feedback SET discord_message_id = $1
+				   WHERE id = $2 AND discord_message_id IS NULL RETURNING id""",
+				message.id,
+				feedback_id,
+			)
+			if tracked_id is None:
+				raise RuntimeError("Feedback draft was not available to track the moderation message")
+		except Exception:
+			logger.exception(
+				"Feedback %s is saved, but tracking of moderation message %s in channel %s could not be confirmed",
+				feedback_id,
+				message.id,
+				channel.id,
+			)
+			try:
+				await message.delete()
+			except Exception:
+				logger.exception(
+					"Compensating deletion failed for feedback %s message %s; an untracked message may remain",
+					feedback_id,
+					message.id,
+				)
+			else:
+				logger.warning(
+					"Deleted moderation message %s after feedback %s tracking failure", message.id, feedback_id
+				)
+				try:
+					# A lost DB response may have hidden a successful update.
+					await interaction.client.db.pool.execute(
+						"UPDATE feedback SET discord_message_id = NULL WHERE id = $1 AND discord_message_id = $2",
+						feedback_id,
+						message.id,
+					)
+				except Exception:
+					logger.exception(
+						"Feedback %s is retained, but may still reference deleted message %s", feedback_id, message.id
+					)
+			await self._respond(
+				interaction,
+				f"Your feedback is saved (reference {feedback_id}), but its moderation delivery could not be confirmed. "
+				"An administrator must resolve this; no automatic retry is queued.",
+			)
+			return
+
+		reactions_ready = True
+		for emoji in (ACCEPT_EMOJI, DENY_EMOJI):
+			try:
+				await message.add_reaction(emoji)
+			except Exception:
+				reactions_ready = False
+				logger.exception(
+					"Feedback %s is tracked, but moderation reaction %s could not be added", feedback_id, emoji
+				)
+		response = (
+			f"Thank you! Your {self.feedback_type.value} is saved and posted for review (reference {feedback_id})."
 		)
+		if not reactions_ready:
+			response += (
+				" The moderation reaction controls could not be fully added; an administrator may need to restore them."
+			)
+		await self._respond(interaction, response)
 
-		await message.add_reaction(ACCEPT_EMOJI)
-		await message.add_reaction(DENY_EMOJI)
-		await interaction.response.send_message(f"Thank you for submitting the {self.feedback_type.value}!")
+	async def _respond(self, interaction: discord.Interaction, content: str):
+		try:
+			if interaction.response.is_done():
+				await interaction.followup.send(content, ephemeral=True)
+			else:
+				await interaction.response.send_message(content, ephemeral=True)
+		except Exception:
+			logger.exception("Could not send feedback submission response to user %s", interaction.user.id)
 
 	async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-		await interaction.response.send_message("Oops! Something went wrong.", ephemeral=True)
-		logger.error(type(error), error, error.__traceback__)
+		logger.exception(
+			"Feedback modal failed for user %s",
+			interaction.user.id,
+			exc_info=(type(error), error, error.__traceback__),
+		)
+		await self._respond(interaction, "Something went wrong, and I could not confirm your feedback submission.")
 
 
 async def setup(bot: core.Substiify):
