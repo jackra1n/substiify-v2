@@ -1,18 +1,26 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import UTC, datetime
 
 
 class Game(ABC):
 	title: str
-	start_date: datetime
+	start_date: datetime | None
 	end_date: datetime | None
 	original_price: str
 	discount_price: str
 	cover_image_url: str
 	store_link: str
 	platform: Platform
+
+	@property
+	def promotion_key(self) -> str:
+		if self.start_date is None and self.end_date is None:
+			return "undated"
+		start = self.start_date.astimezone(UTC).isoformat() if self.start_date is not None else ""
+		end = self.end_date.astimezone(UTC).isoformat() if self.end_date is not None else ""
+		return f"{start}/{end}"
 
 
 class Platform(ABC):

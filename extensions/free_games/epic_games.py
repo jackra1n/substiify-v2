@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 import aiohttp
 
@@ -45,7 +45,7 @@ class EpicGamesGame(Game):
 
 	def _parse_date(self, game_info_json: str, date_field: str) -> datetime:
 		date_str = game_info_json["promotions"]["promotionalOffers"][0]["promotionalOffers"][0][date_field]
-		return datetime.strptime(date_str.split("T")[0], "%Y-%m-%d")
+		return datetime.fromisoformat(date_str).astimezone(UTC)
 
 	def _create_discount_price(self, game_price_str: str) -> str:
 		discount_price = game_price_str["totalPrice"]["discountPrice"]

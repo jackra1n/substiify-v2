@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
-from datetime import datetime, timedelta
+from uuid import UUID, uuid4
 
 import discord
 from discord.ext import commands, tasks
@@ -82,10 +83,6 @@ class FreeGames(commands.Cog):
 			logger.info(f"Sent [{total_sent_messages}] new free games messages")
 
 	async def _send_free_game(self, game: Game, freegames_and_options) -> int:
-		if await self._is_game_in_history(game):
-			return 0
-		logger.info(f"Starting to send new free game: {game.title}")
-		await self._add_game_to_history(game)
 		embed = self._create_game_embed(game)
 
 		sent_messages = 0
@@ -94,8 +91,7 @@ class FreeGames(commands.Cog):
 			if not channel or fg_setting["store_name"] != game.platform.name:
 				continue
 			try:
-				await channel.send(embed=embed)
-				sent_messages += 1
+				sent_messages += await self._deliver_free_game(game, channel.id, channel.send, embed)
 			except Exception:
 				logger.exception(
 					"Failed to send free game to server %s, channel %s.",
@@ -108,26 +104,68 @@ class FreeGames(commands.Cog):
 	async def before_check_free_games(self):
 		await self.bot.wait_until_ready()
 
-	async def _is_game_in_history(self, game: Game) -> bool:
-		game_in_history_stmt = """
-			SELECT 1
-			FROM free_game_history
-			WHERE title = $1 AND store_name = $2
-			AND created_at >= $3;
+	async def _claim_delivery(self, game: Game, channel_id: int) -> UUID | None:
+		claim_stmt = """
+			INSERT INTO free_game_delivery (
+				store_name, store_link, promotion_key, discord_channel_id, claimed_until, claim_token
+			)
+			SELECT $1, $2, $3, $4, NOW() + INTERVAL '2 minutes', $5
+			WHERE EXISTS (
+				SELECT 1 FROM free_game_delivery
+				WHERE store_name = $1 AND store_link = $2 AND promotion_key = $3
+					AND discord_channel_id = $4
+			) OR NOT EXISTS (
+				SELECT 1 FROM free_game_delivery
+				WHERE store_name = $1 AND store_link = $2 AND promotion_key = 'legacy'
+					AND discord_channel_id = $4 AND delivered_at >= NOW() - INTERVAL '30 days'
+			)
+			ON CONFLICT (store_name, store_link, promotion_key, discord_channel_id) DO UPDATE
+			SET claimed_until = EXCLUDED.claimed_until, claim_token = EXCLUDED.claim_token
+			WHERE (
+				free_game_delivery.delivered_at IS NULL
+				OR ($3 = 'undated' AND free_game_delivery.delivered_at < NOW() - INTERVAL '30 days')
+			) AND (free_game_delivery.claimed_until IS NULL OR free_game_delivery.claimed_until <= NOW())
+			RETURNING claim_token;
 		"""
-		thirty_days_ago = datetime.now() - timedelta(days=30)
-		result = await self.bot.db.pool.fetchrow(game_in_history_stmt, game.title, game.platform.name, thirty_days_ago)
-		return result is not None
-
-	async def _add_game_to_history(self, game: Game):
-		game_insert_stmt = """
-			INSERT INTO free_game_history (title, start_date, end_date, store_name, store_link)
-			VALUES ($1, $2, $3, $4, $5)
-			ON CONFLICT DO NOTHING;
-		"""
-		await self.bot.db.pool.execute(
-			game_insert_stmt, game.title, game.start_date, game.end_date, game.platform.name, game.store_link
+		return await self.bot.db.pool.fetchval(
+			claim_stmt, game.platform.name, game.store_link, game.promotion_key, channel_id, uuid4()
 		)
+
+	async def _deliver_free_game(self, game: Game, channel_id: int, send, embed: discord.Embed) -> bool:
+		token = await self._claim_delivery(game, channel_id)
+		if token is None:
+			return False
+
+		delivery_key = (game.platform.name, game.store_link, game.promotion_key, channel_id, token)
+		acknowledged = False
+		try:
+			async with asyncio.timeout(20):
+				await send(embed=embed)
+			ack_stmt = """
+				UPDATE free_game_delivery
+				SET delivered_at = NOW(), claimed_until = NULL, claim_token = NULL
+				WHERE store_name = $1 AND store_link = $2 AND promotion_key = $3
+					AND discord_channel_id = $4 AND claim_token = $5
+				RETURNING 1;
+			"""
+			acknowledged = await self.bot.db.pool.fetchval(ack_stmt, *delivery_key) is not None
+			if not acknowledged:
+				raise RuntimeError("Free game delivery lease was lost before acknowledgement.")
+			return True
+		finally:
+			if not acknowledged:
+				# Discord may have accepted the message even if send/ack failed.
+				# Retrying is deliberately at-least-once rather than losing a delivery.
+				release_stmt = """
+					UPDATE free_game_delivery
+					SET claimed_until = NULL, claim_token = NULL
+					WHERE store_name = $1 AND store_link = $2 AND promotion_key = $3
+						AND discord_channel_id = $4 AND claim_token = $5;
+				"""
+				try:
+					await self.bot.db.pool.execute(release_stmt, *delivery_key)
+				except Exception:
+					logger.exception("Failed to release free game lease for channel %s; it will expire.", channel_id)
 
 	@commands.hybrid_group(aliases=["fg"], usage="freegames [settings|send]")
 	@commands.cooldown(3, 30)
@@ -151,6 +189,8 @@ class FreeGames(commands.Cog):
 	@freegames.command()
 	@commands.cooldown(2, 30)
 	async def send(self, ctx: commands.Context, platform: str = None):
+		await ctx.defer()
+		await self.bot.db.prepare_command_context(ctx.author, ctx.guild, ctx.channel)
 		all_platforms: list[type[Platform]] = Platform.__subclasses__()
 		if platform:
 			all_platforms = [p for p in all_platforms if p.name == platform]
@@ -158,6 +198,8 @@ class FreeGames(commands.Cog):
 		logger.info(f"Sending free games for platforms: {[p.name for p in all_platforms]}")
 
 		total_free_games_count = 0
+		total_sent_messages = 0
+		delivery_failed = False
 		for platform_cls in all_platforms:
 			current_free_games: list[Game] = await platform_cls.get_free_games()
 			logger.info(f"  {platform_cls.name}: found {len(current_free_games)} free games")
@@ -166,13 +208,19 @@ class FreeGames(commands.Cog):
 			for game in current_free_games:
 				try:
 					embed = self._create_game_embed(game)
-					await ctx.send(embed=embed)
-				except Exception as ex:
-					logger.error(f"Fail while sending free game: {ex}")
+					total_sent_messages += await self._deliver_free_game(game, ctx.channel.id, ctx.send, embed)
+				except Exception:
+					delivery_failed = True
+					logger.exception("Failed to send free game %s.", game.title)
 
-		if total_free_games_count == 0:
+		if total_sent_messages == 0:
 			embed = discord.Embed(color=discord.Colour.dark_embed())
-			embed.description = "Could not find any free games at the moment."
+			if total_free_games_count == 0:
+				embed.description = "Could not find any free games at the moment."
+			elif delivery_failed:
+				embed.description = "Could not send free games at the moment. Please try again later."
+			else:
+				embed.description = "Current free games have already been sent to this channel or are being delivered."
 			await ctx.send(embed=embed)
 
 	def _create_game_embed(self, game: Game) -> discord.Embed:
@@ -296,22 +344,22 @@ class ChannelsSelector(discord.ui.Select):
 			)
 
 		else:
-			await bot.db._insert_server_channel(channel)
+			async with bot.db.pool.acquire(timeout=5) as connection:
+				async with connection.transaction():
+					await bot.db.upsert_channel(channel, connection=connection)
+					fg_stmt = """
+						INSERT INTO free_games_channel (discord_server_id, discord_channel_id) VALUES ($1, $2)
+						ON CONFLICT (discord_server_id) DO UPDATE SET discord_channel_id = $2
+						RETURNING id;
+					"""
+					fg_id = await connection.fetchval(fg_stmt, interaction.guild.id, channel.id)
 
-			fg_stmt = """
-				INSERT INTO free_games_channel (discord_server_id, discord_channel_id) VALUES ($1, $2)
-				ON CONFLICT (discord_server_id) DO UPDATE SET discord_channel_id = $2
-				RETURNING id;
-			"""
-			result = await bot.db.pool.fetch(fg_stmt, interaction.guild.id, channel.id)
-			fg_id = int(result[0]["id"])
-
-			fg_settings_stmt = """
-				INSERT INTO store_options (free_games_channel_id, store_name) VALUES ($1, $2)
-				ON CONFLICT (free_games_channel_id, store_name) DO NOTHING;
-			"""
-			for store_name in STORES:
-				await bot.db.pool.execute(fg_settings_stmt, fg_id, store_name)
+					fg_settings_stmt = """
+						INSERT INTO store_options (free_games_channel_id, store_name) VALUES ($1, $2)
+						ON CONFLICT (free_games_channel_id, store_name) DO NOTHING;
+					"""
+					for store_name in STORES:
+						await connection.execute(fg_settings_stmt, fg_id, store_name)
 
 		self.options = await _create_channels_select_options(self.view.ctx)
 		return await interaction.response.edit_message(embed=embed, view=self.view)

@@ -4,7 +4,8 @@ import asyncio
 import json
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import aiohttp
 
@@ -16,6 +17,7 @@ STEAM_SEARCH_URL = "https://store.steampowered.com/search/results/"
 STEAM_APPDETAILS_URL = "https://store.steampowered.com/api/appdetails"
 STEAM_STORE_URL = "https://store.steampowered.com/app"
 STEAM_SEMAPHORE = asyncio.Semaphore(5)
+STEAM_TIMEZONE = ZoneInfo("America/Los_Angeles")
 
 END_DATE_RE = re.compile(
 	r'class="game_purchase_discount_quantity[^"]*"[^>]*>\s*Free to keep when you get it before\s+(.+?)\s*\.',
@@ -26,7 +28,7 @@ END_DATE_RE = re.compile(
 class SteamGame(Game):
 	def __init__(self, app_id: str, app_details: dict, end_date: datetime | None = None) -> None:
 		self.title: str = app_details["name"]
-		self.start_date: datetime = datetime.now()
+		self.start_date: datetime | None = None
 		self.end_date: datetime | None = end_date
 		price_overview = app_details.get("price_overview", {})
 		initial_cents = price_overview.get("initial", 0)
@@ -143,7 +145,7 @@ class Steam(Platform):
 	async def _fetch_store_page(app_id: str, session: aiohttp.ClientSession) -> tuple[str, str]:
 		async with STEAM_SEMAPHORE:
 			try:
-				async with session.get(f"{STEAM_STORE_URL}/{app_id}/") as response:
+				async with session.get(f"{STEAM_STORE_URL}/{app_id}/", params={"l": "english", "cc": "us"}) as response:
 					html = await response.text()
 					return app_id, html
 			except Exception as ex:
@@ -174,18 +176,23 @@ class Steam(Platform):
 		date_str = re.sub(r"(\d)(am|pm)", r"\1 \2", date_str, flags=re.IGNORECASE)
 		date_str = date_str.upper()
 
-		now = datetime.now()
-		try:
-			parsed = datetime.strptime(date_str, "%d %b %I:%M %p")
-		except ValueError:
+		# Steam's server-rendered English deadline is Pacific wall time, without a year.
+		# Choose the nearest year so December/January polls agree without moving an
+		# expired promotion into next year as soon as its deadline passes.
+		now = datetime.now(STEAM_TIMEZONE)
+		candidates = []
+		for year in (now.year - 1, now.year, now.year + 1):
+			for date_format in ("%b %d %I:%M %p %Y", "%d %b %I:%M %p %Y"):
+				try:
+					parsed = datetime.strptime(f"{date_str} {year}", date_format)
+				except ValueError:
+					continue
+				candidates.append(parsed.replace(tzinfo=STEAM_TIMEZONE))
+				break
+		if not candidates:
 			logger.debug(f"Could not parse Steam end date: {date_str!r}")
 			return None
-
-		parsed = parsed.replace(year=now.year)
-		if parsed < now - timedelta(days=1):
-			parsed = parsed.replace(year=now.year + 1)
-
-		return parsed
+		return min(candidates, key=lambda date: abs(date - now)).astimezone(UTC)
 
 	@staticmethod
 	def _is_free_promo(details: dict) -> bool:
