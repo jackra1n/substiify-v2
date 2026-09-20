@@ -1,6 +1,7 @@
 import datetime
 import logging
 
+import aiohttp
 import discord
 import wavelink
 from discord.app_commands import errors as slash_errors
@@ -99,7 +100,7 @@ class Substiify(commands.Bot):
 			pass
 
 	async def on_command_error(self, ctx: commands.Context, error) -> None:
-		if hasattr(error, "is_handled"):
+		if getattr(error, "is_handled", False):
 			return
 		if isinstance(error, (commands.CommandNotFound, slash_errors.CommandNotFound)):
 			logger.warning(f"Command not found: [{ctx.author}] -> {ctx.message.content}")
@@ -116,8 +117,30 @@ class Substiify(commands.Bot):
 			)
 			await ctx.reply(embed=embed)
 			return
-		logger.error(f"[{ctx.command.qualified_name}] failed for [{ctx.author}] <-> [{error}]", exc_info=error)
-		await self._save_command_error(ctx, error)
+		original = error
+		while isinstance(
+			original, (commands.CommandInvokeError, commands.HybridCommandError, slash_errors.CommandInvokeError)
+		):
+			original = original.original
+		service_error = original
+		while service_error.__cause__ is not None:
+			service_error = service_error.__cause__
+		service_failure = isinstance(
+			original, (wavelink.WavelinkException, aiohttp.ClientConnectionError, TimeoutError)
+		) or isinstance(service_error, (wavelink.WavelinkException, aiohttp.ClientConnectionError, TimeoutError))
+		reported_error = service_error if service_failure else original
+		if service_failure:
+			logger.warning(
+				"[%s] failed for [%s]: %s: %s",
+				ctx.command.qualified_name,
+				ctx.author,
+				type(reported_error).__name__,
+				str(reported_error).partition("\n")[0],
+			)
+		else:
+			logger.error("[%s] failed for [%s]", ctx.command.qualified_name, ctx.author, exc_info=original)
+		if isinstance(error, (commands.CheckFailure, commands.UserInputError)):
+			await self._save_command_error(ctx, original)
 		if isinstance(error, commands.CheckFailure):
 			embed = discord.Embed(
 				title="Insufficient permissions",
@@ -146,11 +169,31 @@ class Substiify(commands.Bot):
 			await ctx.reply(embed=embed)
 			return
 
+		is_music = ctx.command.cog is not None and ctx.command.cog.qualified_name == "Music"
+		if service_failure and is_music:
+			description = (
+				"The music service couldn't complete that request. Please try again shortly or try another track."
+			)
+		elif service_failure:
+			description = "A service is temporarily unavailable. Please try again shortly."
+		else:
+			description = "I couldn't complete that command. Please try again later."
+		try:
+			await ctx.send(
+				embed=discord.Embed(
+					title="Music Error" if is_music else "Command failed",
+					description=description,
+					color=discord.Color.red(),
+				)
+			)
+		except (discord.HTTPException, aiohttp.ClientConnectionError, TimeoutError) as send_error:
+			logger.warning("Could not send command failure response: %s: %s", type(send_error).__name__, send_error)
+
+		await self._save_command_error(ctx, reported_error)
+
 		try:
 			await ctx.message.add_reaction("❌")
-		except discord.errors.NotFound:
-			pass
-		except discord.errors.Forbidden:
+		except discord.HTTPException, aiohttp.ClientConnectionError, TimeoutError:
 			pass
 
 		ERRORS_CHANNEL_ID = 1219407043186659479
@@ -158,15 +201,14 @@ class Substiify(commands.Bot):
 			error_msg = f"Error in {ctx.guild.name} ({ctx.guild.id}) by {ctx.author} -> {ctx.command.qualified_name}"
 		else:
 			error_msg = f"Error in DMs by {ctx.author} -> {ctx.command.qualified_name}"
-		embed = discord.Embed(title=error_msg, description=f"```{error}```", color=discord.Color.red())
+		detail = f"{type(reported_error).__name__}: {reported_error}"
+		embed = discord.Embed(title=error_msg[:256], description=detail[:4000], color=discord.Color.red())
 		channel = self.get_channel(ERRORS_CHANNEL_ID)
 		if isinstance(channel, discord.abc.Messageable):
 			try:
-				await channel.send(embed=embed)
-			except discord.Forbidden:
-				pass
-			except discord.HTTPException:
-				pass
+				await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+			except (discord.HTTPException, aiohttp.ClientConnectionError, TimeoutError) as send_error:
+				logger.warning("Could not send command error report: %s: %s", type(send_error).__name__, send_error)
 
 	async def _save_command_error(self, ctx: commands.Context, error: Exception) -> None:
 		command = ctx.command

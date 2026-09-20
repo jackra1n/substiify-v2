@@ -1,10 +1,57 @@
+import errno
 import logging
 import os
+from copy import copy
 from logging.handlers import RotatingFileHandler
+
+import aiohttp
+
+
+_RETRY_MESSAGES = {
+	"discord.client": "Attempting a reconnect in %.2fs",
+	"discord.ext.tasks": "Handling exception in internal background task %s. Retrying in %.2fs",
+}
+_CONNECTION_ERRNOS = {
+	errno.ECONNABORTED,
+	errno.ECONNREFUSED,
+	errno.ECONNRESET,
+	errno.EHOSTUNREACH,
+	errno.ENETDOWN,
+	errno.ENETUNREACH,
+	errno.EPIPE,
+	errno.ETIMEDOUT,
+}
+
+
+def _is_expected_retry(record: logging.LogRecord) -> bool:
+	if not record.exc_info or record.name not in _RETRY_MESSAGES or record.msg != _RETRY_MESSAGES[record.name]:
+		return False
+
+	error = record.exc_info[1]
+	if isinstance(
+		error,
+		(
+			TimeoutError,
+			aiohttp.ClientConnectorDNSError,
+			ConnectionResetError,
+			ConnectionAbortedError,
+			ConnectionRefusedError,
+			BrokenPipeError,
+			aiohttp.ServerDisconnectedError,
+		),
+	):
+		return True
+	if isinstance(error, aiohttp.WSServerHandshakeError):
+		return error.status in (502, 503, 504)
+	# Exact types keep TLS/proxy errors and arbitrary OSError subclasses diagnostic.
+	return (
+		type(error) in (OSError, aiohttp.ClientOSError, aiohttp.ClientConnectorError)
+		and error.errno in _CONNECTION_ERRNOS
+	)
 
 
 class CustomLogFormatter(logging.Formatter):
-	"""Logging Formatter to add colors and count warning / errors"""
+	"""Colored console logs with concise reasons for known network retries."""
 
 	dark_grey = "\033[30;1m"
 	red = "\033[1;31m"
@@ -31,6 +78,20 @@ class CustomLogFormatter(logging.Formatter):
 	}
 
 	def format(self, record):
+		if _is_expected_retry(record):
+			# Other handlers must receive the original exception and traceback,
+			# including when a file handler has already populated exc_text.
+			record = copy(record)
+			error = record.exc_info[1]
+			reason = " ".join(str(error).split())
+			if not reason:
+				reason = "connection timed out" if isinstance(error, TimeoutError) else "connection interrupted"
+			record.msg = f"{record.getMessage()}: {type(error).__name__}: {reason}"
+			record.args = ()
+			record.exc_info = None
+			record.exc_text = None
+			record.stack_info = None
+
 		log_fmt = self.FORMATS.get(record.levelno)
 		formatter = logging.Formatter(log_fmt, self.dt_fmt, style="{")
 		return formatter.format(record)

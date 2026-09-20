@@ -1,6 +1,7 @@
 import datetime
 import logging
 
+import aiohttp
 import discord
 import wavelink
 from discord import ButtonStyle, Interaction, ui
@@ -13,6 +14,26 @@ import utils
 logger = logging.getLogger(__name__)
 
 EMBED_COLOR = core.constants.CYAN_COLOR
+ERRORS_CHANNEL_ID = 1219407043186659479
+
+
+async def _send_music_error(channel, embed: discord.Embed):
+	if not isinstance(channel, discord.abc.Messageable):
+		return
+	try:
+		await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+	except (discord.HTTPException, aiohttp.ClientConnectionError, TimeoutError) as error:
+		logger.warning("Could not deliver music error notice (%s)", type(error).__name__)
+
+
+async def _report_music_error(bot, channel, embed: discord.Embed, detail: str):
+	admin_channel = bot.get_channel(ERRORS_CHANNEL_ID)
+	if admin_channel is None or getattr(channel, "id", None) == admin_channel.id:
+		return
+	report = embed.copy()
+	report.add_field(name="Channel", value=str(getattr(channel, "id", "Unavailable")), inline=False)
+	report.add_field(name="Details", value=discord.utils.escape_markdown(detail)[:1024] or "Unavailable", inline=False)
+	await _send_music_error(admin_channel, report)
 
 
 class Music(commands.Cog):
@@ -26,12 +47,15 @@ class Music(commands.Cog):
 		return embed
 
 	async def cog_command_error(self, ctx, error):
-		if isinstance(error, commands.MissingRequiredArgument):
-			embed = self._create_error_embed("Please provide a search query or URL.", title="Missing Query")
-			await ctx.reply(embed=embed)
-		if isinstance(error, MusicError):
-			embed = self._create_error_embed(str(error))
-			await ctx.send(embed=embed)
+		original = error
+		while getattr(original, "original", None) is not None:
+			original = original.original
+		if not isinstance(original, MusicError):
+			return
+		if original.__cause__ is not None:
+			return
+		embed = self._create_error_embed(str(original))
+		await ctx.send(embed=embed)
 		error.is_handled = True
 
 	@commands.Cog.listener()
@@ -55,6 +79,33 @@ class Music(commands.Cog):
 		player: wavelink.Player = payload.player
 		await self._update_controller(player)
 
+	@commands.Cog.listener()
+	async def on_wavelink_track_exception(self, payload: wavelink.TrackExceptionEventPayload):
+		await self._notify_playback_failure(payload, stuck=False)
+
+	@commands.Cog.listener()
+	async def on_wavelink_track_stuck(self, payload: wavelink.TrackStuckEventPayload):
+		await self._notify_playback_failure(payload, stuck=True)
+
+	async def _notify_playback_failure(self, payload, *, stuck: bool):
+		player = payload.player
+		channel = getattr(player, "text_channel", None)
+		failure = "stalled" if stuck else "failed"
+		logger.warning(
+			"Music playback %s (guild=%s, track=%s)",
+			failure,
+			getattr(getattr(player, "guild", None), "id", None),
+			payload.track.identifier,
+		)
+		embed = self._create_error_embed(
+			f"Playback {failure}. Please try skipping this track or playing a different search result. "
+			"If this keeps happening, try again later.",
+			title="Playback Error",
+		)
+		await _send_music_error(channel, embed)
+		detail = f"Stuck threshold: {payload.threshold} ms" if stuck else str(payload.exception)
+		await _report_music_error(self.bot, channel, embed, detail)
+
 	async def _update_controller(self, player: wavelink.Player):
 		if not hasattr(player, "controller_message"):
 			return
@@ -73,22 +124,17 @@ class Music(commands.Cog):
 
 		try:
 			return await wavelink.Playable.search(query)
-		except wavelink.LavalinkLoadException as error:
-			raise TrackLoadFailed(detail=error.error, is_spotify=is_spotify) from error
-		except wavelink.LavalinkException as error:
-			raise TrackLoadFailed(
-				detail=f"Lavalink returned an error ({error.status}).", is_spotify=is_spotify
-			) from error
 		except wavelink.WavelinkException as error:
 			raise TrackLoadFailed(is_spotify=is_spotify) from error
 
 	async def _connect_player(self, ctx: commands.Context) -> wavelink.Player:
 		player: wavelink.Player | None = ctx.voice_client
-		if player:
-			return player
-
-		player = await ctx.author.voice.channel.connect(cls=wavelink.Player)
-		await player.set_volume(65)
+		if player is None:
+			player = await ctx.author.voice.channel.connect(cls=wavelink.Player)
+			player.text_channel = ctx.channel
+			await player.set_volume(65)
+		else:
+			player.text_channel = ctx.channel
 		return player
 
 	def _is_spotify_url(self, value: str) -> bool:
@@ -111,13 +157,17 @@ class Music(commands.Cog):
 
 		if guild_check:
 			await self.ensure_voice(ctx)
+			if ctx.voice_client is not None:
+				ctx.voice_client.text_channel = ctx.channel
 
 		return guild_check
 
 	async def ensure_voice(self, ctx: commands.Context):
 		"""This check ensures that the bot and command author are in the same voicechannel."""
-		if wavelink.Pool.nodes is None:
-			raise NoNodeAccessible()
+		try:
+			wavelink.Pool.get_node()
+		except wavelink.InvalidNodeException as error:
+			raise NoNodeAccessible() from error
 
 		if ctx.command.name in ["players", "cleanup", "lavalink"]:
 			return True
@@ -154,6 +204,8 @@ class Music(commands.Cog):
 		`<<play All girls are the same Juice WRLD` - searches for a song and queues it
 		`<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
 		"""
+		if ctx.interaction:
+			await ctx.defer()
 		search = search.strip("<>")
 
 		tracks: wavelink.Search = await self._search_tracks(search)
@@ -335,12 +387,36 @@ class MusicController(ui.View):
 				f"⚠️ {interaction.user.mention} **You aren't the author of this embed**", ephemeral=True
 			)
 			return False
+		if self.player is None or not self.player.connected:
+			raise NoPlayerFound()
+		self.player.text_channel = interaction.channel
+		await interaction.response.defer()
 		return True
+
+	async def on_error(self, interaction: Interaction, error: Exception, item: ui.Item):
+		if isinstance(error, MusicError):
+			description = str(error)
+		else:
+			description = "The music control failed. Please try again, or use the play command with a different track."
+			if isinstance(error, (wavelink.WavelinkException, aiohttp.ClientConnectionError, TimeoutError)):
+				logger.warning("Music controller failed (%s)", type(error).__name__)
+			else:
+				logger.error("Unexpected music controller failure", exc_info=(type(error), error, error.__traceback__))
+		embed = discord.Embed(title="Music Error", description=description, color=discord.Color.red())
+		try:
+			if interaction.response.is_done():
+				await interaction.followup.send(embed=embed, ephemeral=True)
+			else:
+				await interaction.response.send_message(embed=embed, ephemeral=True)
+		except (discord.HTTPException, aiohttp.ClientConnectionError, TimeoutError) as send_error:
+			logger.warning("Could not deliver music controller error (%s)", type(send_error).__name__)
+		if not isinstance(error, MusicError):
+			await _report_music_error(self.ctx.bot, interaction.channel, embed, f"{type(error).__name__}: {error}")
 
 	@ui.button(label="Stop", emoji="⏹️", row=2, style=ButtonStyle.danger)
 	async def leave_button(self, interaction: discord.Interaction, button: ui.Button):
 		await self.player.disconnect()
-		await interaction.response.edit_message(view=None)
+		await interaction.edit_original_response(view=None)
 		if hasattr(self.player, "controller_message"):
 			await self.player.controller_message.delete()
 		embed = discord.Embed(title="⏹️ Disconnected", color=EMBED_COLOR)
@@ -353,13 +429,12 @@ class MusicController(ui.View):
 			await self.player._do_recommendation()
 		else:
 			await self.player.skip()
-		await interaction.response.defer()
 
 	@ui.button(label="Shuffle", emoji="🔀", row=2, style=ButtonStyle.secondary)
 	async def shuffle_button(self, interaction: discord.Interaction, button: ui.Button):
 		self.player.queue.shuffle()
 		embed = await create_controller_embed(self.player)
-		await interaction.response.edit_message(embed=embed)
+		await interaction.edit_original_response(embed=embed)
 
 
 class LoopSelect(ui.Select):
@@ -380,7 +455,6 @@ class LoopSelect(ui.Select):
 	async def callback(self, interaction: discord.Interaction):
 		value = self.values[0]
 		self.player.queue.mode = wavelink.QueueMode[value]
-		await interaction.response.defer()
 
 
 class RadioButton(ui.Button):
@@ -398,7 +472,7 @@ class RadioButton(ui.Button):
 		else:
 			self.player.autoplay = wavelink.AutoPlayMode.partial
 			self.style = ButtonStyle.secondary
-		await interaction.response.edit_message(view=self.view)
+		await interaction.edit_original_response(view=self.view)
 
 
 async def create_controller_embed(player: wavelink.Player):
@@ -455,12 +529,10 @@ class SpotifyUnsupported(MusicError):
 
 
 class TrackLoadFailed(MusicError):
-	def __init__(self, detail: str | None = None, *, is_spotify: bool = False):
+	def __init__(self, *, is_spotify: bool = False):
 		message = "I couldn't load that track. Please try a search query, YouTube link, or SoundCloud link instead."
 		if is_spotify:
 			message = "Spotify links are not working right now. Please use a search query, YouTube link, or SoundCloud link instead."
-		if detail:
-			message = f"{message}\n`{detail}`"
 		super().__init__(message)
 
 
