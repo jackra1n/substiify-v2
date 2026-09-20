@@ -1,7 +1,9 @@
+import asyncio
 import datetime
 import logging
 
 import aiohttp
+import asyncpg
 import discord
 import wavelink
 from discord.app_commands import errors as slash_errors
@@ -12,8 +14,24 @@ from database import Database
 
 logger = logging.getLogger(__name__)
 
+_TRANSIENT_DATABASE_ERRORS = (
+	TimeoutError,
+	OSError,
+	asyncpg.PostgresConnectionError,
+	asyncpg.CannotConnectNowError,
+	asyncpg.TooManyConnectionsError,
+	asyncpg.QueryCanceledError,
+	asyncpg.LockNotAvailableError,
+)
+
+
+class _CommandPreparationError(commands.CommandInvokeError):
+	"""Database preparation failed before the command callback could run."""
+
 
 class Substiify(commands.Bot):
+	_PREPARATION_TIMEOUT = 1.5
+
 	def __init__(self, *, database: Database) -> None:
 		self.db = database
 		self.version = core.__version__
@@ -31,7 +49,22 @@ class Substiify(commands.Bot):
 		self.before_invoke(self._prepare_command_context)
 
 	async def _prepare_command_context(self, ctx: commands.Context) -> None:
-		await self.db.prepare_command_context(ctx.author, ctx.guild, ctx.channel)
+		# An initial response fixes visibility and can only be used once. Leave it
+		# to the callback (including modal responses), but bound unacknowledged
+		# interactions' database work so failures can still be answered in time.
+		timeout = None
+		if ctx.interaction is not None and not ctx.interaction.response.is_done():
+			# Checks/converters may already have consumed part of Discord's three
+			# seconds. Reserve a second for sending the failure response.
+			elapsed = (discord.utils.utcnow() - ctx.interaction.created_at).total_seconds()
+			timeout = max(0.0, min(self._PREPARATION_TIMEOUT, 2.0 - elapsed))
+		try:
+			async with asyncio.timeout(timeout):
+				await self.db.prepare_command_context(ctx.author, ctx.guild, ctx.channel)
+		except commands.CommandError:
+			raise
+		except Exception as error:
+			raise _CommandPreparationError(error) from error
 
 	async def setup_hook(self) -> None:
 		await self.load_extension("core.events")
@@ -117,17 +150,21 @@ class Substiify(commands.Bot):
 			await ctx.reply(embed=embed)
 			return
 		original = error
+		preparation_failed = False
 		while isinstance(
 			original, (commands.CommandInvokeError, commands.HybridCommandError, slash_errors.CommandInvokeError)
 		):
+			preparation_failed |= isinstance(original, _CommandPreparationError)
 			original = original.original
-		service_error = original
-		while service_error.__cause__ is not None:
-			service_error = service_error.__cause__
-		service_failure = isinstance(
-			original, (wavelink.WavelinkException, aiohttp.ClientConnectionError, TimeoutError)
-		) or isinstance(service_error, (wavelink.WavelinkException, aiohttp.ClientConnectionError, TimeoutError))
-		reported_error = service_error if service_failure else original
+		service_errors = (wavelink.WavelinkException, aiohttp.ClientConnectionError, *_TRANSIENT_DATABASE_ERRORS)
+		reported_error = original
+		service_failure = False
+		cause = original
+		while cause is not None:
+			if isinstance(cause, service_errors):
+				reported_error = cause
+				service_failure = True
+			cause = cause.__cause__
 		if service_failure:
 			logger.warning(
 				"[%s] failed for [%s]: %s: %s",
@@ -138,8 +175,6 @@ class Substiify(commands.Bot):
 			)
 		else:
 			logger.error("[%s] failed for [%s]", ctx.command.qualified_name, ctx.author, exc_info=original)
-		if isinstance(error, (commands.CheckFailure, commands.UserInputError)):
-			await self._save_command_error(ctx, original)
 		if isinstance(error, commands.CheckFailure):
 			embed = discord.Embed(
 				title="Insufficient permissions",
@@ -147,6 +182,7 @@ class Substiify(commands.Bot):
 				color=discord.Color.red(),
 			)
 			await ctx.reply(embed=embed)
+			await self._save_command_error(ctx, original)
 			return
 		if isinstance(error, commands.MissingRequiredArgument):
 			param_obj = getattr(error, "param", None)
@@ -160,12 +196,14 @@ class Substiify(commands.Bot):
 			help_hint = f"Use '{core.config.BOT_PREFIX}help {ctx.command.qualified_name}' to learn more."
 			embed.set_footer(text=help_hint)
 			await ctx.reply(embed=embed)
+			await self._save_command_error(ctx, original)
 			return
 		if isinstance(error, (commands.BadArgument, commands.UserInputError)):
 			embed = discord.Embed(title="Invalid input", description=f"{error}", color=discord.Color.red())
 			help_hint = f"Use '{core.config.BOT_PREFIX}help {ctx.command.qualified_name}' to learn more."
 			embed.set_footer(text=help_hint)
 			await ctx.reply(embed=embed)
+			await self._save_command_error(ctx, original)
 			return
 
 		is_music = ctx.command.cog is not None and ctx.command.cog.qualified_name == "Music"
@@ -188,7 +226,10 @@ class Substiify(commands.Bot):
 		except (discord.HTTPException, aiohttp.ClientConnectionError, TimeoutError) as send_error:
 			logger.warning("Could not send command failure response: %s: %s", type(send_error).__name__, send_error)
 
-		await self._save_command_error(ctx, reported_error)
+		# Retrying preparation solely to log its known outage only delays reporting.
+		# Unexpected SQL/schema failures still retain their normal incident trail.
+		if not (preparation_failed and service_failure):
+			await self._save_command_error(ctx, reported_error)
 
 		try:
 			await ctx.message.add_reaction("❌")
