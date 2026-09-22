@@ -38,7 +38,7 @@ STORES: dict[str, type[Platform]] = {
 class FreeGames(commands.Cog):
 	COG_EMOJI = "🕹️"
 
-	def __init__(self, bot: core.Substiify):
+	def __init__(self, bot: core.Substiify) -> None:
 		self.bot = bot
 		self.check_free_games.add_exception_type(*_RETRYABLE_ERRORS)
 
@@ -224,7 +224,7 @@ class FreeGames(commands.Cog):
 
 	@freegames.command()
 	@commands.cooldown(2, 30)
-	async def send(self, ctx: commands.Context, platform: str = None):
+	async def send(self, ctx: commands.Context, platform: str | None = None) -> None:
 		await ctx.defer()
 		await self.bot.db.prepare_command_context(ctx.author, ctx.guild, ctx.channel)
 		all_platforms: list[type[Platform]] = list(STORES.values())
@@ -353,7 +353,7 @@ async def _create_channels_select_options(ctx: commands.Context) -> list[discord
 
 
 class SettingsView(discord.ui.View):
-	def __init__(self, ctx: commands.Context, channel_options: list[discord.SelectOption] = None):
+	def __init__(self, ctx: commands.Context, channel_options: list[discord.SelectOption] | None = None) -> None:
 		self.ctx = ctx
 		super().__init__()
 		self.add_item(ChannelsSelector(channel_options=channel_options))
@@ -367,7 +367,7 @@ class SettingsView(discord.ui.View):
 
 
 class ChannelsSelector(discord.ui.Select):
-	def __init__(self, channel_options: list[discord.SelectOption] = None):
+	def __init__(self, channel_options: list[discord.SelectOption] | None = None) -> None:
 		options = channel_options or []
 		super().__init__(placeholder="Select a channel", options=options)
 

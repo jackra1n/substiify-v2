@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 import aiohttp
 
@@ -11,17 +12,17 @@ logger = logging.getLogger(__name__)
 
 
 class EpicGamesGame(Game):
-	def __init__(self, game_info_json: str) -> None:
+	def __init__(self, game_info_json: dict[str, Any]) -> None:
 		self.title: str = game_info_json["title"]
 		self.start_date: datetime = self._create_start_date(game_info_json)
 		self.end_date: datetime = self._create_end_date(game_info_json)
 		self.original_price: str = game_info_json["price"]["totalPrice"]["fmtPrice"]["originalPrice"]
-		self.discount_price: str = self._create_discount_price(game_info_json["price"])
+		self.discount_price: str | int = self._create_discount_price(game_info_json["price"])
 		self.cover_image_url: str = self._create_thumbnail(game_info_json["keyImages"])
 		self.store_link: str = self._create_store_link(game_info_json)
-		self.platform: Platform = EpicGames
+		self.platform: type[Platform] = EpicGames
 
-	def _create_store_link(self, game_info_json: str) -> str:
+	def _create_store_link(self, game_info_json: dict[str, Any]) -> str:
 		offer_mappings = game_info_json["offerMappings"]
 		page_slug = None
 		if offer_mappings:
@@ -30,6 +31,8 @@ class EpicGamesGame(Game):
 			page_slug = game_info_json["catalogNs"]["mappings"][0]["pageSlug"]
 		if page_slug is None and game_info_json["productSlug"]:
 			page_slug = game_info_json["productSlug"]
+		if page_slug is None:
+			raise ValueError("Epic game has no store page slug")
 		if "bundles" in [category["path"] for category in game_info_json["categories"]]:
 			page_slug = "bundles/" + page_slug
 		else:
@@ -37,21 +40,21 @@ class EpicGamesGame(Game):
 
 		return f"https://www.epicgames.com/store/en-US/{page_slug}"
 
-	def _create_start_date(self, game_info_json: str) -> datetime:
+	def _create_start_date(self, game_info_json: dict[str, Any]) -> datetime:
 		return self._parse_date(game_info_json, "startDate")
 
-	def _create_end_date(self, game_info_json: str) -> datetime:
+	def _create_end_date(self, game_info_json: dict[str, Any]) -> datetime:
 		return self._parse_date(game_info_json, "endDate")
 
-	def _parse_date(self, game_info_json: str, date_field: str) -> datetime:
+	def _parse_date(self, game_info_json: dict[str, Any], date_field: str) -> datetime:
 		date_str = game_info_json["promotions"]["promotionalOffers"][0]["promotionalOffers"][0][date_field]
 		return datetime.fromisoformat(date_str).astimezone(UTC)
 
-	def _create_discount_price(self, game_price_str: str) -> str:
-		discount_price = game_price_str["totalPrice"]["discountPrice"]
+	def _create_discount_price(self, game_price: dict[str, Any]) -> str | int:
+		discount_price = game_price["totalPrice"]["discountPrice"]
 		return "Free" if discount_price == 0 else discount_price
 
-	def _create_thumbnail(self, key_images: str) -> str:
+	def _create_thumbnail(self, key_images: list[dict[str, Any]]) -> str:
 		for image in key_images:
 			if "OfferImageWide" in image["type"]:
 				return image["url"]

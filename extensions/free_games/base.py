@@ -4,15 +4,15 @@ from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 
 
-class Game(ABC):
+class Game:
 	title: str
 	start_date: datetime | None
 	end_date: datetime | None
 	original_price: str
-	discount_price: str
+	discount_price: str | int
 	cover_image_url: str
 	store_link: str
-	platform: Platform
+	platform: type[Platform]
 
 	@property
 	def promotion_key(self) -> str:
@@ -31,9 +31,4 @@ class Platform(ABC):
 	@staticmethod
 	@abstractmethod
 	async def get_free_games() -> list[Game]:
-		pass
-
-	@staticmethod
-	@abstractmethod
-	def _create_game(game_info_json: str) -> Game:
 		pass

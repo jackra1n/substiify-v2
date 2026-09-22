@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+from typing import Any
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
@@ -26,7 +27,7 @@ END_DATE_RE = re.compile(
 
 
 class SteamGame(Game):
-	def __init__(self, app_id: str, app_details: dict, end_date: datetime | None = None) -> None:
+	def __init__(self, app_id: str, app_details: dict[str, Any], end_date: datetime | None = None) -> None:
 		self.title: str = app_details["name"]
 		self.start_date: datetime | None = None
 		self.end_date: datetime | None = end_date
@@ -36,7 +37,7 @@ class SteamGame(Game):
 		self.discount_price: str = "Free"
 		self.cover_image_url: str = app_details.get("header_image", "")
 		self.store_link: str = f"{STEAM_STORE_URL}/{app_id}"
-		self.platform: Platform = Steam
+		self.platform: type[Platform] = Steam
 
 
 class Steam(Platform):
@@ -77,7 +78,7 @@ class Steam(Platform):
 		return current_free_games
 
 	@staticmethod
-	async def _fetch_search_results() -> list[dict]:
+	async def _fetch_search_results() -> list[dict[str, Any]]:
 		params = {"specials": "1", "maxprice": "free", "ndl": "1", "json": "1", "cc": "us"}
 		async with aiohttp.ClientSession() as session:
 			async with session.get(STEAM_SEARCH_URL, params=params) as response:
@@ -94,7 +95,7 @@ class Steam(Platform):
 				return data.get("items", [])
 
 	@staticmethod
-	def _extract_app_ids(items: list[dict]) -> list[str]:
+	def _extract_app_ids(items: list[dict[str, Any]]) -> list[str]:
 		app_ids: list[str] = []
 		for item in items:
 			logo_url = item.get("logo", "")
@@ -114,7 +115,7 @@ class Steam(Platform):
 		return None
 
 	@staticmethod
-	async def _fetch_app_details(app_id: str, session: aiohttp.ClientSession) -> tuple[str, dict | None]:
+	async def _fetch_app_details(app_id: str, session: aiohttp.ClientSession) -> tuple[str, dict[str, Any] | None]:
 		async with STEAM_SEMAPHORE:
 			async with session.get(STEAM_APPDETAILS_URL, params={"appids": app_id, "cc": "us"}) as response:
 				response.raise_for_status()
@@ -125,12 +126,12 @@ class Steam(Platform):
 				return app_id, app_data.get("data")
 
 	@staticmethod
-	async def _fetch_app_details_batch(app_ids: list[str]) -> list[tuple[str, dict]]:
-		results: list[tuple[str, dict]] = []
+	async def _fetch_app_details_batch(app_ids: list[str]) -> list[tuple[str, dict[str, Any]]]:
+		results: list[tuple[str, dict[str, Any]]] = []
 		failure: Exception | None = None
 		answered = 0
 
-		async def fetch_one(app_id: str, session: aiohttp.ClientSession) -> tuple[str, dict | None]:
+		async def fetch_one(app_id: str, session: aiohttp.ClientSession) -> tuple[str, dict[str, Any] | None]:
 			nonlocal answered, failure
 			try:
 				_, data = await Steam._fetch_app_details(app_id, session)
@@ -209,14 +210,10 @@ class Steam(Platform):
 		return min(candidates, key=lambda date: abs(date - now)).astimezone(UTC)
 
 	@staticmethod
-	def _is_free_promo(details: dict) -> bool:
+	def _is_free_promo(details: dict[str, Any]) -> bool:
 		if details.get("type") != "game":
 			return False
 		price_overview = details.get("price_overview")
 		if not price_overview:
 			return False
 		return price_overview.get("discount_percent", 0) == 100
-
-	@staticmethod
-	def _create_game(game_info_json: str) -> Game:
-		raise NotImplementedError("Steam._create_game is not used; games are created in get_free_games()")
