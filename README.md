@@ -4,46 +4,20 @@
 [![Made with Python](https://img.shields.io/badge/Made%20with-Python-ffde57.svg?longCache=true&style=flat-square&colorB=ffdf68&logo=python&logoColor=88889e)](https://www.python.org/)
 [![Powered by discord.py](https://img.shields.io/badge/Powered%20by-discord.py-blue?style=flat-square&logo=appveyor)](https://github.com/Rapptz/discord.py)
 
-
-
 ## Getting started
 
-To run the bot you'll need docker compose.
+Requires Docker with Compose.
 
-- Copy or rename `example.env` in `/` to `.env` and fill out the fields. 
-- Start the postgres container and create a database which you configured in `.env` -> `DB_NAME`
-- Start the bot with `docker compose up -d`
+1. Create a bot in the [Discord Developer Portal](https://discord.com/developers/applications), enable all three **Privileged Gateway Intents**, and invite it to your server with the `bot` and `applications.commands` scopes.
+2. Copy `example.env` to `.env`. Set `BOT_TOKEN`, `BOT_PREFIX`, `BOT_OWNER_ID` (your Discord account ID), and `DB_PASSWORD`. Keep the other database values for Compose. Channel IDs can stay blank to disable those destinations.
+3. For music, configure `LAVALINK_NODE_URL` and `LAVALINK_PASSWORD` for your Lavalink server. Otherwise, set both to empty strings.
+4. Start the bot and database:
 
-### Discord routing
+   ```sh
+   docker compose up -d
+   ```
 
-Set `BOT_OWNER_ID` in `.env` to the Discord account allowed to run owner commands. A missing or blank owner ID is rejected; there is no default or automatic application-owner discovery.
-
-These optional IDs control operational destinations:
-
-| Variable | Destination |
-| --- | --- |
-| `ERRORS_CHANNEL_ID` | Command and music error reports |
-| `EVENTS_CHANNEL_ID` | Guild join/leave notifications |
-| `SUGGESTION_CHANNEL_ID` | Suggestion submissions |
-| `BUG_CHANNEL_ID` | Bug reports |
-
-Missing or blank channel IDs disable those destinations without disabling ordinary logging or command-error persistence. There are no built-in owner or channel IDs. Disabled feedback destinations report that submissions are unavailable.
-
-`example.env` starts with all four destinations disabled. Set the owner and destination IDs for your own deployment. Invalid IDs fail at startup.
-
-## Development
-
-Increment the version in `core/VERSION`
-
-Build docker image with `docker build -t sybstiify .`
-
-### Feature extensions
-
-- `extensions/giveaways.py` owns giveaway commands, winner selection, delivery recovery, and its background worker.
-- `extensions/kasino.py` owns kasino commands, betting and settlement transactions, message rendering, and interactive views.
-- `extensions/util.py` retains general utilities; `extensions/karma.py` retains voting, posts, balances, and donations.
-
-Giveaways and Kasino load as independent cogs and appear as separate help categories. Command names and aliases are unchanged. Karma and Kasino share ordered balance-row locking through `database/karma.py`, not through each other's cogs.
+Compose uses the published release image and creates the PostgreSQL database on first start. No manual database setup is needed.
 
 ### Tests
 
