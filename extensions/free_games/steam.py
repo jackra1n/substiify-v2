@@ -79,22 +79,19 @@ class Steam(Platform):
 	@staticmethod
 	async def _fetch_search_results() -> list[dict]:
 		params = {"specials": "1", "maxprice": "free", "ndl": "1", "json": "1", "cc": "us"}
-		try:
-			async with aiohttp.ClientSession() as session:
-				async with session.get(STEAM_SEARCH_URL, params=params) as response:
-					text = await response.text()
-					try:
-						data = json.loads(text)
-					except json.JSONDecodeError:
-						logger.error(
-							f"Steam search returned non-JSON response (status {response.status}, "
-							f"content-type {response.headers.get('Content-Type')!r}): {text[:200]!r}"
-						)
-						return []
-					return data.get("items", [])
-		except Exception as ex:
-			logger.error(f"Error while fetching Steam search results: {ex}")
-			return []
+		async with aiohttp.ClientSession() as session:
+			async with session.get(STEAM_SEARCH_URL, params=params) as response:
+				response.raise_for_status()
+				text = await response.text()
+				try:
+					data = json.loads(text)
+				except json.JSONDecodeError:
+					logger.error(
+						f"Steam search returned non-JSON response (status {response.status}, "
+						f"content-type {response.headers.get('Content-Type')!r}): {text[:200]!r}"
+					)
+					raise
+				return data.get("items", [])
 
 	@staticmethod
 	def _extract_app_ids(items: list[dict]) -> list[str]:
@@ -119,26 +116,42 @@ class Steam(Platform):
 	@staticmethod
 	async def _fetch_app_details(app_id: str, session: aiohttp.ClientSession) -> tuple[str, dict | None]:
 		async with STEAM_SEMAPHORE:
-			try:
-				async with session.get(STEAM_APPDETAILS_URL, params={"appids": app_id, "cc": "us"}) as response:
-					data = json.loads(await response.text())
-					app_data = data.get(str(app_id), {})
-					if not app_data.get("success", False):
-						return app_id, None
-					return app_id, app_data.get("data")
-			except Exception as ex:
-				logger.error(f"Error fetching app details for {app_id}: {ex}")
-				return app_id, None
+			async with session.get(STEAM_APPDETAILS_URL, params={"appids": app_id, "cc": "us"}) as response:
+				response.raise_for_status()
+				data = json.loads(await response.text())
+				app_data = data.get(str(app_id), {})
+				if not app_data.get("success", False):
+					return app_id, None
+				return app_id, app_data.get("data")
 
 	@staticmethod
 	async def _fetch_app_details_batch(app_ids: list[str]) -> list[tuple[str, dict]]:
 		results: list[tuple[str, dict]] = []
+		failure: Exception | None = None
+		answered = 0
+
+		async def fetch_one(app_id: str, session: aiohttp.ClientSession) -> tuple[str, dict | None]:
+			nonlocal answered, failure
+			try:
+				_, data = await Steam._fetch_app_details(app_id, session)
+				answered += 1
+				return app_id, data
+			except Exception as ex:
+				logger.error(f"Error fetching app details for {app_id}: {ex}")
+				if failure is None:
+					failure = ex
+				return app_id, None
+
 		async with aiohttp.ClientSession() as session:
-			tasks = [Steam._fetch_app_details(app_id, session) for app_id in app_ids]
+			tasks = [fetch_one(app_id, session) for app_id in app_ids]
 			responses = await asyncio.gather(*tasks)
 			for app_id, data in responses:
 				if data is not None:
 					results.append((app_id, data))
+		if failure is not None and not answered:
+			# Every detail fetch failed: this is an outage, and must not look
+			# like "no free games". Partial failures stay isolated per app.
+			raise failure
 		return results
 
 	@staticmethod
@@ -146,6 +159,7 @@ class Steam(Platform):
 		async with STEAM_SEMAPHORE:
 			try:
 				async with session.get(f"{STEAM_STORE_URL}/{app_id}/", params={"l": "english", "cc": "us"}) as response:
+					response.raise_for_status()
 					html = await response.text()
 					return app_id, html
 			except Exception as ex:

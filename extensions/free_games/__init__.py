@@ -82,6 +82,9 @@ class FreeGames(commands.Cog):
 			try:
 				current_free_games += await STORES[platform].get_free_games()
 			except _RETRYABLE_ERRORS as error:
+				logger.warning(
+					"Transient failure checking %s for free games; the check will retry: %s", platform, error
+				)
 				retry_error = error
 			except Exception:
 				logger.exception("Failed to check %s for free games.", platform)
@@ -224,7 +227,7 @@ class FreeGames(commands.Cog):
 	async def send(self, ctx: commands.Context, platform: str = None):
 		await ctx.defer()
 		await self.bot.db.prepare_command_context(ctx.author, ctx.guild, ctx.channel)
-		all_platforms: list[type[Platform]] = Platform.__subclasses__()
+		all_platforms: list[type[Platform]] = list(STORES.values())
 		if platform:
 			all_platforms = [p for p in all_platforms if p.name == platform]
 
@@ -233,8 +236,15 @@ class FreeGames(commands.Cog):
 		total_free_games_count = 0
 		total_sent_messages = 0
 		delivery_failed = False
+		fetch_failed = False
 		for platform_cls in all_platforms:
-			current_free_games: list[Game] = await platform_cls.get_free_games()
+			try:
+				current_free_games: list[Game] = await platform_cls.get_free_games()
+			except Exception:
+				# Report an outage instead of "no games", but let the other stores answer.
+				fetch_failed = True
+				logger.exception("Failed to fetch free games from %s.", platform_cls.name)
+				continue
 			logger.info(f"  {platform_cls.name}: found {len(current_free_games)} free games")
 			total_free_games_count += len(current_free_games)
 
@@ -248,7 +258,9 @@ class FreeGames(commands.Cog):
 
 		if total_sent_messages == 0:
 			embed = discord.Embed(color=discord.Colour.dark_embed())
-			if total_free_games_count == 0:
+			if fetch_failed:
+				embed.description = "Could not fetch free games at the moment. Please try again later."
+			elif total_free_games_count == 0:
 				embed.description = "Could not find any free games at the moment."
 			elif delivery_failed:
 				embed.description = "Could not send free games at the moment. Please try again later."

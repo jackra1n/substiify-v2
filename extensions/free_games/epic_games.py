@@ -65,15 +65,14 @@ class EpicGames(Platform):
 
 	@staticmethod
 	async def get_free_games() -> list[Game]:
-		all_games = ""
-		try:
-			async with aiohttp.ClientSession() as session:
-				session: aiohttp.ClientSession
-				async with session.get(EpicGames.api_url) as response:
-					json_response = await response.json()
-					all_games = json_response["data"]["Catalog"]["searchStore"]["elements"]
-		except Exception as ex:
-			logger.error(f"Error while getting list of all Epic games: {ex}")
+		# Transport and HTTP failures propagate so callers can retry instead of
+		# mistaking an outage for an empty listing.
+		async with aiohttp.ClientSession() as session:
+			session: aiohttp.ClientSession
+			async with session.get(EpicGames.api_url) as response:
+				response.raise_for_status()
+				json_response = await response.json()
+		all_games = json_response["data"]["Catalog"]["searchStore"]["elements"]
 
 		current_free_games: list[Game] = []
 		for game in all_games:
