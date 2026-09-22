@@ -19,3 +19,20 @@ To run the bot you'll need docker compose.
 Increment the version in `core/VERSION`
 
 Build docker image with `docker build -t sybstiify .`
+
+### Tests
+
+Install development dependencies with `uv sync --locked --dev`, then run:
+
+```sh
+uv run --locked python -m unittest discover -s tests -v
+```
+
+Database tests are skipped unless `TEST_POSTGRES_DSN` points to a dedicated PostgreSQL test database:
+
+```sh
+TEST_POSTGRES_DSN=postgresql://user:password@localhost:5432/substiify_test \
+  uv run --locked python -m unittest discover -s tests -v
+```
+
+The test user must be able to create schemas. Tests apply migrations in isolated schemas and drop them afterward; do not use the production database. CI runs the full suite with PostgreSQL 18 on pushes and pull requests.
