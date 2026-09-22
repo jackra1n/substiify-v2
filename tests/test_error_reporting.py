@@ -10,6 +10,7 @@ from discord.ext import commands
 from core.bot import Substiify
 from core.custom_logger import CustomLogFormatter, PlainLogFormatter
 from extensions.music import Music, NoVoiceChannel, TrackLoadFailed
+from extensions.owner import Owner
 
 
 class ConnectionLoggingTests(unittest.TestCase):
@@ -52,6 +53,37 @@ class ConnectionLoggingTests(unittest.TestCase):
 				sys.exc_info(),
 			)
 		self.assertIn("Traceback", CustomLogFormatter().format(record))
+
+
+class StatusLoggingTests(unittest.IsolatedAsyncioTestCase):
+	async def status_failure(self, error: Exception) -> logging.LogRecord:
+		bot = SimpleNamespace(
+			is_ready=Mock(return_value=True),
+			guilds=[],
+			change_presence=AsyncMock(side_effect=error),
+		)
+		cog = Owner(cast(Substiify, bot))
+		with self.assertLogs("extensions.owner", level="ERROR") as logs:
+			await cog.status_task.coro(cog)
+		self.assertEqual(len(logs.records), 1)
+		return logs.records[0]
+
+	async def test_disconnected_status_update_is_concise_only_on_console(self):
+		record = await self.status_failure(aiohttp.ClientConnectionResetError("Cannot write to closing transport"))
+		for formatters in (
+			(CustomLogFormatter(), PlainLogFormatter()),
+			(PlainLogFormatter(), CustomLogFormatter()),
+		):
+			outputs = {type(formatter): formatter.format(record) for formatter in formatters}
+			self.assertNotIn("\n", outputs[CustomLogFormatter])
+			self.assertIn("ClientConnectionResetError", outputs[CustomLogFormatter])
+			self.assertIn("Cannot write to closing transport", outputs[CustomLogFormatter])
+			self.assertIn("Traceback", outputs[PlainLogFormatter])
+
+	async def test_unexpected_status_failure_keeps_console_traceback(self):
+		record = await self.status_failure(ValueError("unexpected status bug"))
+		self.assertIn("Traceback", CustomLogFormatter().format(record))
+		self.assertIn("ValueError", CustomLogFormatter().format(record))
 
 
 class MusicErrorReportingTests(unittest.IsolatedAsyncioTestCase):

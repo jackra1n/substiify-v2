@@ -10,6 +10,7 @@ import aiohttp
 _RETRY_MESSAGES = {
 	"discord.client": "Attempting a reconnect in %.2fs",
 	"discord.ext.tasks": "Handling exception in internal background task %s. Retrying in %.2fs",
+	"extensions.owner": "Failed to update the bot status.",
 }
 _CONNECTION_ERRNOS = {
 	errno.ECONNABORTED,
