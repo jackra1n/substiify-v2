@@ -16,7 +16,7 @@ from extensions.feedback import Feedback
 class CommandPreparationTests(unittest.IsolatedAsyncioTestCase):
 	async def asyncSetUp(self):
 		self.db = SimpleNamespace(prepare_command_context=AsyncMock(), pool=SimpleNamespace(execute=AsyncMock()))
-		with patch("core.config.BOT_PREFIX", "!"):
+		with patch.multiple("core.config", BOT_PREFIX="!", BOT_OWNER_ID=12):
 			self.bot = Substiify(database=self.db)
 		await self.bot._async_setup_hook()
 		self.bot.command_prefix = "!"
@@ -297,7 +297,8 @@ class CommandPreparationTests(unittest.IsolatedAsyncioTestCase):
 	async def test_feedback_modal_retains_the_initial_response(self):
 		await self.bot.add_cog(Feedback(self.bot))
 		interaction = self.interaction("feedback", [{"name": "feedback_type", "type": 3, "value": "bug"}])
-		await self.bot.tree._call(interaction)
+		with patch("core.config.BUG_CHANNEL_ID", 30):
+			await self.bot.tree._call(interaction)
 		await self.finish_events()
 		self.assertFalse(interaction.command_failed)
 		self.assertEqual(interaction.response.type, discord.InteractionResponseType.modal)

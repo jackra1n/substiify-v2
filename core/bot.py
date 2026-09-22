@@ -39,11 +39,14 @@ class Substiify(commands.Bot):
 		prefix = core.config.BOT_PREFIX
 		if not prefix:
 			raise RuntimeError("BOT_PREFIX must be configured before creating the bot")
+		owner_id = core.config.BOT_OWNER_ID
+		if owner_id is None:
+			raise RuntimeError("BOT_OWNER_ID must be configured before creating the bot")
 		intents = discord.Intents().all()
 		super().__init__(
 			command_prefix=commands.when_mentioned_or(prefix),
 			intents=intents,
-			owner_id=276462585690193921,
+			owner_id=owner_id,
 			max_messages=3000,
 		)
 		self.before_invoke(self._prepare_command_context)
@@ -236,14 +239,15 @@ class Substiify(commands.Bot):
 		except discord.HTTPException, aiohttp.ClientConnectionError, TimeoutError:
 			pass
 
-		ERRORS_CHANNEL_ID = 1219407043186659479
+		if core.config.ERRORS_CHANNEL_ID is None:
+			return
 		if ctx.guild:
 			error_msg = f"Error in {ctx.guild.name} ({ctx.guild.id}) by {ctx.author} -> {ctx.command.qualified_name}"
 		else:
 			error_msg = f"Error in DMs by {ctx.author} -> {ctx.command.qualified_name}"
 		detail = f"{type(reported_error).__name__}: {reported_error}"
 		embed = discord.Embed(title=error_msg[:256], description=detail[:4000], color=discord.Color.red())
-		channel = self.get_channel(ERRORS_CHANNEL_ID)
+		channel = self.get_channel(core.config.ERRORS_CHANNEL_ID)
 		if isinstance(channel, discord.abc.Messageable):
 			try:
 				await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())

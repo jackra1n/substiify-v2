@@ -14,7 +14,6 @@ import utils
 logger = logging.getLogger(__name__)
 
 EMBED_COLOR = core.constants.CYAN_COLOR
-ERRORS_CHANNEL_ID = 1219407043186659479
 
 
 async def _send_music_error(channel, embed: discord.Embed):
@@ -27,7 +26,9 @@ async def _send_music_error(channel, embed: discord.Embed):
 
 
 async def _report_music_error(bot, channel, embed: discord.Embed, detail: str):
-	admin_channel = bot.get_channel(ERRORS_CHANNEL_ID)
+	if core.config.ERRORS_CHANNEL_ID is None:
+		return
+	admin_channel = bot.get_channel(core.config.ERRORS_CHANNEL_ID)
 	if admin_channel is None or getattr(channel, "id", None) == admin_channel.id:
 		return
 	report = embed.copy()

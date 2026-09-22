@@ -12,13 +12,15 @@ logger = logging.getLogger(__name__)
 
 ACCEPT_EMOJI = discord.PartialEmoji.from_str("greenTick:876177251832590348")
 DENY_EMOJI = discord.PartialEmoji.from_str("redCross:876177262813278288")
-SUGGESTION_CHANNEL_ID = 876413286978031676
-BUG_CHANNEL_ID = 876412993498398740
 
 
 class FeedbackType(Enum):
 	BUG = "bug"
 	SUGGESTION = "suggestion"
+
+
+def _feedback_channel_id(feedback_type: FeedbackType) -> int | None:
+	return core.config.BUG_CHANNEL_ID if feedback_type == FeedbackType.BUG else core.config.SUGGESTION_CHANNEL_ID
 
 
 class FeedbackOutcome(Enum):
@@ -40,7 +42,7 @@ class Feedback(commands.Cog):
 		if payload.member.bot:
 			return
 
-		if payload.channel_id not in [BUG_CHANNEL_ID, SUGGESTION_CHANNEL_ID]:
+		if payload.channel_id not in (core.config.BUG_CHANNEL_ID, core.config.SUGGESTION_CHANNEL_ID):
 			return
 
 		if payload.emoji not in [ACCEPT_EMOJI, DENY_EMOJI]:
@@ -127,6 +129,13 @@ class Feedback(commands.Cog):
 		Allows you to report a bug or suggest a feature or an improvement to the developer team.
 		After review, the bot will attempt to send you the outcome by DM.
 		"""
+		channel_id = _feedback_channel_id(feedback_type)
+		if channel_id is None:
+			await interaction.response.send_message(
+				f"{feedback_type.value.capitalize()} feedback submissions are currently unavailable.",
+				ephemeral=True,
+			)
+			return
 		await interaction.response.send_modal(FeedbackModal(feedback_type))
 
 
@@ -151,7 +160,15 @@ class FeedbackSelect(discord.ui.Select):
 		)
 
 	async def callback(self, interaction: discord.Interaction):
-		await interaction.response.send_modal(FeedbackModal(self.values[0]))
+		feedback_type = FeedbackType(self.values[0])
+		channel_id = _feedback_channel_id(feedback_type)
+		if channel_id is None:
+			await interaction.response.send_message(
+				f"{feedback_type.value.capitalize()} feedback submissions are currently unavailable.",
+				ephemeral=True,
+			)
+			return
+		await interaction.response.send_modal(FeedbackModal(feedback_type))
 
 
 class FeedbackModal(discord.ui.Modal):
@@ -169,9 +186,26 @@ class FeedbackModal(discord.ui.Modal):
 		self.add_item(self.feedback)
 
 	async def on_submit(self, interaction: discord.Interaction):
+		channel_id = _feedback_channel_id(self.feedback_type)
+		if channel_id is None:
+			await self._respond(
+				interaction,
+				f"{self.feedback_type.value.capitalize()} feedback submissions are currently unavailable.",
+			)
+			return
 		await interaction.response.defer(ephemeral=True, thinking=True)
-		channel_id = BUG_CHANNEL_ID if self.feedback_type == FeedbackType.BUG else SUGGESTION_CHANNEL_ID
-		channel = interaction.client.get_channel(channel_id) or await interaction.client.fetch_channel(channel_id)
+		channel = interaction.client.get_channel(channel_id)
+		if channel is None:
+			try:
+				channel = await interaction.client.fetch_channel(channel_id)
+			except discord.NotFound, discord.Forbidden, discord.HTTPException:
+				channel = None
+		if not isinstance(channel, discord.abc.Messageable):
+			await self._respond(
+				interaction,
+				f"{self.feedback_type.value.capitalize()} feedback submissions are currently unavailable.",
+			)
+			return
 		embed = discord.Embed(
 			title=f"New {self.feedback_type.value} submission",
 			description=f"```{self.feedback.value}```",

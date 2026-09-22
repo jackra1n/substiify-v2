@@ -146,7 +146,8 @@ class KarmaErrorReportingTests(unittest.IsolatedAsyncioTestCase):
 			pool=SimpleNamespace(execute=AsyncMock(), fetch=AsyncMock(return_value=[])),
 			upsert_channel=AsyncMock(),
 		)
-		with patch("core.config.BOT_PREFIX", "!"):
+		self.enterContext(patch("core.config.ERRORS_CHANNEL_ID", 30))
+		with patch.multiple("core.config", BOT_PREFIX="!", BOT_OWNER_ID=12):
 			self.bot = Substiify(database=self.db)
 		await self.bot._async_setup_hook()
 		self.bot.command_prefix = "!"

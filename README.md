@@ -14,6 +14,23 @@ To run the bot you'll need docker compose.
 - Start the postgres container and create a database which you configured in `.env` -> `DB_NAME`
 - Start the bot with `docker compose up -d`
 
+### Discord routing
+
+Set `BOT_OWNER_ID` in `.env` to the Discord account allowed to run owner commands. A missing or blank owner ID is rejected; there is no default or automatic application-owner discovery.
+
+These optional IDs control operational destinations:
+
+| Variable | Destination |
+| --- | --- |
+| `ERRORS_CHANNEL_ID` | Command and music error reports |
+| `EVENTS_CHANNEL_ID` | Guild join/leave notifications |
+| `SUGGESTION_CHANNEL_ID` | Suggestion submissions |
+| `BUG_CHANNEL_ID` | Bug reports |
+
+Missing or blank channel IDs disable those destinations without disabling ordinary logging or command-error persistence. There are no built-in owner or channel IDs. Disabled feedback destinations report that submissions are unavailable.
+
+`example.env` starts with all four destinations disabled. Set the owner and destination IDs for your own deployment. Invalid IDs fail at startup.
+
 ## Development
 
 Increment the version in `core/VERSION`
