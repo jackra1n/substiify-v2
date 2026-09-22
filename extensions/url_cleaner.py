@@ -14,7 +14,7 @@ MAX_TRACKED_MESSAGES = 3000
 class _ReplyTracker:
 	def __init__(self, limit: int) -> None:
 		self.limit = limit
-		self.replies: dict[int, discord.Message] = {}
+		self.replies: dict[int, discord.PartialMessage] = {}
 		self.original_by_reply: dict[int, int] = {}
 		self.resend_attempts: dict[int, int] = {}
 
@@ -23,7 +23,7 @@ class _ReplyTracker:
 		if previous_reply is not None:
 			self.original_by_reply.pop(previous_reply.id, None)
 
-		self.replies[original_id] = reply
+		self.replies[original_id] = discord.PartialMessage(channel=reply.channel, id=reply.id)
 		self.original_by_reply[reply.id] = original_id
 		if reset_attempts:
 			self.resend_attempts.pop(original_id, None)
@@ -32,10 +32,10 @@ class _ReplyTracker:
 			oldest_original_id = next(iter(self.replies))
 			self.pop_original(oldest_original_id)
 
-	def get_reply(self, original_id: int) -> discord.Message | None:
+	def get_reply(self, original_id: int) -> discord.PartialMessage | None:
 		return self.replies.get(original_id)
 
-	def pop_original(self, original_id: int) -> discord.Message | None:
+	def pop_original(self, original_id: int) -> discord.PartialMessage | None:
 		reply = self.replies.pop(original_id, None)
 		if reply is not None:
 			self.original_by_reply.pop(reply.id, None)
