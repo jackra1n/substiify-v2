@@ -1,14 +1,17 @@
+import asyncio
 import logging
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 from typing import cast
 
 import aiohttp
+import discord
 from discord.ext import commands
 
 from core.bot import Substiify
 from core.custom_logger import CustomLogFormatter, PlainLogFormatter
+from extensions.karma import Karma
 from extensions.music import Music, NoVoiceChannel, TrackLoadFailed
 from extensions.owner import Owner
 
@@ -129,6 +132,129 @@ class MusicErrorReportingTests(unittest.IsolatedAsyncioTestCase):
 		await self.dispatch_error(commands.CommandInvokeError(NoVoiceChannel()))
 		self.assertEqual(self.ctx.send.await_count + self.ctx.reply.await_count, 1)
 		self.bot._save_command_error.assert_not_awaited()
+
+
+class FakeErrorsChannel(discord.abc.Messageable):
+	def __init__(self):
+		self.send = AsyncMock()
+
+
+class KarmaErrorReportingTests(unittest.IsolatedAsyncioTestCase):
+	async def asyncSetUp(self):
+		self.db = SimpleNamespace(
+			prepare_command_context=AsyncMock(),
+			pool=SimpleNamespace(execute=AsyncMock(), fetch=AsyncMock(return_value=[])),
+			upsert_channel=AsyncMock(),
+		)
+		with patch("core.config.BOT_PREFIX", "!"):
+			self.bot = Substiify(database=self.db)
+		await self.bot._async_setup_hook()
+		self.bot.command_prefix = "!"
+		self.user_data = {
+			"id": str(self.bot.owner_id),
+			"username": "owner",
+			"discriminator": "0",
+			"avatar": None,
+		}
+		self.bot._connection.user = discord.ClientUser(
+			state=self.bot._connection,
+			data={**self.user_data, "id": "99", "username": "test-bot", "bot": True},
+		)
+		self.channel_data = {"id": "30", "type": 1, "recipients": [self.user_data]}
+		self.channel = discord.DMChannel(me=self.bot.user, state=self.bot._connection, data=self.channel_data)
+		self.karma = Karma(cast(Substiify, self.bot), [])
+		await self.bot.add_cog(self.karma)
+		self.messages = []
+		self.events = []
+		self.errors_channel = FakeErrorsChannel()
+		self.bot.get_channel = Mock(return_value=self.errors_channel)
+		self.bot.on_command_completion = AsyncMock()
+		self.bot.on_command_error = AsyncMock(wraps=self.bot.on_command_error)
+		self.bot._save_command_error = AsyncMock()
+		# Exercise real contexts and Discord response state, replacing only network I/O.
+		self.bot.http.request = AsyncMock(side_effect=AssertionError("Unexpected Discord request"))
+		self.bot.http.send_message = AsyncMock(side_effect=self.send_message)
+		self.bot.http.send_typing = AsyncMock()
+		self.bot.http.add_reaction = AsyncMock()
+		self.bot.http.delete_message = AsyncMock()
+		schedule = self.bot._schedule_event
+
+		def schedule_event(*args, **kwargs):
+			task = schedule(*args, **kwargs)
+			self.events.append(task)
+			return task
+
+		self.bot._schedule_event = schedule_event
+
+	async def asyncTearDown(self):
+		for task in self.events:
+			if not task.done():
+				task.cancel()
+		await asyncio.gather(*self.events, return_exceptions=True)
+		await self.bot.close()
+
+	def message_data(self, content="", **extra):
+		return {
+			"id": str(discord.utils.time_snowflake(discord.utils.utcnow())),
+			"channel_id": str(self.channel.id),
+			"type": 0,
+			"content": content,
+			"author": self.user_data,
+			**extra,
+		}
+
+	async def send_message(self, channel_id, *, params):
+		self.messages.append(params.payload)
+		return self.message_data(**params.payload)
+
+	async def invoke(self, content, *, author=None):
+		data = self.message_data(content, **({"author": author} if author is not None else {}))
+		message = discord.Message(state=self.bot._connection, channel=self.channel, data=data)
+		await self.bot.invoke(await self.bot.get_context(message))
+		await self.finish_events()
+
+	async def finish_events(self):
+		while self.events:
+			await asyncio.wait_for(self.events.pop(0), timeout=2)
+
+	async def test_missing_kasino_argument_replies_once_without_central_report(self):
+		await self.invoke("!kasino close")
+		self.assertEqual(len(self.messages), 1)
+		self.bot._save_command_error.assert_not_awaited()
+		self.errors_channel.send.assert_not_awaited()
+
+	async def test_bad_kasino_argument_replies_once_without_central_report(self):
+		await self.invoke("!kasino close abc 1")
+		self.assertEqual(len(self.messages), 1)
+		self.bot._save_command_error.assert_not_awaited()
+		self.errors_channel.send.assert_not_awaited()
+
+	async def test_unrecognized_kasino_error_keeps_invocation_for_central_fallback(self):
+		# A non-owner fails the command checks, so nothing is locally handled.
+		author = {**self.user_data, "id": "11"}
+		with self.assertLogs("core.bot", level="ERROR"):
+			await self.invoke("!kasino close 1 2", author=author)
+		self.assertEqual(len(self.messages), 1)
+		self.bot.http.delete_message.assert_not_awaited()
+		self.bot._save_command_error.assert_awaited_once()
+
+	async def test_known_donate_user_error_stays_local_without_report(self):
+		await self.invoke("!karma donate")
+		self.assertEqual(len(self.messages), 1)
+		self.bot._save_command_error.assert_not_awaited()
+		self.errors_channel.send.assert_not_awaited()
+
+	async def test_unexpected_donate_failure_reaches_central_reporting_only(self):
+		failure = ValueError("private donation bug")
+		with patch.object(Karma, "_find_guild_user", Mock(side_effect=failure)):
+			with self.assertLogs("core.bot", level="ERROR"):
+				await self.invoke("!karma donate boom 5")
+		self.assertEqual(len(self.messages), 1)
+		self.assertNotIn(str(failure), str(self.messages))
+		self.bot._save_command_error.assert_awaited_once()
+		self.errors_channel.send.assert_awaited_once()
+		report = self.errors_channel.send.call_args.kwargs["embed"]
+		self.assertIn(str(failure), report.description)
 
 
 if __name__ == "__main__":

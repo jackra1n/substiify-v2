@@ -291,14 +291,15 @@ class Karma(commands.Cog):
 		If users click the reactions, user karma will be updated.
 		"""
 		channel = channel or ctx.channel
-		if channel.id not in self.vote_channels:
-			self.vote_channels.append(channel.id)
 		stmt = "SELECT * FROM discord_channel WHERE discord_channel_id = $1 AND upvote = True"
 		votes_enabled = await self.bot.db.pool.fetch(stmt, channel.id)
 		logger.info(f"Votes enabled: {votes_enabled}")
 
+		# The cache only follows confirmed database state; a failed enable must leave it unchanged.
 		embed = discord.Embed(color=discord.Colour.green())
 		if votes_enabled:
+			if channel.id not in self.vote_channels:
+				self.vote_channels.append(channel.id)
 			embed.description = f"Votes are **already active** in {ctx.channel.mention}!"
 			return await ctx.send(embed=embed)
 
@@ -306,6 +307,8 @@ class Karma(commands.Cog):
 		await self.bot.db.pool.execute(
 			"UPDATE discord_channel SET upvote = True WHERE discord_channel_id = $1", channel.id
 		)
+		if channel.id not in self.vote_channels:
+			self.vote_channels.append(channel.id)
 
 		embed.description = f"Votes **enabled** in {channel.mention}!"
 		await ctx.send(embed=embed)
@@ -489,8 +492,8 @@ class Karma(commands.Cog):
 		elif isinstance(error, commands.BadArgument):
 			embed.description = f"Wrong command usage! Command usage is `{ctx.prefix}karma donate <user> <amount>`"
 		else:
-			embed.description = f"An unknown error occured. Please contact <@{self.bot.owner_id}> for help."
-			logger.error(f"An unknown error occured in karma_donate: {error}")
+			# Unexpected errors must reach the central handler for diagnostics, persistence and admin reports.
+			return
 		await ctx.send(embed=embed)
 		error.is_handled = True
 
@@ -842,6 +845,10 @@ class Karma(commands.Cog):
 			await ctx.send(embed=embed)
 		elif isinstance(error, commands.errors.BadArgument):
 			await ctx.send(f"Bad argument: {error}")
+		else:
+			# Unrecognized errors keep their invocation for the central handler's diagnostics.
+			return
+		error.is_handled = True
 		if not ctx.interaction:
 			await ctx.message.delete()
 
