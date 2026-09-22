@@ -12,6 +12,7 @@ from discord.ext import commands
 from core.bot import Substiify
 from core.custom_logger import CustomLogFormatter, PlainLogFormatter
 from extensions.karma import Karma
+from extensions.kasino import Kasino
 from extensions.music import Music, NoVoiceChannel, TrackLoadFailed
 from extensions.owner import Owner
 
@@ -165,6 +166,7 @@ class KarmaErrorReportingTests(unittest.IsolatedAsyncioTestCase):
 		self.channel = discord.DMChannel(me=self.bot.user, state=self.bot._connection, data=self.channel_data)
 		self.karma = Karma(cast(Substiify, self.bot), [])
 		await self.bot.add_cog(self.karma)
+		await self.bot.add_cog(Kasino(self.bot))
 		self.messages = []
 		self.events = []
 		self.errors_channel = FakeErrorsChannel()

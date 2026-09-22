@@ -11,7 +11,7 @@ import discord
 
 from core.bot import Substiify
 from database import Database
-from extensions.util import Util
+from extensions.giveaways import Giveaways
 
 
 class CheckpointAckLostPool:
@@ -61,7 +61,7 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 		self.bot = SimpleNamespace(
 			db=self.db, user=SimpleNamespace(id=99), fetch_channel=AsyncMock(return_value=self.channel)
 		)
-		self.cog = Util(cast(Substiify, self.bot))
+		self.cog = Giveaways(cast(Substiify, self.bot))
 		self.source.embeds = [self.cog.create_giveaway_embed("<@11>", "prize", 2)]
 		self.ctx = SimpleNamespace(
 			guild=self.guild,
@@ -72,7 +72,7 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 			send=AsyncMock(),
 		)
 		self.sample = Mock(side_effect=lambda population, count: population[:count])
-		self.rng = patch("extensions.util.secrets.SystemRandom", return_value=SimpleNamespace(sample=self.sample))
+		self.rng = patch("extensions.giveaways.secrets.SystemRandom", return_value=SimpleNamespace(sample=self.sample))
 		self.rng.start()
 		self.addCleanup(self.rng.stop)
 
@@ -127,7 +127,7 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 		self.assertIsNotNone(pending["announcement_message_id"])
 		self.assertIsNone(pending["completed_at"])
 		# Restart: no in-memory selection or delivery state survives.
-		await Util(cast(Substiify, self.bot))._process_giveaway(giveaway)
+		await Giveaways(cast(Substiify, self.bot))._process_giveaway(giveaway)
 		await self.cog._process_giveaway(giveaway)
 		completed = await self.result(giveaway)
 		self.assertEqual(self.sample.call_count, 1)
@@ -174,7 +174,7 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 			await self.cog._process_giveaway(giveaway)
 		selected = await self.result(giveaway)
 		self.assertEqual(self.sent, [])
-		await Util(cast(Substiify, self.bot))._process_giveaway(giveaway)
+		await Giveaways(cast(Substiify, self.bot))._process_giveaway(giveaway)
 		self.assertEqual((await self.result(giveaway))["winner_ids"], selected["winner_ids"])
 		self.assertEqual(self.sample.call_count, 1)
 		self.assertEqual(len(self.sent), 1)
@@ -184,7 +184,7 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 		proxy_bot = SimpleNamespace(**vars(self.bot))
 		proxy_bot.db = SimpleNamespace(pool=CheckpointAckLostPool(self.db.pool))
 		with self.assertRaises(ConnectionError):
-			await Util(cast(Substiify, proxy_bot))._process_giveaway(giveaway)
+			await Giveaways(cast(Substiify, proxy_bot))._process_giveaway(giveaway)
 		checkpoint = await self.result(giveaway)
 		self.assertIsNotNone(checkpoint["announcement_message_id"])
 		await self.expire_lease(giveaway)
@@ -215,9 +215,9 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 
 	async def test_cancellation_blocks_stale_settlement_and_reroll(self):
 		giveaway = await self.create_giveaway()
-		await Util.stop.callback(self.cog, self.ctx, self.source.id)
+		await Giveaways.stop.callback(self.cog, self.ctx, self.source.id)
 		await self.cog._process_giveaway(giveaway)
-		await Util.reroll.callback(self.cog, self.ctx, self.source.id)
+		await Giveaways.reroll.callback(self.cog, self.ctx, self.source.id)
 		self.assertIsNone(await self.result(giveaway))
 		self.assertEqual(self.sent, [])
 		self.assertEqual(self.sample.call_count, 0)
@@ -232,12 +232,12 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 			*(self.cog._claim_giveaway_delivery(giveaway["id"], selected["version"]) for _ in range(3))
 		)
 		self.assertEqual(sum(claim is not None for claim in claims), 1)
-		await Util.stop.callback(self.cog, self.ctx, self.source.id)
+		await Giveaways.stop.callback(self.cog, self.ctx, self.source.id)
 		await self.cog._process_giveaway(giveaway)
 		self.assertEqual(self.sent, [])
 		await self.expire_lease(giveaway)
-		await Util(cast(Substiify, self.bot))._process_giveaway(giveaway)
-		await Util.stop.callback(self.cog, self.ctx, self.source.id)
+		await Giveaways(cast(Substiify, self.bot))._process_giveaway(giveaway)
+		await Giveaways.stop.callback(self.cog, self.ctx, self.source.id)
 		self.assertIsNone(
 			await self.db.pool.fetchval("SELECT cancelled_at FROM giveaway WHERE id = $1", giveaway["id"])
 		)
@@ -250,7 +250,7 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 		await self.cog._process_giveaway(giveaway)
 		original = await self.result(giveaway)
 		self.sample.side_effect = lambda population, count: list(reversed(population))[:count]
-		await Util.reroll.callback(self.cog, self.ctx, self.source.id)
+		await Giveaways.reroll.callback(self.cog, self.ctx, self.source.id)
 		rerolled = await self.result(giveaway, 2)
 		self.assertEqual(dict(await self.result(giveaway)), dict(original))
 		self.assertNotEqual(rerolled["winner_ids"], original["winner_ids"])
@@ -268,13 +268,13 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 		self.source.edit.side_effect = self.fail_first_edit
 		with self.assertRaises(RuntimeError):
 			await self.cog._process_giveaway(giveaway)
-		await Util.reroll.callback(self.cog, self.ctx, self.source.id)
+		await Giveaways.reroll.callback(self.cog, self.ctx, self.source.id)
 		self.assertIsNone(await self.result(giveaway, 2))
 		self.assertEqual(self.sample.call_count, 1)
 		self.assertEqual(len(self.sent), 1)
 
 	async def test_historical_bot_owned_giveaway_can_be_explicitly_rerolled(self):
-		await Util.reroll.callback(self.cog, self.ctx, self.source.id)
+		await Giveaways.reroll.callback(self.cog, self.ctx, self.source.id)
 		giveaway = await self.db.pool.fetchrow("SELECT * FROM giveaway WHERE discord_message_id = 900")
 		self.assertIsNotNone((await self.result(giveaway))["completed_at"])
 		self.assertEqual(len(self.sent), 1)
@@ -284,7 +284,7 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 	async def test_historical_empty_result_with_removed_host_can_be_rerolled(self):
 		self.source.embeds[0].remove_field(0)
 		self.source.embeds[0].set_footer(text="No one won the giveaway (no one entered)")
-		await Util.reroll.callback(self.cog, self.ctx, self.source.id)
+		await Giveaways.reroll.callback(self.cog, self.ctx, self.source.id)
 		giveaway = await self.db.pool.fetchrow("SELECT * FROM giveaway WHERE discord_message_id = 900")
 		result = await self.result(giveaway)
 		self.assertEqual(result["winner_ids"], [11, 12])
@@ -293,13 +293,13 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 
 	async def test_unowned_historical_message_and_wrong_channel_are_rejected(self):
 		self.source.author.id = 98
-		await Util.reroll.callback(self.cog, self.ctx, self.source.id)
+		await Giveaways.reroll.callback(self.cog, self.ctx, self.source.id)
 		self.assertEqual(await self.db.pool.fetchval("SELECT count(*) FROM giveaway"), 0)
 		self.source.author.id = 99
 		giveaway = await self.create_giveaway()
 		self.ctx.channel = SimpleNamespace(id=31, guild=self.guild)
-		await Util.stop.callback(self.cog, self.ctx, self.source.id)
-		await Util.reroll.callback(self.cog, self.ctx, self.source.id)
+		await Giveaways.stop.callback(self.cog, self.ctx, self.source.id)
+		await Giveaways.reroll.callback(self.cog, self.ctx, self.source.id)
 		self.assertIsNone(
 			await self.db.pool.fetchval("SELECT cancelled_at FROM giveaway WHERE id = $1", giveaway["id"])
 		)
@@ -312,7 +312,7 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 		self.channel.fetch_message.side_effect = discord.NotFound(
 			SimpleNamespace(status=404, reason="Not Found"), {"message": "Unknown Message", "code": 10008}
 		)
-		with self.assertLogs("extensions.util", level="WARNING") as logs:
+		with self.assertLogs("extensions.giveaways", level="WARNING") as logs:
 			await self.cog._process_giveaway(giveaway)
 			await self.cog._process_giveaway(giveaway)
 		self.assertEqual(len(logs.records), 1)

@@ -3,7 +3,7 @@ from typing import cast
 
 from asyncpg import Record
 
-from extensions.karma import _calculate_payouts
+from extensions.kasino import _calculate_payouts
 
 
 class KasinoPayouts(unittest.TestCase):

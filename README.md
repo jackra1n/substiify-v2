@@ -37,6 +37,14 @@ Increment the version in `core/VERSION`
 
 Build docker image with `docker build -t sybstiify .`
 
+### Feature extensions
+
+- `extensions/giveaways.py` owns giveaway commands, winner selection, delivery recovery, and its background worker.
+- `extensions/kasino.py` owns kasino commands, betting and settlement transactions, message rendering, and interactive views.
+- `extensions/util.py` retains general utilities; `extensions/karma.py` retains voting, posts, balances, and donations.
+
+Giveaways and Kasino load as independent cogs and appear as separate help categories. Command names and aliases are unchanged. Karma and Kasino share ordered balance-row locking through `database/karma.py`, not through each other's cogs.
+
 ### Tests
 
 Install development dependencies with `uv sync --locked --dev`, then run:

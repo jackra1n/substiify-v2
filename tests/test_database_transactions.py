@@ -13,7 +13,8 @@ from core.bot import Substiify
 from database import Database
 from extensions.free_games import FreeGames
 from extensions.free_games.base import Game
-from extensions.karma import Karma, KasinoStateError
+from extensions.karma import Karma
+from extensions.kasino import Kasino, KasinoStateError
 
 
 @unittest.skipUnless(os.environ.get("TEST_POSTGRES_DSN"), "Set TEST_POSTGRES_DSN to an isolated PostgreSQL database")
@@ -37,7 +38,8 @@ class DatabaseTransactions(unittest.IsolatedAsyncioTestCase):
 			"INSERT INTO karma(discord_user_id,discord_server_id,amount) VALUES($1,20,10)",
 			[(user.id,) for user in self.users],
 		)
-		self.cog = Karma(cast(Substiify, SimpleNamespace(db=self.db)), [])
+		self.karma = Karma(cast(Substiify, SimpleNamespace(db=self.db)), [])
+		self.kasino = Kasino(cast(Substiify, SimpleNamespace(db=self.db)))
 
 	async def asyncTearDown(self):
 		await self.db.__aexit__(None, None, None)
@@ -52,8 +54,8 @@ class DatabaseTransactions(unittest.IsolatedAsyncioTestCase):
 
 	async def test_concurrent_donations_cannot_overspend(self):
 		results = await asyncio.gather(
-			self.cog.donate_karma(self.users[0], self.users[1], self.guild, 8),
-			self.cog.donate_karma(self.users[0], self.users[2], self.guild, 8),
+			self.karma.donate_karma(self.users[0], self.users[1], self.guild, 8),
+			self.karma.donate_karma(self.users[0], self.users[2], self.guild, 8),
 		)
 		self.assertEqual(sorted(results), [False, True])
 		self.assertEqual(await self.db.pool.fetchval("SELECT amount FROM karma WHERE discord_user_id=11"), 2)
@@ -62,27 +64,27 @@ class DatabaseTransactions(unittest.IsolatedAsyncioTestCase):
 	async def test_settlement_is_conserved_and_idempotent(self):
 		kasino_id = await self.create_kasino()
 		for user, option in zip(self.users, (1, 1, 2)):
-			await self.cog.place_kasino_bet(kasino_id, 20, user.id, option, 1)
-		results = await asyncio.gather(*(self.cog.settle_kasino(kasino_id, 20, 1) for _ in range(2)))
+			await self.kasino.place_kasino_bet(kasino_id, 20, user.id, option, 1)
+		results = await asyncio.gather(*(self.kasino.settle_kasino(kasino_id, 20, 1) for _ in range(2)))
 		self.assertEqual(sorted(result[2] for result in results), [False, True])
 		self.assertEqual(sum(bet["payout"] for bet in results[0][1]), 3)
-		await self.cog.settle_kasino(kasino_id, 20, 1)
+		await self.kasino.settle_kasino(kasino_id, 20, 1)
 		self.assertEqual(await self.db.pool.fetchval("SELECT sum(amount) FROM karma"), 30)
 		with self.assertRaises(KasinoStateError):
-			await self.cog.place_kasino_bet(kasino_id, 20, 11, 1, 1)
+			await self.kasino.place_kasino_bet(kasino_id, 20, 11, 1, 1)
 		with self.assertRaises(KasinoStateError):
-			await self.cog.set_kasino_locked(kasino_id, 20, False)
+			await self.kasino.set_kasino_locked(kasino_id, 20, False)
 
 	async def test_failed_payout_rolls_back_every_balance(self):
 		kasino_id = await self.create_kasino()
 		for user in self.users:
-			await self.cog.place_kasino_bet(kasino_id, 20, user.id, 1, 1)
+			await self.kasino.place_kasino_bet(kasino_id, 20, user.id, 1, 1)
 		# Force a real database failure after an earlier participant could be credited.
 		await self.db.pool.execute(
 			"ALTER TABLE karma ADD CONSTRAINT reject_second_payout CHECK (discord_user_id <> 12 OR amount <= 9)"
 		)
 		with self.assertRaises(asyncpg.CheckViolationError):
-			await self.cog.settle_kasino(kasino_id, 20, 3)
+			await self.kasino.settle_kasino(kasino_id, 20, 3)
 		self.assertEqual(await self.db.pool.fetchval("SELECT sum(amount) FROM karma"), 27)
 		self.assertIsNone(await self.db.pool.fetchval("SELECT settled_at FROM kasino WHERE id=$1", kasino_id))
 		self.assertEqual(await self.db.pool.fetchval("SELECT count(*) FROM kasino_bet WHERE payout IS NOT NULL"), 0)
