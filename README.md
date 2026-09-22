@@ -6,18 +6,16 @@
 
 ## Getting started
 
-Requires Docker with Compose.
+Requires Docker Compose and the **Server Members**, **Presence**, and **Message Content** intents.
 
-1. Create a bot in the [Discord Developer Portal](https://discord.com/developers/applications), enable all three **Privileged Gateway Intents**, and invite it to your server with the `bot` and `applications.commands` scopes.
-2. Copy `example.env` to `.env`. Set `BOT_TOKEN`, `BOT_PREFIX`, `BOT_OWNER_ID` (your Discord account ID), and `DB_PASSWORD`. Keep the other database values for Compose. Channel IDs can stay blank to disable those destinations.
-3. For music, configure `LAVALINK_NODE_URL` and `LAVALINK_PASSWORD` for your Lavalink server. Otherwise, set both to empty strings.
-4. Start the bot and database:
+- Copy `example.env` to `.env`; set `BOT_TOKEN`, `BOT_PREFIX`, `BOT_OWNER_ID`, and `DB_PASSWORD`. Keep the database defaults for Compose.
+- Channel IDs are optional. Set both `LAVALINK_NODE_URL` and `LAVALINK_PASSWORD` to empty strings unless using Lavalink for music.
 
-   ```sh
-   docker compose up -d
-   ```
+```sh
+docker compose up -d
+```
 
-Compose uses the published release image and creates the PostgreSQL database on first start. No manual database setup is needed.
+Uses the published release image; PostgreSQL is initialized automatically.
 
 ### Tests
 
