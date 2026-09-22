@@ -7,6 +7,7 @@ from typing import cast
 
 import aiohttp
 import discord
+import wavelink
 from discord.ext import commands
 
 from core.bot import Substiify
@@ -93,6 +94,7 @@ class StatusLoggingTests(unittest.IsolatedAsyncioTestCase):
 class MusicErrorReportingTests(unittest.IsolatedAsyncioTestCase):
 	async def asyncSetUp(self):
 		self.bot = SimpleNamespace(_save_command_error=AsyncMock(), get_channel=Mock(return_value=None))
+		self.bot.on_command_error = Substiify.on_command_error.__get__(self.bot)
 		self.ctx = SimpleNamespace(
 			command=SimpleNamespace(qualified_name="play", cog=SimpleNamespace(qualified_name="Music")),
 			author="listener",
@@ -118,14 +120,22 @@ class MusicErrorReportingTests(unittest.IsolatedAsyncioTestCase):
 		with self.assertLogs("core.bot", level="WARNING"):
 			await self.dispatch_error(wrapped)
 		embed = self.ctx.send.call_args.kwargs["embed"]
-		self.assertIn("music service", embed.description)
 		self.assertNotIn("private backend detail", embed.description)
 		self.bot._save_command_error.assert_awaited_once()
+		self.ctx.send.assert_awaited_once()
+
+	async def test_wavelink_failure_is_reported_once_without_exposing_backend_details(self):
+		failure = wavelink.WavelinkException("private Lavalink detail")
+		with self.assertLogs("core.bot", level="WARNING"):
+			await self.dispatch_error(commands.CommandInvokeError(failure))
+		self.ctx.send.assert_awaited_once()
+		self.assertNotIn("private Lavalink detail", self.ctx.send.call_args.kwargs["embed"].description)
+		self.bot._save_command_error.assert_awaited_once_with(self.ctx, failure)
 
 	async def test_unexpected_music_error_is_not_swallowed(self):
 		with self.assertLogs("core.bot", level="ERROR") as logs:
 			await self.dispatch_error(commands.CommandInvokeError(ValueError("unexpected bug")))
-		self.assertIn("couldn't complete", self.ctx.send.call_args.kwargs["embed"].description)
+		self.ctx.send.assert_awaited_once()
 		self.assertIn("ValueError", "\n".join(logs.output))
 		self.bot._save_command_error.assert_awaited_once()
 

@@ -42,6 +42,33 @@ class Music(commands.Cog):
 
 	def __init__(self, bot: core.Substiify):
 		self.bot = bot
+		self._node: wavelink.Node | None = None
+		self._session: aiohttp.ClientSession | None = None
+
+	async def cog_load(self) -> None:
+		self._session = aiohttp.ClientSession()
+		try:
+			self._node = wavelink.Node(
+				uri=core.config.LAVALINK_NODE_URL,
+				password=core.config.LAVALINK_PASSWORD,
+				session=self._session,
+			)
+			await wavelink.Pool.connect(client=self.bot, nodes=[self._node])
+		except BaseException:
+			await self.cog_unload()
+			raise
+
+	async def cog_unload(self) -> None:
+		try:
+			if self._node is not None:
+				await self._node.close(eject=True)
+		finally:
+			if self._session is not None:
+				await self._session.close()
+
+	@commands.Cog.listener()
+	async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
+		logger.info("Wavelink Node connected: %r | Resumed: %s", payload.node, payload.resumed)
 
 	def _create_error_embed(self, description: str, *, title: str = "Music Error") -> discord.Embed:
 		embed = discord.Embed(title=title, description=description, color=discord.Color.red())
@@ -51,12 +78,20 @@ class Music(commands.Cog):
 		original = error
 		while getattr(original, "original", None) is not None:
 			original = original.original
-		if not isinstance(original, MusicError):
-			return
-		if original.__cause__ is not None:
-			return
-		embed = self._create_error_embed(str(original))
-		await ctx.send(embed=embed)
+		if isinstance(original, MusicError) and original.__cause__ is None:
+			embed = self._create_error_embed(str(original))
+			await ctx.send(embed=embed)
+		else:
+			await self.bot.on_command_error(
+				ctx,
+				error,
+				service_errors=(wavelink.WavelinkException,),
+				error_title="Music Error",
+				service_message=(
+					"The music service couldn't complete that request. Please try again shortly or try another track."
+				),
+			)
+		# Discord still dispatches the global error event after this cog handler.
 		error.is_handled = True
 
 	@commands.Cog.listener()

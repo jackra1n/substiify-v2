@@ -5,7 +5,6 @@ import logging
 import aiohttp
 import asyncpg
 import discord
-import wavelink
 from discord.app_commands import errors as slash_errors
 from discord.ext import commands
 
@@ -73,18 +72,6 @@ class Substiify(commands.Bot):
 		await self.load_extension("core.events")
 		await self.load_extension("extensions")
 
-		url = core.config.LAVALINK_NODE_URL
-		password = core.config.LAVALINK_PASSWORD
-
-		if url and url.strip() and password and password.strip():
-			node: wavelink.Node = wavelink.Node(uri=url, password=password)
-			await wavelink.Pool.connect(client=self, nodes=[node])
-		else:
-			logger.warning("Lavalink is not configured. Skipping connection.")
-
-	async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
-		logging.info(f"Wavelink Node connected: {payload.node!r} | Resumed: {payload.resumed}")
-
 	async def on_ready(self) -> None:
 		user = self.user
 		if user is None:
@@ -134,7 +121,16 @@ class Substiify(commands.Bot):
 		except discord.errors.Forbidden:
 			pass
 
-	async def on_command_error(self, ctx: commands.Context, error) -> None:
+	async def on_command_error(
+		self,
+		ctx: commands.Context,
+		error,
+		*,
+		service_errors: tuple[type[Exception], ...] = (),
+		error_title: str = "Command failed",
+		service_message: str = "A service is temporarily unavailable. Please try again shortly.",
+	) -> None:
+		"""Report failures centrally, with optional backend types and messages supplied by a cog."""
 		if getattr(error, "is_handled", False):
 			return
 		if isinstance(error, (commands.CommandNotFound, slash_errors.CommandNotFound)):
@@ -159,7 +155,7 @@ class Substiify(commands.Bot):
 		):
 			preparation_failed |= isinstance(original, _CommandPreparationError)
 			original = original.original
-		service_errors = (wavelink.WavelinkException, aiohttp.ClientConnectionError, *_TRANSIENT_DATABASE_ERRORS)
+		service_errors = (*service_errors, aiohttp.ClientConnectionError, *_TRANSIENT_DATABASE_ERRORS)
 		reported_error = original
 		service_failure = False
 		cause = original
@@ -209,19 +205,14 @@ class Substiify(commands.Bot):
 			await self._save_command_error(ctx, original)
 			return
 
-		is_music = ctx.command.cog is not None and ctx.command.cog.qualified_name == "Music"
-		if service_failure and is_music:
-			description = (
-				"The music service couldn't complete that request. Please try again shortly or try another track."
-			)
-		elif service_failure:
-			description = "A service is temporarily unavailable. Please try again shortly."
+		if service_failure:
+			description = service_message
 		else:
 			description = "I couldn't complete that command. Please try again later."
 		try:
 			await ctx.send(
 				embed=discord.Embed(
-					title="Music Error" if is_music else "Command failed",
+					title=error_title,
 					description=description,
 					color=discord.Color.red(),
 				)
