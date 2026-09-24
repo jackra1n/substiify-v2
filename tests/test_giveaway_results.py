@@ -42,7 +42,8 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 		separator = "&" if "?" in self.dsn else "?"
 		self.db = await Database(f"{self.dsn}{separator}search_path={self.schema}").__aenter__()
 		self.guild = SimpleNamespace(id=20, name="guild")
-		self.channel = SimpleNamespace(id=30, name="channel", guild=self.guild)
+		self.channel = Mock(spec=discord.TextChannel, id=30, guild=self.guild)
+		self.channel.name = "channel"
 		self.host = SimpleNamespace(id=11, name="host", display_avatar=SimpleNamespace(url="avatar"))
 		await self.db.prepare_command_context(self.host, self.guild, self.channel)
 		self.entrant_ids = [11, 12, 12, 13]

@@ -3,6 +3,7 @@ import datetime
 import logging
 import re
 import secrets
+from typing import Any
 from uuid import uuid4
 
 import discord
@@ -70,7 +71,7 @@ class Giveaways(commands.Cog):
 		channel: discord.TextChannel,
 		duration: str,
 		prize: str,
-		hosted_by: discord.Member = None,
+		hosted_by: discord.Member | None = None,
 		winners: int = 1,
 	):
 		"""
@@ -85,11 +86,13 @@ class Giveaways(commands.Cog):
 		"""
 		if ctx.guild is None or channel.guild.id != ctx.guild.id:
 			return await self._safe_notify(ctx, content="Choose a giveaway channel in this server.")
-		if hosted_by is None or hosted_by.bot:
-			hosted_by = ctx.author
+		host = hosted_by if hosted_by is not None and not hosted_by.bot else ctx.author
 
-		channel = await self.bot.fetch_channel(channel.id)
-		perms = channel.permissions_for(ctx.me)
+		fetched_channel = await self.bot.fetch_channel(channel.id)
+		if not isinstance(fetched_channel, discord.TextChannel):
+			return await self._safe_notify(ctx, content="Choose a giveaway text channel in this server.")
+		channel = fetched_channel
+		perms = channel.permissions_for(channel.guild.me)
 		missing = []
 		if not perms.send_messages:
 			missing.append("Send Messages")
@@ -127,21 +130,19 @@ class Giveaways(commands.Cog):
 				),
 			)
 
-		embed = self.create_giveaway_embed(hosted_by, prize, winners)
+		embed = self.create_giveaway_embed(host, prize, winners)
 		base_desc = embed.description or ""
 		embed.description = f"{base_desc}\nReact with :tada: to enter!\nEnds <t:{int(end.timestamp())}:R>"
 		embed.set_footer(text=f"Giveaway ends on {end_string}")
 
-		await self.bot.db.prepare_command_context(hosted_by, ctx.guild, channel)
+		await self.bot.db.prepare_command_context(host, ctx.guild, channel)
 		new_msg = await channel.send(embed=embed)
 		stmt = """INSERT INTO giveaway
 			(discord_user_id, end_date, prize, discord_server_id, discord_channel_id, discord_message_id, winners_count)
 			VALUES ($1, $2, $3, $4, $5, $6, $7)"""
 		try:
 			await new_msg.add_reaction("🎉")
-			await self.bot.db.pool.execute(
-				stmt, hosted_by.id, end, prize, ctx.guild.id, channel.id, new_msg.id, winners
-			)
+			await self.bot.db.pool.execute(stmt, host.id, end, prize, ctx.guild.id, channel.id, new_msg.id, winners)
 		except Exception:
 			try:
 				await new_msg.delete()
@@ -169,7 +170,7 @@ class Giveaways(commands.Cog):
 			return await self._safe_notify(ctx, content="This giveaway was cancelled or its source is unavailable.")
 		try:
 			msg = await ctx.fetch_message(message_id)
-			if msg.author.id != self.bot.user.id or msg.guild.id != ctx.guild.id or msg.channel.id != ctx.channel.id:
+			if msg.author != self.bot.user or msg.guild.id != ctx.guild.id or msg.channel.id != ctx.channel.id:
 				return await self._safe_notify(ctx, content="This is not one of my giveaways in this channel.")
 			users = await self._giveaway_entrants(msg)
 		except discord.NotFound, discord.Forbidden, TimeoutError:
@@ -209,11 +210,11 @@ class Giveaways(commands.Cog):
 		if len(giveaways) == 0:
 			return await ctx.send("There are no active giveaways")
 
-		embed = discord.Embed(title="Active Giveaways", description="")
+		description = ""
 		for giveaway in giveaways:
 			end_date = giveaway["end_date"]
-			embed.description += f"[{giveaway['prize']}](https://discord.com/channels/{giveaway['discord_server_id']}/{giveaway['discord_channel_id']}/{giveaway['discord_message_id']}) - Ends <t:{int(end_date.timestamp())}:R>\n"
-		await ctx.send(embed=embed)
+			description += f"[{giveaway['prize']}](https://discord.com/channels/{giveaway['discord_server_id']}/{giveaway['discord_channel_id']}/{giveaway['discord_message_id']}) - Ends <t:{int(end_date.timestamp())}:R>\n"
+		await ctx.send(embed=discord.Embed(title="Active Giveaways", description=description))
 
 	@commands.command(name="giveawayInfo", hidden=True)
 	@commands.is_owner()
@@ -257,7 +258,7 @@ class Giveaways(commands.Cog):
 			)
 		try:
 			msg = await ctx.fetch_message(message_id)
-			if msg.author.id != self.bot.user.id:
+			if msg.author != self.bot.user:
 				return await self._safe_notify(
 					ctx, content="Giveaway cancelled in the database; the source is not mine to edit."
 				)
@@ -305,13 +306,13 @@ class Giveaways(commands.Cog):
 			return
 		try:
 			channel = await self.bot.fetch_channel(giveaway["discord_channel_id"])
-			if getattr(channel, "guild", None) is None or channel.guild.id != giveaway["discord_server_id"]:
+			if not isinstance(channel, discord.TextChannel) or channel.guild.id != giveaway["discord_server_id"]:
 				await self._mark_giveaway_unavailable(
 					giveaway["id"], "Source channel does not belong to the recorded server."
 				)
 				return
 			msg = await channel.fetch_message(giveaway["discord_message_id"])
-			if msg.author.id != self.bot.user.id:
+			if msg.author != self.bot.user:
 				await self._mark_giveaway_unavailable(giveaway["id"], "Source message is not owned by this bot.")
 				return
 			if result is None:
@@ -532,7 +533,7 @@ class Giveaways(commands.Cog):
 			pass
 		return 1
 
-	def create_giveaway_embed(self, author: discord.Member, prize, winners):
+	def create_giveaway_embed(self, author: discord.Member | discord.User | str, prize, winners):
 		embed = discord.Embed(
 			title=":tada: Giveaway :tada:",
 			description=f"Win **{prize}**!",
@@ -549,23 +550,23 @@ class Giveaways(commands.Cog):
 		*,
 		content: str | None = None,
 		embed: discord.Embed | None = None,
-		delete_after: float | None = None,
 	):
+		message: dict[str, Any] = {"content": content, "embed": embed}
 		interaction = ctx.interaction
 		if interaction is not None:
 			try:
 				if interaction.response.is_done():
-					await interaction.followup.send(content=content, embed=embed, ephemeral=True)
+					await interaction.followup.send(**message, ephemeral=True)
 				else:
-					await interaction.response.send_message(content=content, embed=embed, ephemeral=True)
+					await interaction.response.send_message(**message, ephemeral=True)
 				return
 			except discord.HTTPException as exc:
 				logger.warning(f"Giveaway interaction reply to {ctx.author} failed: {exc}")
 		try:
-			await ctx.send(content=content, embed=embed, delete_after=delete_after)
+			await ctx.send(**message)
 		except discord.Forbidden:
 			try:
-				await ctx.author.send(content=content, embed=embed)
+				await ctx.author.send(**message)
 			except discord.HTTPException as exc:
 				logger.warning(f"Giveaway notification to {ctx.author} could not be delivered: {exc}")
 
