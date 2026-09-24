@@ -1,4 +1,5 @@
 import os
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 
@@ -12,7 +13,9 @@ DB_PORT = os.getenv("DB_PORT")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME")
-POSTGRES_DSN = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+POSTGRES_DSN = (
+	f"postgresql://{quote(DB_USER or '', safe='')}:{quote(DB_PASSWORD or '', safe='')}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+)
 
 LAVALINK_NODE_URL = os.getenv("LAVALINK_NODE_URL")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
