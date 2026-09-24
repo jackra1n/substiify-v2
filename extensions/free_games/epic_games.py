@@ -6,7 +6,7 @@ from typing import Any
 
 import aiohttp
 
-from .base import Game, Platform
+from .base import Game, Platform, ProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -74,29 +74,35 @@ class EpicGames(Platform):
 			session: aiohttp.ClientSession
 			async with session.get(EpicGames.api_url) as response:
 				response.raise_for_status()
-				json_response = await response.json()
-		all_games = json_response["data"]["Catalog"]["searchStore"]["elements"]
+				try:
+					json_response = await response.json()
+				except ValueError as error:
+					raise ProviderError("Epic returned invalid JSON") from error
+		try:
+			all_games = json_response["data"]["Catalog"]["searchStore"]["elements"]
+		except (KeyError, TypeError) as error:
+			raise ProviderError("Epic response has no game listing") from error
+		if not isinstance(all_games, list):
+			raise ProviderError("Epic game listing is not a list")
 
 		current_free_games: list[Game] = []
 		for game in all_games:
-			if game["promotions"] is None:
-				continue
-			if not game["promotions"]["promotionalOffers"]:
-				continue
-			if not game["price"]:
-				continue
-			if not game["price"]["totalPrice"]:
-				continue
-			if game["price"]["totalPrice"]["discountPrice"] != 0:
-				continue
-			categories = [category["path"] for category in game["categories"]]
-			must_have_categories = ["freegames", "games"]
-			if not all(category in categories for category in must_have_categories):
-				continue
-			if game["status"] != "ACTIVE":
-				continue
 			try:
-				current_free_games.append(EpicGamesGame(game))
-			except Exception as ex:
-				logger.error(f"Error while creating 'Game' object: {ex}")
+				if _is_current_free_game(game):
+					current_free_games.append(EpicGamesGame(game))
+			except (KeyError, TypeError, IndexError, ValueError) as ex:
+				logger.error(f"Skipping malformed Epic game entry: {ex!r}")
 		return current_free_games
+
+
+def _is_current_free_game(game: dict[str, Any]) -> bool:
+	if not game["promotions"] or not game["promotions"]["promotionalOffers"]:
+		return False
+	if not game["price"] or not game["price"]["totalPrice"]:
+		return False
+	if game["price"]["totalPrice"]["discountPrice"] != 0:
+		return False
+	categories = [category["path"] for category in game["categories"]]
+	if not all(category in categories for category in ("freegames", "games")):
+		return False
+	return game["status"] == "ACTIVE"

@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 
 
+class ProviderError(Exception):
+	"""A store answered with data that does not match the expected shape."""
+
+
 class Game:
 	title: str
 	start_date: datetime | None

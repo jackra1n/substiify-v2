@@ -9,6 +9,7 @@ import aiohttp
 import asyncpg
 
 from extensions.free_games import FreeGames
+from extensions.free_games.base import ProviderError
 from extensions.free_games.epic_games import EpicGames
 from extensions.free_games.steam import STEAM_SEARCH_URL, Steam
 from core.bot import Substiify
@@ -151,6 +152,24 @@ class FreeGameFetchOutages(unittest.IsolatedAsyncioTestCase):
 
 		with _fake_transport(empty):
 			self.assertEqual(await Steam.get_free_games(), [])
+
+	async def test_malformed_store_payloads_are_provider_errors(self):
+		cases = [
+			(EpicGames, _FakeResponse(payload={"data": None})),
+			(EpicGames, _FakeResponse(payload={"data": {"Catalog": {"searchStore": {"elements": "nope"}}}})),
+			(Steam, _FakeResponse(text="<html>blocked</html>")),
+			(Steam, _FakeResponse(text=json.dumps({"unexpected": []}))),
+		]
+		for store, response in cases:
+			with self.subTest(store=store.name, response=response._payload or response._text):
+				with _fake_transport(lambda _url, _params: response), self.assertRaises(ProviderError):
+					await store.get_free_games()
+
+	async def test_malformed_epic_entry_is_skipped(self):
+		payload = {"data": {"Catalog": {"searchStore": {"elements": [{"title": "broken"}]}}}}
+		with _fake_transport(lambda _url, _params: _FakeResponse(payload=payload)):
+			with self.assertLogs("extensions.free_games.epic_games", level="ERROR"):
+				self.assertEqual(await EpicGames.get_free_games(), [])
 
 	async def test_steam_detail_fetch_outage_is_not_an_empty_listing(self):
 		search_results = _FakeResponse(

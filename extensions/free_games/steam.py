@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import aiohttp
 
-from .base import Game, Platform
+from .base import Game, Platform, ProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -86,19 +86,24 @@ class Steam(Platform):
 				text = await response.text()
 				try:
 					data = json.loads(text)
-				except json.JSONDecodeError:
+				except json.JSONDecodeError as error:
 					logger.error(
 						f"Steam search returned non-JSON response (status {response.status}, "
 						f"content-type {response.headers.get('Content-Type')!r}): {text[:200]!r}"
 					)
-					raise
-				return data.get("items", [])
+					raise ProviderError("Steam search returned invalid JSON") from error
+				items = data.get("items") if isinstance(data, dict) else None
+				if not isinstance(items, list):
+					raise ProviderError("Steam search response has no item list")
+				return items
 
 	@staticmethod
 	def _extract_app_ids(items: list[dict[str, Any]]) -> list[str]:
 		app_ids: list[str] = []
 		for item in items:
-			logo_url = item.get("logo", "")
+			logo_url = item.get("logo") if isinstance(item, dict) else None
+			if not isinstance(logo_url, str):
+				continue
 			app_id = Steam._get_app_id_from_url(logo_url)
 			if app_id:
 				app_ids.append(app_id)
@@ -119,11 +124,19 @@ class Steam(Platform):
 		async with STEAM_SEMAPHORE:
 			async with session.get(STEAM_APPDETAILS_URL, params={"appids": app_id, "cc": "us"}) as response:
 				response.raise_for_status()
-				data = json.loads(await response.text())
-				app_data = data.get(str(app_id), {})
+				try:
+					data = json.loads(await response.text())
+				except json.JSONDecodeError as error:
+					raise ProviderError(f"Steam app details for {app_id} returned invalid JSON") from error
+				app_data = data.get(str(app_id)) if isinstance(data, dict) else None
+				if not isinstance(app_data, dict):
+					raise ProviderError(f"Steam app details for {app_id} are malformed")
 				if not app_data.get("success", False):
 					return app_id, None
-				return app_id, app_data.get("data")
+				details = app_data.get("data")
+				if not isinstance(details, dict):
+					raise ProviderError(f"Steam app details for {app_id} have no data")
+				return app_id, details
 
 	@staticmethod
 	async def _fetch_app_details_batch(app_ids: list[str]) -> list[tuple[str, dict[str, Any]]]:
@@ -214,6 +227,6 @@ class Steam(Platform):
 		if details.get("type") != "game":
 			return False
 		price_overview = details.get("price_overview")
-		if not price_overview:
+		if not isinstance(price_overview, dict):
 			return False
 		return price_overview.get("discount_percent", 0) == 100

@@ -10,7 +10,7 @@ import discord
 from discord.ext import commands, tasks
 
 import core
-from .base import Game, Platform
+from .base import Game, Platform, ProviderError
 from .epic_games import EpicGames
 from .steam import Steam
 
@@ -27,6 +27,7 @@ _RETRYABLE_ERRORS = (
 	asyncpg.TooManyConnectionsError,
 	asyncpg.QueryCanceledError,
 	asyncpg.LockNotAvailableError,
+	ProviderError,
 )
 
 STORES: dict[str, type[Platform]] = {
