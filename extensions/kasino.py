@@ -100,6 +100,7 @@ class Kasino(commands.Cog):
 		return f"https://discordapp.com/channels/{kasino['discord_server_id']}/{kasino['discord_channel_id']}/{kasino['discord_message_id']}"
 
 	@commands.hybrid_group(name="kasino", aliases=["kas"], invoke_without_command=True)
+	@commands.guild_only()
 	async def kasino(self, ctx: commands.Context):
 		"""Karma kasino which allows people to bet on a question with two options.
 		If you want to open a kasino, use the subcommand `kasino open`.

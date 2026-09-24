@@ -139,6 +139,11 @@ class MusicErrorReportingTests(unittest.IsolatedAsyncioTestCase):
 		self.assertIn("ValueError", "\n".join(logs.output))
 		self.bot._save_command_error.assert_awaited_once()
 
+	async def test_dm_only_failure_replies_without_incident_report(self):
+		await self.dispatch_error(commands.NoPrivateMessage())
+		self.ctx.reply.assert_awaited_once_with("This command can only be used in a server.")
+		self.bot._save_command_error.assert_not_awaited()
+
 	async def test_user_error_has_one_response_without_incident_report(self):
 		await self.dispatch_error(commands.CommandInvokeError(NoVoiceChannel()))
 		self.assertEqual(self.ctx.send.await_count + self.ctx.reply.await_count, 1)

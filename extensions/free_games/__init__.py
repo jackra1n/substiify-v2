@@ -204,6 +204,7 @@ class FreeGames(commands.Cog):
 					logger.exception("Failed to release free game lease for channel %s; it will expire.", channel_id)
 
 	@commands.hybrid_group(aliases=["fg"], usage="freegames [settings|send]")
+	@commands.guild_only()
 	@commands.cooldown(3, 30)
 	async def freegames(self, ctx: commands.Context):
 		if ctx.author.guild_permissions.manage_channels or ctx.author.id == self.bot.owner_id:
@@ -212,7 +213,6 @@ class FreeGames(commands.Cog):
 			return await ctx.invoke(self.bot.get_command("freegames send"))
 
 	@freegames.command()
-	@commands.guild_only()
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
 	async def settings(self, ctx: commands.Context):
 		embed = discord.Embed(title="Free Games Settings", color=core.constants.SECONDARY_COLOR)

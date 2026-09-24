@@ -202,6 +202,7 @@ class Karma(commands.Cog):
 		return server_upvote_emotes
 
 	@commands.hybrid_group(invoke_without_command=True)
+	@commands.guild_only()
 	async def votes(self, ctx: commands.Context):
 		"""
 		Shows if votes are enabled in the current channel
@@ -291,6 +292,7 @@ class Karma(commands.Cog):
 		usage="karma [user]",
 		invoke_without_command=True,
 	)
+	@commands.guild_only()
 	@app_commands.describe(
 		user="Which user do you want to see the karma of? If not specified, it will show your own karma."
 	)
@@ -626,6 +628,7 @@ class Karma(commands.Cog):
 			await ctx.send(embed=embed)
 
 	@commands.hybrid_group(name="post", aliases=["po"], invoke_without_command=True)
+	@commands.guild_only()
 	async def post(self, ctx: commands.Context):
 		await ctx.send_help(ctx.command)
 

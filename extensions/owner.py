@@ -182,6 +182,8 @@ class Owner(commands.Cog):
 		"""
 		Shows a lits of most used command on the current server
 		"""
+		if ctx.guild is None:
+			return await ctx.reply("This command can only be used in a server.")
 		stmt_usage = "SELECT command_name, COUNT(*) AS cnt FROM command_history WHERE discord_server_id = $1 GROUP BY command_name ORDER BY cnt DESC LIMIT 10"
 		commands_used = await self.bot.db.pool.fetch(stmt_usage, ctx.guild.id)
 		embed = create_command_usage_embed(commands_used)
@@ -203,6 +205,7 @@ class Owner(commands.Cog):
 
 	@usage.command(name="last")
 	@commands.is_owner()
+	@commands.guild_only()
 	async def usage_last(self, ctx: commands.Context, amount: int = 10):
 		"""
 		Shows a list of last used commands on the current server
@@ -294,6 +297,7 @@ class Owner(commands.Cog):
 
 	@commands.is_owner()
 	@db_command.command(name="generateTestData")
+	@commands.guild_only()
 	async def db_generate_test_data(self, ctx: commands.Context):
 		"""
 		Generates test data for the database

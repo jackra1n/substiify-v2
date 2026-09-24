@@ -151,6 +151,9 @@ class Substiify(commands.Bot):
 			)
 			await ctx.reply(embed=embed)
 			return
+		if isinstance(error, commands.NoPrivateMessage):
+			await ctx.reply("This command can only be used in a server.")
+			return
 		original = error
 		preparation_failed = False
 		while isinstance(
