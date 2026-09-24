@@ -13,6 +13,19 @@ import core
 
 logger = logging.getLogger(__name__)
 
+DURATION_UNITS = {"m": 60, "h": 3600, "d": 24 * 3600}
+MAX_DURATION = 365 * 24 * 3600
+
+
+def parse_duration(duration: str) -> int | None:
+	match = re.fullmatch(r"(\d+)([mhd])", duration.strip().lower())
+	if match is None:
+		return None
+	seconds = int(match.group(1)) * DURATION_UNITS[match.group(2)]
+	if not 0 < seconds <= MAX_DURATION:
+		return None
+	return seconds
+
 
 class Giveaways(commands.Cog):
 	# The whole delivery attempt is bounded below its persisted lease, including DB checkpoints.
@@ -91,16 +104,14 @@ class Giveaways(commands.Cog):
 			)
 			return await self._safe_notify(ctx, embed=embed)
 
-		time = self.convert(duration)
-		# Check if Time is valid
-		if time == -1:
+		time = parse_duration(duration)
+		if time is None:
 			await self._safe_notify(
-				ctx, embed=discord.Embed(description="The Time format was wrong", color=discord.Colour.red())
-			)
-			return
-		elif time == -2:
-			await self._safe_notify(
-				ctx, embed=discord.Embed(description="The Time was not conventional number", color=discord.Colour.red())
+				ctx,
+				embed=discord.Embed(
+					description="Invalid duration. Use a positive number with m, h or d (max 365d), e.g. `2h`.",
+					color=discord.Colour.red(),
+				),
 			)
 			return
 
@@ -520,18 +531,6 @@ class Giveaways(commands.Cog):
 		except Exception:
 			pass
 		return 1
-
-	def convert(self, time):
-		pos = ["m", "h", "d"]
-		time_dict = {"m": 60, "h": 3600, "d": 24 * 3600}
-		unit = time[-1]
-		if unit not in pos:
-			return -1
-		try:
-			time_val = int(time[:-1])
-		except Exception:
-			return -2
-		return time_val * time_dict[unit]
 
 	def create_giveaway_embed(self, author: discord.Member, prize, winners):
 		embed = discord.Embed(
