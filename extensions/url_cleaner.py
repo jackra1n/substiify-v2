@@ -9,6 +9,7 @@ from utils.url_rules import URLRulesCleaner, load_compiled_rules, refresh_compil
 
 logger = logging.getLogger(__name__)
 MAX_TRACKED_MESSAGES = 3000
+MAX_EMBED_DESCRIPTION = 4096
 
 
 class _ReplyTracker:
@@ -107,14 +108,17 @@ class URLCleaner(commands.Cog):
 
 	def _build_tracking_embed(self, cleaned_urls: list[str], removed_trackers: list[str]) -> discord.Embed:
 		embed = discord.Embed(title="Please avoid sending links containing tracking parameters.")
-		cleaned_urls_str = "\n".join(cleaned_urls)
 		if removed_trackers:
 			tracker_list = ", ".join([f"`{tracker}`" for tracker in removed_trackers])
 			verb = "are" if len(removed_trackers) > 1 else "is"
 			response = f"{tracker_list} {verb} used for tracking."
 		else:
 			response = "Tracking elements were removed from this link."
-		response += f"\n Here's the link without trackers:\n{cleaned_urls_str}"
+		response = response[:1000] + "\n Here's the link without trackers:"
+		for url in cleaned_urls:
+			if len(response) + len(url) + 1 > MAX_EMBED_DESCRIPTION:
+				break
+			response += f"\n{url}"
 		embed.description = response
 		embed.set_footer(text="You can edit your message to remove trackers, and this message will disappear.")
 		return embed
@@ -163,7 +167,8 @@ class URLCleaner(commands.Cog):
 				logger.error(
 					f"Unable to send url_cleaner message in {message.guild} {message.channel}, missing permissions."
 				)
-				return
+			except discord.HTTPException as exc:
+				logger.warning(f"Failed to send url_cleaner message in {message.guild} {message.channel}: {exc}")
 
 	@commands.Cog.listener()
 	async def on_message_edit(self, before: discord.Message, after: discord.Message):
