@@ -84,9 +84,6 @@ class URLCleaner(commands.Cog):
 		finally:
 			self._rules_ready.set()
 
-	async def cog_load(self) -> None:
-		await self._rules_ready.wait()
-
 	async def cog_unload(self) -> None:
 		self.refresh_rules.cancel()
 		if not self._initialization_task.done():
@@ -124,7 +121,6 @@ class URLCleaner(commands.Cog):
 		return embed
 
 	async def _clean_urls(self, message_content: str) -> tuple[list[str], list[str]]:
-		await self._rules_ready.wait()
 		if self.cleaner is None:
 			return [], []
 		return self.cleaner.clean_message_urls(message_content)
