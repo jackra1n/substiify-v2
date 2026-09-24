@@ -18,7 +18,7 @@ class KasinoStateError(ValueError):
 	pass
 
 
-def _check_kasino(kasino: Record | None, guild_id: int, *, allow_settled: bool = False) -> None:
+def _check_kasino(kasino: Record | None, guild_id: int | None, *, allow_settled: bool = False) -> None:
 	if kasino is None:
 		raise KasinoStateError("Kasino not found. This message may be out of date.")
 	if kasino["discord_server_id"] != guild_id:
@@ -109,15 +109,16 @@ class Kasino(commands.Cog):
 		"""Opens a karma kasino which allows people to bet on a question with two options.
 		Check "karma" and "votes" commands for more info on karma.
 		"""
+		guild = core.require_guild(ctx)
 		await ctx.defer()
-		await self.bot.db.prepare_command_context(ctx.author, ctx.guild, ctx.channel)
+		await self.bot.db.prepare_command_context(ctx.author, guild, ctx.channel)
 		kasino_msg = await best_effort(ctx.send(embed=discord.Embed(description="Opening kasino...")))
 		if kasino_msg is None:
 			return
 		kasino_id = await self.bot.db.pool.fetchval(
 			"""INSERT INTO kasino (discord_server_id, discord_channel_id, discord_message_id, question, option1, option2)
 			VALUES ($1, $2, $3, $4, $5, $6) RETURNING id""",
-			ctx.guild.id,
+			guild.id,
 			ctx.channel.id,
 			kasino_msg.id,
 			question,
@@ -134,9 +135,10 @@ class Kasino(commands.Cog):
 	)
 	async def kasino_close(self, ctx: commands.Context, kasino_id: int, winner: int):
 		"""Closes a karma kasino and announces the winner. To cancel the kasino, use 3 as the winner."""
+		guild = core.require_guild(ctx)
 		await ctx.defer()
 		try:
-			kasino, bets, newly_settled = await self.settle_kasino(kasino_id, ctx.guild.id, winner)
+			kasino, bets, newly_settled = await self.settle_kasino(kasino_id, guild.id, winner)
 		except KasinoStateError as error:
 			return await best_effort(ctx.reply(str(error), ephemeral=True))
 		await _update_kasino_msg(self.bot, kasino_id)
@@ -168,11 +170,12 @@ class Kasino(commands.Cog):
 	@kasino.command(name="list", aliases=["l"], usage="list")
 	async def kasino_list(self, ctx: commands.Context):
 		"""Lists all open kasinos on the server."""
+		guild = core.require_guild(ctx)
 		await ctx.defer()
 		embed = discord.Embed(title="Open kasinos")
 		stmt_kasinos = """SELECT * FROM kasino
 			WHERE settled_at IS NULL AND discord_server_id = $1 ORDER BY id ASC"""
-		all_kasinos: list[Record] = await self.bot.db.pool.fetch(stmt_kasinos, ctx.guild.id)
+		all_kasinos: list[Record] = await self.bot.db.pool.fetch(stmt_kasinos, guild.id)
 		embed_kasinos = "".join(
 			f"`{entry['id']}` - [{entry['question']}]({self._create_kasino_message_url(entry)}){' (locked)' if entry['locked'] else ''}\n"
 			for entry in all_kasinos
@@ -188,13 +191,14 @@ class Kasino(commands.Cog):
 	@app_commands.describe(kasino_id="The ID of the kasino you want to resend.")
 	async def resend_kasino(self, ctx: commands.Context, kasino_id: int):
 		"""Resends a kasino message if it got lost in the channel."""
+		guild = core.require_guild(ctx)
 		await ctx.defer()
 		try:
 			kasino = await self.bot.db.pool.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
-			_check_kasino(kasino, ctx.guild.id, allow_settled=True)
+			_check_kasino(kasino, guild.id, allow_settled=True)
 		except KasinoStateError as error:
 			return await best_effort(ctx.send(str(error), ephemeral=True))
-		await self.bot.db.prepare_command_context(ctx.author, ctx.guild, ctx.channel)
+		await self.bot.db.prepare_command_context(ctx.author, guild, ctx.channel)
 		message = await _update_kasino_msg(self.bot, kasino_id, resend_channel=ctx.channel)
 		if message is None:
 			await best_effort(
@@ -332,10 +336,23 @@ class Kasino(commands.Cog):
 			logger.warning("Timed out notifying kasino %s participants; settlement is saved.", kasino["id"])
 
 
+def _kasino_cog(bot: core.Substiify) -> "Kasino":
+	cog = bot.get_cog("Kasino")
+	if not isinstance(cog, Kasino):
+		raise RuntimeError("Kasino cog is not loaded")
+	return cog
+
+
+async def _can_manage_kasino(interaction: discord.Interaction[core.Substiify]) -> bool:
+	user = interaction.user
+	if isinstance(user, discord.Member) and user.guild_permissions.manage_channels:
+		return True
+	return user.id == interaction.client.owner_id
+
+
 async def _update_kasino_msg(bot: core.Substiify, kasino_id: int, *, resend_channel=None) -> discord.Message | None:
 	# Serialize renders on this bot so a slow pre-settlement edit cannot overwrite the conclusion.
-	cog: Kasino = bot.get_cog("Kasino")
-	lock = cog.kasino_message_locks.setdefault(kasino_id, asyncio.Lock())
+	lock = _kasino_cog(bot).kasino_message_locks.setdefault(kasino_id, asyncio.Lock())
 	async with lock:
 		try:
 			async with asyncio.timeout(30):
@@ -368,6 +385,8 @@ async def _update_kasino_msg(bot: core.Substiify, kasino_id: int, *, resend_chan
 					channel = bot.get_channel(kasino["discord_channel_id"]) or await bot.fetch_channel(
 						kasino["discord_channel_id"]
 					)
+					if not isinstance(channel, discord.abc.Messageable):
+						return None
 					kasino_msg = await channel.fetch_message(kasino["discord_message_id"])
 
 				# Fetch one coherent current snapshot after channel/message network calls.
@@ -409,8 +428,9 @@ async def _update_kasino_msg(bot: core.Substiify, kasino_id: int, *, resend_chan
 					async def delete_old_message():
 						channel_id, message_id = old_message
 						channel = bot.get_channel(channel_id) or await bot.fetch_channel(channel_id)
-						message = await channel.fetch_message(message_id)
-						await message.delete()
+						if isinstance(channel, discord.abc.Messageable):
+							message = await channel.fetch_message(message_id)
+							await message.delete()
 
 					await best_effort(delete_old_message())
 				return kasino_msg
@@ -422,23 +442,23 @@ async def _update_kasino_msg(bot: core.Substiify, kasino_id: int, *, resend_chan
 class KasinoView(discord.ui.View):
 	def __init__(self, kasino: Record):
 		super().__init__(timeout=None)
-		self.kasino = kasino
 		if kasino["settled_at"] is not None:
 			return
 		if not kasino["locked"]:
-			self.add_item(KasinoBetButton(1))
-			self.add_item(KasinoBetButton(2))
+			self.add_item(KasinoBetButton(kasino["id"], 1))
+			self.add_item(KasinoBetButton(kasino["id"], 2))
 		self.add_item(KasinoLockButton(kasino))
 
 
 class KasinoBetButton(discord.ui.Button):
-	def __init__(self, option: int):
+	def __init__(self, kasino_id: int, option: int):
 		gamba_emoji = discord.PartialEmoji.from_str("karmabet:817354842699857920")
+		self.kasino_id = kasino_id
 		self.option = option
 		super().__init__(label=f"Bet: {option}", emoji=gamba_emoji, style=discord.ButtonStyle.blurple)
 
-	async def callback(self, interaction: discord.Interaction):
-		bot: core.Substiify = interaction.client
+	async def callback(self, interaction: discord.Interaction[core.Substiify]):
+		bot = interaction.client
 		try:
 			# Modals cannot follow a defer, so bound this lookup below Discord's response deadline.
 			async with asyncio.timeout(2):
@@ -449,7 +469,7 @@ class KasinoBetButton(discord.ui.Button):
 						AND balance.discord_server_id = k.discord_server_id
 					LEFT JOIN kasino_bet bet ON bet.kasino_id = k.id AND bet.discord_user_id = $2
 					WHERE k.id = $1""",
-					self.view.kasino["id"],
+					self.kasino_id,
 					interaction.user.id,
 				)
 			_check_kasino(kasino, interaction.guild_id)
@@ -471,6 +491,7 @@ class KasinoBetButton(discord.ui.Button):
 class KasinoLockButton(discord.ui.Button):
 	def __init__(self, kasino: Record):
 		locked = kasino["locked"]
+		self.kasino_id = kasino["id"]
 		self.expected_locked = locked
 		self.lock_settings = {
 			True: ("Unlock", "🔐", discord.ButtonStyle.red),
@@ -479,18 +500,18 @@ class KasinoLockButton(discord.ui.Button):
 		label, emoji, style = self.lock_settings[locked]
 		super().__init__(label=label, emoji=emoji, style=style)
 
-	async def callback(self, interaction: discord.Interaction):
+	async def callback(self, interaction: discord.Interaction[core.Substiify]):
 		await interaction.response.defer(ephemeral=True)
-		bot: core.Substiify = interaction.client
-		cog: Kasino = bot.get_cog("Kasino")
-		kasino_id = self.view.kasino["id"]
-		if not interaction.user.guild_permissions.manage_channels and not await bot.is_owner(interaction.user):
+		bot = interaction.client
+		kasino_id = self.kasino_id
+		guild_id = interaction.guild_id
+		if guild_id is None or not await _can_manage_kasino(interaction):
 			return await best_effort(
 				interaction.followup.send("You don't have permission to lock this kasino.", ephemeral=True)
 			)
 		try:
 			kasino = await bot.db.pool.fetchrow("SELECT * FROM kasino WHERE id = $1", kasino_id)
-			_check_kasino(kasino, interaction.guild_id)
+			_check_kasino(kasino, guild_id)
 			if kasino["locked"] != self.expected_locked:
 				await best_effort(
 					interaction.followup.send(
@@ -513,7 +534,7 @@ class KasinoLockButton(discord.ui.Button):
 						ephemeral=True,
 					)
 				)
-			_, changed = await cog.set_kasino_locked(kasino_id, interaction.guild_id, True)
+			_, changed = await _kasino_cog(bot).set_kasino_locked(kasino_id, guild_id, True)
 		except KasinoStateError as error:
 			return await best_effort(interaction.followup.send(str(error), ephemeral=True))
 		await best_effort(
@@ -542,17 +563,18 @@ class KasinoBetModal(discord.ui.Modal):
 		)
 		self.add_item(self.bet_amount_input)
 
-	async def on_submit(self, interaction: discord.Interaction) -> None:
+	async def on_submit(self, interaction: discord.Interaction[core.Substiify]) -> None:
 		await interaction.response.defer(ephemeral=True)
-		bot: core.Substiify = interaction.client
-		cog: Kasino = bot.get_cog("Kasino")
+		bot = interaction.client
+		if interaction.guild_id is None or interaction.channel is None:
+			return
 		try:
 			amount = int(self.bet_amount_input.value)
 		except ValueError:
 			return await best_effort(interaction.followup.send("Invalid amount.", ephemeral=True))
 		try:
 			await bot.db.prepare_command_context(interaction.user, interaction.guild, interaction.channel)
-			total_bet, remaining_karma, increased = await cog.place_kasino_bet(
+			total_bet, remaining_karma, increased = await _kasino_cog(bot).place_kasino_bet(
 				self.kasino_id,
 				interaction.guild_id,
 				interaction.user.id,
@@ -577,16 +599,17 @@ class KasinoConfirmUnlockView(discord.ui.View):
 		self.kasino_id = kasino_id
 
 	@discord.ui.button(label="Unlock", style=discord.ButtonStyle.blurple)
-	async def unlock(self, interaction: discord.Interaction, button: discord.ui.Button):
+	async def unlock(self, interaction: discord.Interaction[core.Substiify], button: discord.ui.Button):
 		await interaction.response.defer(ephemeral=True)
-		bot: core.Substiify = interaction.client
-		cog: Kasino = bot.get_cog("Kasino")
-		if not interaction.user.guild_permissions.manage_channels and not await bot.is_owner(interaction.user):
+		bot = interaction.client
+		cog = _kasino_cog(bot)
+		guild_id = interaction.guild_id
+		if guild_id is None or not await _can_manage_kasino(interaction):
 			return await best_effort(
 				interaction.followup.send("You don't have permission to unlock this kasino.", ephemeral=True)
 			)
 		try:
-			kasino, changed = await cog.set_kasino_locked(self.kasino_id, interaction.guild_id, False)
+			kasino, changed = await cog.set_kasino_locked(self.kasino_id, guild_id, False)
 		except KasinoStateError as error:
 			return await best_effort(interaction.followup.send(str(error), ephemeral=True))
 		if not changed:
