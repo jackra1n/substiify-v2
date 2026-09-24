@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import timedelta
 
 import discord
 import asyncio
@@ -635,8 +636,8 @@ class Karma(commands.Cog):
 		"""
 		async with ctx.typing():
 			all_board = await self.fetch_and_create_leaderboard(ctx, user)
-			month_board = await self.fetch_and_create_leaderboard(ctx, user, "30 days")
-			week_board = await self.fetch_and_create_leaderboard(ctx, user, "7 days")
+			month_board = await self.fetch_and_create_leaderboard(ctx, user, timedelta(days=30))
+			week_board = await self.fetch_and_create_leaderboard(ctx, user, timedelta(days=7))
 
 		embed = discord.Embed(title="Top Messages")
 		embed.set_thumbnail(url=ctx.guild.icon)
@@ -645,13 +646,18 @@ class Karma(commands.Cog):
 		embed.add_field(name="Top 5 This Week", value=week_board, inline=False)
 		await ctx.send(embed=embed)
 
-	async def fetch_and_create_leaderboard(self, ctx: commands.Context, user: discord.User, interval: str = None):
-		user_query = " AND discord_user_id = $2" if user else ""
-		interval_query = f" AND created_at > NOW() - INTERVAL '{interval}'" if interval else ""
-		stmt = (
-			f"SELECT * FROM post WHERE discord_server_id = $1{user_query}{interval_query} ORDER BY upvotes DESC LIMIT 5"
-		)
-		params = (ctx.guild.id, user.id) if user else (ctx.guild.id,)
+	async def fetch_and_create_leaderboard(
+		self, ctx: commands.Context, user: discord.User | None, interval: timedelta | None = None
+	):
+		stmt = "SELECT * FROM post WHERE discord_server_id = $1"
+		params: list = [ctx.guild.id]
+		if user:
+			params.append(user.id)
+			stmt += f" AND discord_user_id = ${len(params)}"
+		if interval:
+			params.append(interval)
+			stmt += f" AND created_at > NOW() - ${len(params)}::interval"
+		stmt += " ORDER BY upvotes DESC LIMIT 5"
 		posts = await self.bot.db.pool.fetch(stmt, *params)
 		return await self._create_post_leaderboard(posts)
 
