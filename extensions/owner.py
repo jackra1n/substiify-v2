@@ -272,13 +272,7 @@ class Owner(commands.Cog):
 		servers = self.bot.guilds
 
 		for server in servers:
-			await self.bot.db.upsert_server(server)
-
-			for channel in server.channels:
-				if not isinstance(channel, discord.TextChannel):
-					continue
-				print(f"inserting channel: {channel}...")
-				await self.bot.db.upsert_channel(channel)
+			await self.bot.db.sync_guild(server)
 
 		for post in await self.bot.db.pool.fetch("SELECT * FROM post"):
 			user_id = post["discord_user_id"]

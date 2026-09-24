@@ -115,6 +115,13 @@ class Database:
 		executor = connection if connection is not None else self.pool
 		await executor.execute(SERVER_INSERT_QUERY, guild.id, guild.name)
 
+	async def sync_guild(self, guild: discord.Guild) -> None:
+		channels = [(channel.id, channel.name, guild.id, None) for channel in guild.channels]
+		async with self.pool.acquire() as connection:
+			async with connection.transaction():
+				await self.upsert_server(guild, connection=connection)
+				await connection.executemany(MESSAGEABLE_INSERT_QUERY, channels)
+
 	async def upsert_channel(self, channel: _DiscordChannel, *, connection: asyncpg.Connection | None = None) -> None:
 		if connection is None:
 			async with self.pool.acquire() as connection:

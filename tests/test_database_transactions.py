@@ -61,13 +61,27 @@ class DatabaseTransactions(unittest.IsolatedAsyncioTestCase):
 		self.assertEqual(await self.db.pool.fetchval("SELECT amount FROM karma WHERE discord_user_id=11"), 2)
 		self.assertEqual(await self.db.pool.fetchval("SELECT sum(amount) FROM karma"), 30)
 
+	async def test_sync_guild_upserts_server_and_channels(self):
+		guild = SimpleNamespace(id=21, name="joined")
+		guild.channels = [SimpleNamespace(id=100 + i, name=f"c{i}") for i in range(3)]
+		await self.db.sync_guild(cast(discord.Guild, guild))
+		await self.db.sync_guild(cast(discord.Guild, guild))
+		self.assertEqual(
+			await self.db.pool.fetchval("SELECT server_name FROM discord_server WHERE discord_server_id=21"), "joined"
+		)
+		self.assertEqual(
+			await self.db.pool.fetchval("SELECT count(*) FROM discord_channel WHERE discord_server_id=21"), 3
+		)
+
 	async def test_failed_post_vote_rolls_back_karma(self):
 		payload = cast(discord.RawReactionActionEvent, SimpleNamespace(guild_id=20, channel_id=30, message_id=555))
 		message = cast(discord.Message, SimpleNamespace(created_at="not a timestamp"))
 		with self.assertRaises(Exception):
 			await self.karma._apply_vote(payload, 11, 1, 1, 0, message=message)
 		self.assertEqual(await self.db.pool.fetchval("SELECT amount FROM karma WHERE discord_user_id=11"), 10)
-		self.assertIsNone(await self.db.pool.fetchval("SELECT discord_message_id FROM post WHERE discord_message_id=555"))
+		self.assertIsNone(
+			await self.db.pool.fetchval("SELECT discord_message_id FROM post WHERE discord_message_id=555")
+		)
 
 	async def test_vote_updates_karma_and_post(self):
 		payload = cast(discord.RawReactionActionEvent, SimpleNamespace(guild_id=20, channel_id=30, message_id=555))

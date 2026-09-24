@@ -29,11 +29,7 @@ class Events(commands.Cog):
 
 	@commands.Cog.listener()
 	async def on_guild_join(self, guild: discord.Guild):
-		async with self.bot.db.pool.acquire() as connection:
-			async with connection.transaction():
-				await self.bot.db.upsert_server(guild, connection=connection)
-				for channel in guild.channels:
-					await self.bot.db.upsert_channel(channel, connection=connection)
+		await self.bot.db.sync_guild(guild)
 		await self._send_event(f"Joined {guild.owner}'s guild `{guild.name}` ({guild.id})")
 
 	@commands.Cog.listener()
