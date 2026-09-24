@@ -151,9 +151,6 @@ class Substiify(commands.Bot):
 			)
 			await ctx.reply(embed=embed)
 			return
-		if isinstance(error, commands.NoPrivateMessage):
-			await ctx.reply("This command can only be used in a server.")
-			return
 		original = error
 		preparation_failed = False
 		while isinstance(
@@ -161,6 +158,9 @@ class Substiify(commands.Bot):
 		):
 			preparation_failed |= isinstance(original, _CommandPreparationError)
 			original = original.original
+		if isinstance(original, commands.NoPrivateMessage):
+			await ctx.reply("This command can only be used in a server.")
+			return
 		service_errors = (*service_errors, aiohttp.ClientConnectionError, *_TRANSIENT_DATABASE_ERRORS)
 		reported_error = original
 		service_failure = False
@@ -276,3 +276,9 @@ class Substiify(commands.Bot):
 			)
 		except Exception:
 			logger.exception("Failed to persist command error for %s", command_name)
+
+
+def require_guild(ctx: commands.Context) -> discord.Guild:
+	if ctx.guild is None:
+		raise commands.NoPrivateMessage()
+	return ctx.guild

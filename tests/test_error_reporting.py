@@ -140,9 +140,13 @@ class MusicErrorReportingTests(unittest.IsolatedAsyncioTestCase):
 		self.bot._save_command_error.assert_awaited_once()
 
 	async def test_dm_only_failure_replies_without_incident_report(self):
-		await self.dispatch_error(commands.NoPrivateMessage())
-		self.ctx.reply.assert_awaited_once_with("This command can only be used in a server.")
-		self.bot._save_command_error.assert_not_awaited()
+		for error in (commands.NoPrivateMessage(), commands.CommandInvokeError(commands.NoPrivateMessage())):
+			with self.subTest(error=type(error).__name__):
+				self.ctx.reply.reset_mock()
+				with self.assertNoLogs("core.bot", level="ERROR"):
+					await self.dispatch_error(error)
+				self.ctx.reply.assert_awaited_once_with("This command can only be used in a server.")
+				self.bot._save_command_error.assert_not_awaited()
 
 	async def test_user_error_has_one_response_without_incident_report(self):
 		await self.dispatch_error(commands.CommandInvokeError(NoVoiceChannel()))

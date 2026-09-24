@@ -1,5 +1,6 @@
 from . import config as config
 from . import constants as constants
+from .bot import require_guild as require_guild
 from .bot import Substiify as Substiify
 from .delivery import best_effort as best_effort
 
