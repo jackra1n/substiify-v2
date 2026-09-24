@@ -5,7 +5,7 @@ import string
 import subprocess
 import sys
 
-import colorlog
+from colorlog.escape_codes import escape_codes
 import discord
 
 import core
@@ -37,10 +37,7 @@ def print_system_info() -> None:
 		"discord_version": discord.__version__,
 		"substiify_version": bot_version,
 	}
-	try:
-		args.update(colorlog.escape_codes.escape_codes)
-	except AttributeError:
-		pass
+	args.update(escape_codes)
 
 	art_str = string.Template(raw_art).substitute(args)
 	sys.stdout.write(art_str)

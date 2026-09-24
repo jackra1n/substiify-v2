@@ -3,7 +3,7 @@ import math
 __all__ = ("seconds_to_human_readable", "bytes_to_human_readable")
 
 
-def seconds_to_human_readable(seconds: int) -> str:
+def seconds_to_human_readable(seconds: float) -> str:
 	if seconds <= 60:
 		return "<1 minute"
 	elif 3600 > seconds > 60:

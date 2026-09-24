@@ -17,12 +17,13 @@ class Fun(commands.Cog):
 		self.bot = bot
 
 	@commands.command(name="teams", aliases=["team"])
-	async def teams(self, ctx: commands.Context, *, players: str = None):
+	async def teams(self, ctx: commands.Context, *, players: str | None = None):
 		"""
 		Create two teams from the current members of the voice channel or passed names for you to play custom games.
 		"""
-		if ctx.author.voice:
-			players_list = [member for member in ctx.author.voice.channel.members if not member.bot]
+		voice = ctx.author.voice if isinstance(ctx.author, discord.Member) else None
+		if voice and voice.channel:
+			players_list = [member for member in voice.channel.members if not member.bot]
 		elif players:
 			players_list = players.split(",") if "," in players else players.split(" ")
 		else:
@@ -38,7 +39,7 @@ class Fun(commands.Cog):
 		embed = discord.Embed(title="Teams", color=discord.Colour.dark_embed())
 		embed.add_field(name="Team 1", value="\n".join([f"{member} " for member in team_1]))
 		embed.add_field(name="Team 2", value="\n".join([f"{member} " for member in team_2]))
-		if ctx.author.voice and players:
+		if voice and players:
 			embed.set_footer(text="Did you know that if you are in a voice channel you can just type `<<teams`?")
 		await ctx.send(embed=embed)
 

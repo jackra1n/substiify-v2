@@ -53,7 +53,7 @@ class Util(commands.Cog):
 
 	@commands.group(aliases=["c"], invoke_without_command=True)
 	@commands.check_any(commands.has_permissions(manage_messages=True), commands.is_owner())
-	async def clear(self, ctx: commands.Context, amount: int = None):
+	async def clear(self, ctx: commands.Context, amount: int | None = None):
 		"""
 		Clears messages within the current channel.
 		"""
@@ -67,6 +67,10 @@ class Util(commands.Cog):
 
 		if amount >= 100:
 			return await ctx.send("Cannot delete more than 100 messages at a time!")
+		if not isinstance(
+			ctx.channel, (discord.TextChannel, discord.VoiceChannel, discord.StageChannel, discord.Thread)
+		):
+			return await ctx.send("Messages can only be cleared in a server channel.")
 		await ctx.channel.purge(limit=amount + 1)
 
 	@clear.command(aliases=["bot", "b"])
@@ -158,9 +162,9 @@ class Util(commands.Cog):
 			)
 
 		embed = discord.Embed(
-			title=f"Info about {self.bot.user.display_name}", description=content, color=core.constants.PRIMARY_COLOR
+			title=f"Info about {ctx.me.display_name}", description=content, color=core.constants.PRIMARY_COLOR
 		)
-		embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+		embed.set_thumbnail(url=ctx.me.display_avatar.url)
 		embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.display_avatar)
 		await ctx.send(embed=embed)
 
