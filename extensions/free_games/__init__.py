@@ -374,13 +374,15 @@ class ChannelsSelector(discord.ui.Select):
 	async def callback(self, interaction: discord.Interaction):
 		bot: core.Substiify = self.view.ctx.bot
 
-		channel: discord.TextChannel = interaction.guild.get_channel(int(self.values[0]))
+		channel = interaction.guild.get_channel(int(self.values[0]))
 		embed = discord.Embed(title="Free Games Settings", color=core.constants.SECONDARY_COLOR)
 		embed.description = "Here you can configure where free games should be sent and which platforms to check."
 
 		if int(self.values[0]) == 0:
 			fg_stmt = """DELETE FROM free_games_channel WHERE discord_server_id = $1;"""
 			await bot.db.pool.execute(fg_stmt, interaction.guild.id)
+		elif not isinstance(channel, discord.TextChannel):
+			embed.description += "\n\n**⚠️ That channel no longer exists. Please pick another one.**"
 		elif not channel.permissions_for(interaction.guild.me).read_messages:
 			embed.description += f"\n\n**⚠️ Can't set channel to {channel.mention}. Missing 'View Channel' permission.**"
 		elif not channel.permissions_for(interaction.guild.me).send_messages:
