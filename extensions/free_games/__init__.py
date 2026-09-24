@@ -118,8 +118,8 @@ class FreeGames(commands.Cog):
 		sent_messages = 0
 		retry_error = None
 		for fg_setting in freegames_and_options:
-			channel: discord.TextChannel = self.bot.get_channel(fg_setting["discord_channel_id"])
-			if not channel or fg_setting["store_name"] != game.platform.name:
+			channel = self.bot.get_channel(fg_setting["discord_channel_id"])
+			if not isinstance(channel, discord.TextChannel) or fg_setting["store_name"] != game.platform.name:
 				continue
 			try:
 				sent_messages += await self._deliver_free_game(game, channel.id, channel.send, embed)
@@ -208,10 +208,12 @@ class FreeGames(commands.Cog):
 	@commands.guild_only()
 	@commands.cooldown(3, 30)
 	async def freegames(self, ctx: commands.Context):
-		if ctx.author.guild_permissions.manage_channels or ctx.author.id == self.bot.owner_id:
-			await ctx.invoke(self.bot.get_command("freegames settings"))
+		if (
+			isinstance(ctx.author, discord.Member) and ctx.author.guild_permissions.manage_channels
+		) or ctx.author.id == self.bot.owner_id:
+			await ctx.invoke(self.settings)
 		else:
-			return await ctx.invoke(self.bot.get_command("freegames send"))
+			await ctx.invoke(self.send)
 
 	@freegames.command()
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -219,8 +221,9 @@ class FreeGames(commands.Cog):
 		embed = discord.Embed(title="Free Games Settings", color=core.constants.SECONDARY_COLOR)
 		embed.description = "Here you can configure where free games should be sent and which platforms to check."
 
-		channel_options = await _create_channels_select_options(ctx)
-		settings_view = SettingsView(ctx, channel_options)
+		guild = core.require_guild(ctx)
+		channel_options = await _create_channels_select_options(self.bot, guild, ctx.channel)
+		settings_view = SettingsView(self.bot, ctx.author.id, channel_options)
 		await ctx.send(embed=embed, view=settings_view, delete_after=180)
 
 	@freegames.command()
@@ -286,7 +289,9 @@ class FreeGames(commands.Cog):
 		return embed
 
 
-async def _create_channels_select_options(ctx: commands.Context) -> list[discord.SelectOption]:
+async def _create_channels_select_options(
+	bot: core.Substiify, guild: discord.Guild, current_channel: discord.abc.Snowflake | None
+) -> list[discord.SelectOption]:
 	selected_channel_id = 0
 	free_games_channel_stmt = """
 		SELECT fgc.discord_server_id, fgc.discord_channel_id, so.store_name
@@ -294,36 +299,36 @@ async def _create_channels_select_options(ctx: commands.Context) -> list[discord
 		JOIN store_options AS so ON fgc.id = so.free_games_channel_id
 		WHERE fgc.discord_server_id = $1;
 	"""
-	bot: core.Substiify = ctx.bot
-	free_games_channel = await bot.db.pool.fetchrow(free_games_channel_stmt, ctx.guild.id)
+	free_games_channel = await bot.db.pool.fetchrow(free_games_channel_stmt, guild.id)
 	if free_games_channel:
 		selected_channel_id = int(free_games_channel["discord_channel_id"])
 
-	channel_options = []
-	disabled_option = discord.SelectOption(
-		label="Click here to disable",
-		description="Free games will not be sent to this server.",
-		value=0,
-		emoji="❌",
-		default=(selected_channel_id == 0),
-	)
+	channel_options = [
+		discord.SelectOption(
+			label="Click here to disable",
+			description="Free games will not be sent to this server.",
+			value="0",
+			emoji="❌",
+			default=(selected_channel_id == 0),
+		)
+	]
 
-	bot_member = ctx.guild.get_member(bot.user.id)
+	bot_member = guild.me
 	channel_emoji = bot.get_emoji(1221097471946522725)
 	channel_active_emoji = bot.get_emoji(1221097459745292398)
 
-	is_selected = selected_channel_id == ctx.channel.id
-	current_channel_option = discord.SelectOption(
-		label=f"{ctx.channel.name} (here)",
-		value=ctx.channel.id,
-		emoji=(channel_active_emoji if is_selected else channel_emoji),
-		default=is_selected,
-	)
+	if isinstance(current_channel, discord.TextChannel):
+		is_selected = selected_channel_id == current_channel.id
+		channel_options.append(
+			discord.SelectOption(
+				label=f"{current_channel.name} (here)",
+				value=str(current_channel.id),
+				emoji=(channel_active_emoji if is_selected else channel_emoji),
+				default=is_selected,
+			)
+		)
 
-	channel_options.append(disabled_option)
-	channel_options.append(current_channel_option)
-
-	channels_list = [channel for channel in ctx.guild.text_channels if channel != ctx.channel]
+	channels_list = [channel for channel in guild.text_channels if channel != current_channel]
 	for channel in channels_list[:]:
 		if len(channel_options) >= 25:
 			break
@@ -331,7 +336,7 @@ async def _create_channels_select_options(ctx: commands.Context) -> list[discord
 		can_write = channel.permissions_for(bot_member).send_messages
 		if not can_read or not can_write:
 			continue
-		channel_option = discord.SelectOption(label=channel.name, value=channel.id, emoji=channel_emoji)
+		channel_option = discord.SelectOption(label=channel.name, value=str(channel.id), emoji=channel_emoji)
 		if selected_channel_id == channel.id:
 			channel_option.emoji = channel_active_emoji
 			channel_option.default = True
@@ -341,7 +346,7 @@ async def _create_channels_select_options(ctx: commands.Context) -> list[discord
 	for channel in channels_list[:]:
 		if len(channel_options) >= 25:
 			break
-		channel_option = discord.SelectOption(label=channel.name, value=channel.id, emoji=channel_emoji)
+		channel_option = discord.SelectOption(label=channel.name, value=str(channel.id), emoji=channel_emoji)
 		if selected_channel_id == channel.id:
 			channel_option.default = True
 			channel_option.emoji = channel_active_emoji
@@ -354,42 +359,45 @@ async def _create_channels_select_options(ctx: commands.Context) -> list[discord
 
 
 class SettingsView(discord.ui.View):
-	def __init__(self, ctx: commands.Context, channel_options: list[discord.SelectOption] | None = None) -> None:
-		self.ctx = ctx
+	def __init__(
+		self, bot: core.Substiify, author_id: int, channel_options: list[discord.SelectOption] | None = None
+	) -> None:
 		super().__init__()
-		self.add_item(ChannelsSelector(channel_options=channel_options))
+		self.author_id = author_id
+		self.add_item(ChannelsSelector(bot, channel_options=channel_options))
 
 	async def interaction_check(self, interaction: discord.Interaction) -> bool:
-		return interaction.user.id == self.ctx.author.id
+		return interaction.user.id == self.author_id
 
 	@discord.ui.button(label="Close", style=discord.ButtonStyle.grey, row=4)
 	async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-		await interaction.message.delete()
+		if interaction.message is not None:
+			await interaction.message.delete()
 
 
 class ChannelsSelector(discord.ui.Select):
-	def __init__(self, channel_options: list[discord.SelectOption] | None = None) -> None:
-		options = channel_options or []
-		super().__init__(placeholder="Select a channel", options=options)
+	def __init__(self, bot: core.Substiify, channel_options: list[discord.SelectOption] | None = None) -> None:
+		super().__init__(placeholder="Select a channel", options=channel_options or [])
+		self.bot = bot
 
 	async def callback(self, interaction: discord.Interaction):
-		bot: core.Substiify = self.view.ctx.bot
-
-		channel = interaction.guild.get_channel(int(self.values[0]))
+		guild = interaction.guild
+		if guild is None:
+			return
+		bot = self.bot
+		channel = guild.get_channel(int(self.values[0]))
 		embed = discord.Embed(title="Free Games Settings", color=core.constants.SECONDARY_COLOR)
-		embed.description = "Here you can configure where free games should be sent and which platforms to check."
+		description = "Here you can configure where free games should be sent and which platforms to check."
 
 		if int(self.values[0]) == 0:
 			fg_stmt = """DELETE FROM free_games_channel WHERE discord_server_id = $1;"""
-			await bot.db.pool.execute(fg_stmt, interaction.guild.id)
+			await bot.db.pool.execute(fg_stmt, guild.id)
 		elif not isinstance(channel, discord.TextChannel):
-			embed.description += "\n\n**⚠️ That channel no longer exists. Please pick another one.**"
-		elif not channel.permissions_for(interaction.guild.me).read_messages:
-			embed.description += f"\n\n**⚠️ Can't set channel to {channel.mention}. Missing 'View Channel' permission.**"
-		elif not channel.permissions_for(interaction.guild.me).send_messages:
-			embed.description += (
-				f"\n\n**⚠️ Can't set channel to {channel.mention}. Missing 'Send Messages' permission.**"
-			)
+			description += "\n\n**⚠️ That channel no longer exists. Please pick another one.**"
+		elif not channel.permissions_for(guild.me).read_messages:
+			description += f"\n\n**⚠️ Can't set channel to {channel.mention}. Missing 'View Channel' permission.**"
+		elif not channel.permissions_for(guild.me).send_messages:
+			description += f"\n\n**⚠️ Can't set channel to {channel.mention}. Missing 'Send Messages' permission.**"
 
 		else:
 			async with bot.db.pool.acquire(timeout=5) as connection:
@@ -400,7 +408,7 @@ class ChannelsSelector(discord.ui.Select):
 						ON CONFLICT (discord_server_id) DO UPDATE SET discord_channel_id = $2
 						RETURNING id;
 					"""
-					fg_id = await connection.fetchval(fg_stmt, interaction.guild.id, channel.id)
+					fg_id = await connection.fetchval(fg_stmt, guild.id, channel.id)
 
 					fg_settings_stmt = """
 						INSERT INTO store_options (free_games_channel_id, store_name) VALUES ($1, $2)
@@ -409,7 +417,8 @@ class ChannelsSelector(discord.ui.Select):
 					for store_name in STORES:
 						await connection.execute(fg_settings_stmt, fg_id, store_name)
 
-		self.options = await _create_channels_select_options(self.view.ctx)
+		embed.description = description
+		self.options = await _create_channels_select_options(bot, guild, interaction.channel)
 		return await interaction.response.edit_message(embed=embed, view=self.view)
 
 
