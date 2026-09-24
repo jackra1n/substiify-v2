@@ -38,6 +38,7 @@ class Database:
 		try:
 			await asyncio.wait_for(self.pool.close(), timeout=10)
 		except TimeoutError:
+			self.pool.terminate()
 			logger.warning("Database shutdown timed out; connections were terminated.")
 		else:
 			logger.info("Successfully closed Database connection.")
