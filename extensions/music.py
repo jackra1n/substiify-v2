@@ -19,10 +19,9 @@ EMBED_COLOR = core.constants.CYAN_COLOR
 async def _send_music_error(channel, embed: discord.Embed):
 	if not isinstance(channel, discord.abc.Messageable):
 		return
-	try:
-		await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
-	except (discord.HTTPException, aiohttp.ClientConnectionError, TimeoutError) as error:
-		logger.warning("Could not deliver music error notice (%s)", type(error).__name__)
+	await core.best_effort(
+		channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none()), "music error notice"
+	)
 
 
 async def _report_music_error(bot, channel, embed: discord.Embed, detail: str):
@@ -439,13 +438,11 @@ class MusicController(ui.View):
 			else:
 				logger.error("Unexpected music controller failure", exc_info=(type(error), error, error.__traceback__))
 		embed = discord.Embed(title="Music Error", description=description, color=discord.Color.red())
-		try:
-			if interaction.response.is_done():
-				await interaction.followup.send(embed=embed, ephemeral=True)
-			else:
-				await interaction.response.send_message(embed=embed, ephemeral=True)
-		except (discord.HTTPException, aiohttp.ClientConnectionError, TimeoutError) as send_error:
-			logger.warning("Could not deliver music controller error (%s)", type(send_error).__name__)
+		if interaction.response.is_done():
+			reply = interaction.followup.send(embed=embed, ephemeral=True)
+		else:
+			reply = interaction.response.send_message(embed=embed, ephemeral=True)
+		await core.best_effort(reply, "music controller error")
 		if not isinstance(error, MusicError):
 			await _report_music_error(self.ctx.bot, interaction.channel, embed, f"{type(error).__name__}: {error}")
 

@@ -1,6 +1,5 @@
 import logging
 
-import aiohttp
 import discord
 from discord.ext import commands
 
@@ -22,10 +21,7 @@ class Events(commands.Cog):
 		if not isinstance(channel, discord.abc.Messageable):
 			logger.warning("Events channel %s is unavailable.", core.config.EVENTS_CHANNEL_ID)
 			return
-		try:
-			await channel.send(message)
-		except discord.HTTPException, aiohttp.ClientConnectionError, TimeoutError:
-			logger.warning("Could not send guild event notification.", exc_info=True)
+		await core.best_effort(channel.send(message), "guild event notification")
 
 	#
 	# GUILD EVENTS
