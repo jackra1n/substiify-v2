@@ -233,6 +233,7 @@ class Karma(commands.Cog):
 		await ctx.send(embed=embed)
 
 	@votes.command()
+	@commands.guild_only()
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
 	@app_commands.describe(channel="The channel to enable votes in")
 	async def enable(self, ctx: commands.Context, channel: discord.abc.GuildChannel | None = None):
@@ -267,6 +268,7 @@ class Karma(commands.Cog):
 		await ctx.send(embed=embed)
 
 	@votes.command()
+	@commands.guild_only()
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
 	@app_commands.describe(channel="The channel to disable votes in")
 	async def disable(self, ctx: commands.Context, channel: discord.TextChannel | None = None):
