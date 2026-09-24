@@ -15,4 +15,4 @@ jobs:
           enable-cache: true
       - run: uv python install 3.14
       - run: uv sync --locked --dev
-      - run: uv run ty check main.py core database utils extensions/util.py extensions/fun.py extensions/owner.py extensions/help.py extensions/feedback.py extensions/giveaways.py extensions/free_games extensions/kasino.py extensions/karma.py
+      - run: uv run ty check main.py core database extensions utils
