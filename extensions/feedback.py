@@ -57,6 +57,8 @@ class Feedback(commands.Cog):
 			return
 
 		channel = self.bot.get_channel(payload.channel_id) or await self.bot.fetch_channel(payload.channel_id)
+		if not isinstance(channel, discord.abc.Messageable):
+			return
 		message = await channel.fetch_message(payload.message_id)
 		if message.author != self.bot.user:
 			return
@@ -77,7 +79,7 @@ class Feedback(commands.Cog):
 		except Exception:
 			logger.exception("Feedback %s was decided, but its moderation embed could not be updated", feedback["id"])
 		try:
-			await self.send_user_reply(feedback)
+			await self.send_user_reply(feedback, message.author)
 		except Exception:
 			logger.exception(
 				"Feedback %s was decided, but its user notification failed; no retry is queued", feedback["id"]
@@ -99,7 +101,7 @@ class Feedback(commands.Cog):
 
 		await message.edit(embed=embed)
 
-	async def send_user_reply(self, feedback: Record):
+	async def send_user_reply(self, feedback: Record, bot_user: discord.abc.User):
 		feedback_type_str = feedback["feedback_type"]
 		feedback_type = FeedbackType(feedback_type_str)
 
@@ -116,7 +118,7 @@ class Feedback(commands.Cog):
 			description=f"```{feedback['content']}```",
 			color=color,
 		)
-		message_to_user = f"Hello {user.name}!\nYour {self.bot.user.mention} {feedback_type.value} submission has been **{outcome}** {emoji}."
+		message_to_user = f"Hello {user.name}!\nYour {bot_user.mention} {feedback_type.value} submission has been **{outcome}** {emoji}."
 		await user.send(content=message_to_user, embed=new_embed)
 
 	@commands.cooldown(2, 100)
@@ -129,38 +131,6 @@ class Feedback(commands.Cog):
 		Allows you to report a bug or suggest a feature or an improvement to the developer team.
 		After review, the bot will attempt to send you the outcome by DM.
 		"""
-		channel_id = _feedback_channel_id(feedback_type)
-		if channel_id is None:
-			await interaction.response.send_message(
-				f"{feedback_type.value.capitalize()} feedback submissions are currently unavailable.",
-				ephemeral=True,
-			)
-			return
-		await interaction.response.send_modal(FeedbackModal(feedback_type))
-
-
-class FeedbackSelect(discord.ui.Select):
-	def __init__(self):
-		super().__init__(
-			placeholder="Select a type of submission...",
-			options=[
-				discord.SelectOption(
-					label="Bug fix",
-					description="Report a bug that needs to be fixed",
-					emoji="🐛",
-					value=FeedbackType.BUG,
-				),
-				discord.SelectOption(
-					label="Improvement suggestion",
-					description="Suggest an improvement to the bot",
-					emoji="👍",
-					value=FeedbackType.SUGGESTION,
-				),
-			],
-		)
-
-	async def callback(self, interaction: discord.Interaction):
-		feedback_type = FeedbackType(self.values[0])
 		channel_id = _feedback_channel_id(feedback_type)
 		if channel_id is None:
 			await interaction.response.send_message(
@@ -185,7 +155,7 @@ class FeedbackModal(discord.ui.Modal):
 		)
 		self.add_item(self.feedback)
 
-	async def on_submit(self, interaction: discord.Interaction):
+	async def on_submit(self, interaction: discord.Interaction[core.Substiify]):
 		channel_id = _feedback_channel_id(self.feedback_type)
 		if channel_id is None:
 			await self._respond(

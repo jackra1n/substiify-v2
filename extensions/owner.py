@@ -145,7 +145,7 @@ class Owner(commands.Cog):
 		for guild in self.bot.guilds:
 			servers += f"{guild.name}\n"
 			user_count += f"{guild.member_count}\n"
-			owner += f"{guild.owner.mention} {guild.owner}\n"
+			owner += f"<@{guild.owner_id}>\n"
 		embed = discord.Embed(title="Server Infos", color=discord.Colour.blurple())
 		embed.add_field(name="Name", value=servers, inline=True)
 		embed.add_field(name="Cnt", value=user_count, inline=True)
@@ -172,6 +172,8 @@ class Owner(commands.Cog):
 		Lists all the channels in a server.
 		"""
 		guild = self.bot.get_guild(guild_id)
+		if guild is None:
+			return await ctx.send("Server not found.", delete_after=30)
 		channels = "".join(f"{channel.name}\n" for channel in guild.channels)
 		embed = discord.Embed(title="Channel Infos", color=discord.Colour.blurple())
 		embed.add_field(name="Name", value=channels, inline=True)
@@ -182,12 +184,11 @@ class Owner(commands.Cog):
 		"""
 		Shows a lits of most used command on the current server
 		"""
-		if ctx.guild is None:
-			return await ctx.reply("This command can only be used in a server.")
+		guild = core.require_guild(ctx)
 		stmt_usage = "SELECT command_name, COUNT(*) AS cnt FROM command_history WHERE discord_server_id = $1 GROUP BY command_name ORDER BY cnt DESC LIMIT 10"
-		commands_used = await self.bot.db.pool.fetch(stmt_usage, ctx.guild.id)
+		commands_used = await self.bot.db.pool.fetch(stmt_usage, guild.id)
 		embed = create_command_usage_embed(commands_used)
-		embed.title = f"Top 10 used commands on: **{ctx.guild.name}**"
+		embed.title = f"Top 10 used commands on: **{guild.name}**"
 		await ctx.send(embed=embed)
 
 	@usage.command(name="all")
@@ -205,16 +206,16 @@ class Owner(commands.Cog):
 
 	@usage.command(name="last")
 	@commands.is_owner()
-	@commands.guild_only()
 	async def usage_last(self, ctx: commands.Context, amount: int = 10):
 		"""
 		Shows a list of last used commands on the current server
 		"""
+		guild = core.require_guild(ctx)
 		amount = min(amount, 20)
 		stmt_last = """SELECT * FROM command_history JOIN discord_user
                        ON command_history.discord_user_id = discord_user.discord_user_id
                        WHERE discord_server_id = $1 ORDER BY date DESC LIMIT $2"""
-		commands_used = await self.bot.db.pool.fetch(stmt_last, ctx.guild.id, amount)
+		commands_used = await self.bot.db.pool.fetch(stmt_last, guild.id, amount)
 		longest_user = self.get_longest_property_length(commands_used, "username")
 		longest_cmd = self.get_longest_property_length(commands_used, "command_name")
 		commands_used_string = ""
@@ -224,14 +225,13 @@ class Owner(commands.Cog):
 			user = command["username"].center(longest_user)
 			commands_used_string += f"`{user}` used `{cmd}` {discord_tmstmp}\n"
 		embed = discord.Embed(
-			title=f"Last {amount} used commands on: **{ctx.guild.name}**", color=core.constants.PRIMARY_COLOR
+			title=f"Last {amount} used commands on: **{guild.name}**", color=core.constants.PRIMARY_COLOR
 		)
 		embed.description = commands_used_string
 		await ctx.send(embed=embed)
 
-	def get_longest_property_length(self, record_list: list, prprty: str) -> len:
-		longest_record = max(record_list, key=lambda x: len(x[prprty]))
-		return len(longest_record[prprty])
+	def get_longest_property_length(self, record_list: list, prprty: str) -> int:
+		return max((len(record[prprty]) for record in record_list), default=0)
 
 	@usage.command(name="servers")
 	@commands.is_owner()
@@ -291,19 +291,19 @@ class Owner(commands.Cog):
 
 	@commands.is_owner()
 	@db_command.command(name="generateTestData")
-	@commands.guild_only()
 	async def db_generate_test_data(self, ctx: commands.Context):
 		"""
 		Generates test data for the database
 		"""
+		guild = core.require_guild(ctx)
 		# fetch all users from the server
-		async for user in ctx.guild.fetch_members(limit=None):
+		async for user in guild.fetch_members(limit=None):
 			print(f"inserting user: {user}...")
 			await self.bot.db.upsert_user(user)
 			stmt_insert_user_karma = """INSERT INTO karma (discord_user_id, discord_server_id, amount) VALUES ($1, $2, $3)
                                         ON CONFLICT (discord_user_id, discord_server_id) DO UPDATE SET amount = $3"""
 			random_karma = random.randint(500, 3000)
-			await self.bot.db.pool.execute(stmt_insert_user_karma, user.id, ctx.guild.id, random_karma)
+			await self.bot.db.pool.execute(stmt_insert_user_karma, user.id, guild.id, random_karma)
 
 
 def create_command_usage_embed(results):

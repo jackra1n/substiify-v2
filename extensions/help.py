@@ -1,6 +1,6 @@
-from typing import Optional, Set
+from collections.abc import Iterable, Mapping
+from typing import Any
 
-import discord
 from discord import Embed
 from discord.ext import commands
 
@@ -18,7 +18,7 @@ class Help(commands.MinimalHelpCommand):
 		return f"{self.context.clean_prefix}{command.qualified_name} {command.signature}"
 
 	# help
-	async def send_bot_help(self, mapping: dict):
+	async def send_bot_help(self, mapping: Mapping[commands.Cog | None, list[commands.Command[Any, ..., Any]]], /):
 		embed = await self._help_embed(
 			title="Bot Commands",
 			description=self.context.bot.description,
@@ -45,7 +45,7 @@ class Help(commands.MinimalHelpCommand):
 		)
 		await self.context.send(embed=embed)
 
-	async def cog_help_embed(self, cog: Optional[commands.Cog]) -> Embed:
+	async def cog_help_embed(self, cog: commands.Cog | None) -> Embed:
 		if cog is None:
 			return await self._help_embed(title="No category", command_set=self.get_bot_mapping()[None])
 
@@ -64,17 +64,16 @@ class Help(commands.MinimalHelpCommand):
 	async def _help_embed(
 		self,
 		title: str,
-		description: Optional[str] = None,
-		mapping: Optional[str] = None,
-		command_set: Optional[Set[commands.Command]] = None,
+		description: str | None = None,
+		mapping: Mapping[commands.Cog | None, list[commands.Command[Any, ..., Any]]] | None = None,
+		command_set: Iterable[commands.Command[Any, ..., Any]] | None = None,
 		set_author: bool = False,
 	) -> Embed:
 		embed = Embed(title=title, color=constants.SECONDARY_COLOR)
 		if description:
 			embed.description = description
 		if set_author:
-			avatar = self.context.bot.user.display_avatar
-			embed.set_author(name=self.context.bot.user.name, icon_url=avatar)
+			embed.set_author(name=self.context.me.name, icon_url=self.context.me.display_avatar)
 		if command_set:
 			# show help about all commands in the set
 			filtered = await self.filter_commands(command_set, sort=True)
@@ -132,7 +131,7 @@ class Help(commands.MinimalHelpCommand):
 	async def can_run_cmd(self, cmd):
 		try:
 			return await cmd.can_run(self.context)
-		except discord.ext.commands.CommandError:
+		except commands.CommandError:
 			return False
 
 
