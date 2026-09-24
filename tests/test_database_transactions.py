@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from typing import cast
 from uuid import uuid4
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import asyncpg
 import discord
@@ -131,8 +131,8 @@ class DatabaseTransactions(unittest.IsolatedAsyncioTestCase):
 		second = SimpleNamespace(id=31, name="second", guild=self.guild)
 		await self.db.upsert_channel(second)
 		channels = {
-			30: SimpleNamespace(id=30, send=AsyncMock(side_effect=TimeoutError())),
-			31: SimpleNamespace(id=31, send=AsyncMock()),
+			30: Mock(spec=discord.TextChannel, id=30, send=AsyncMock(side_effect=TimeoutError())),
+			31: Mock(spec=discord.TextChannel, id=31, send=AsyncMock()),
 		}
 		cog = FreeGames(cast(Substiify, SimpleNamespace(db=self.db, get_channel=channels.get)))
 		game = Game()
