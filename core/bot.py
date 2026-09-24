@@ -105,15 +105,18 @@ class Substiify(commands.Bot):
 		query = """INSERT INTO command_history
                    (command_name, parameters, discord_user_id, discord_server_id, discord_channel_id, discord_message_id)
                    VALUES ($1, $2, $3, $4, $5, $6)"""
-		await self.db.pool.execute(
-			query,
-			command_name,
-			parameters_string,
-			ctx.author.id,
-			server_id,
-			ctx.channel.id,
-			ctx.message.id,
-		)
+		try:
+			await self.db.pool.execute(
+				query,
+				command_name,
+				parameters_string,
+				ctx.author.id,
+				server_id,
+				ctx.channel.id,
+				ctx.message.id,
+			)
+		except Exception:
+			logger.exception(f"Failed to persist command history for {command_name}")
 		try:
 			await ctx.message.add_reaction("✅")
 		except discord.errors.NotFound:
