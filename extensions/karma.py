@@ -35,10 +35,12 @@ class Karma(commands.Cog):
 		if message.type == discord.MessageType.thread_created:
 			return
 		if message.channel.id in self.vote_channels:
+			upvote_emoji = self.bot.get_emoji(core.constants.UPVOTE_EMOTE_ID)
+			downvote_emoji = self.bot.get_emoji(core.constants.DOWNVOTE_EMOTE_ID)
+			if upvote_emoji is None or downvote_emoji is None:
+				logger.warning("Vote emojis not found; is the bot in the server that owns them?")
+				return
 			try:
-				upvote_emoji = self.bot.get_emoji(core.constants.UPVOTE_EMOTE_ID)
-				downvote_emoji = self.bot.get_emoji(core.constants.DOWNVOTE_EMOTE_ID)
-
 				await message.add_reaction(upvote_emoji)
 				await message.add_reaction(downvote_emoji)
 			except discord.NotFound:
