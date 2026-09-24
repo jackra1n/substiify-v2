@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 CLEARURLS_RULES_URL = "https://raw.githubusercontent.com/ClearURLs/Rules/master/data.min.json"
 RULES_CACHE_PATH = Path("cache/url_rules_cache.json")
 RULES_CACHE_MAX_AGE = timedelta(hours=24)
+RULES_FETCH_TIMEOUT = aiohttp.ClientTimeout(total=10)
 
 
 @dataclass(slots=True)
@@ -118,7 +119,7 @@ def write_cached_rules(payload: dict[str, Any]) -> None:
 
 async def fetch_rules_payload(session: aiohttp.ClientSession | None = None) -> dict[str, Any]:
 	async def _fetch(active_session: aiohttp.ClientSession) -> dict[str, Any]:
-		async with active_session.get(CLEARURLS_RULES_URL) as response:
+		async with active_session.get(CLEARURLS_RULES_URL, timeout=RULES_FETCH_TIMEOUT) as response:
 			response.raise_for_status()
 			return _validate_payload(await response.json(content_type=None))
 
