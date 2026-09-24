@@ -551,26 +551,23 @@ class Giveaways(commands.Cog):
 		embed: discord.Embed | None = None,
 		delete_after: float | None = None,
 	):
-		# For slash invocations, prefer ephemeral interaction responses
-		interaction = getattr(ctx, "interaction", None)
+		interaction = ctx.interaction
 		if interaction is not None:
 			try:
-				await interaction.response.send_message(content=content, embed=embed, ephemeral=True)
-				return
-			except Exception:
-				try:
+				if interaction.response.is_done():
 					await interaction.followup.send(content=content, embed=embed, ephemeral=True)
-					return
-				except Exception:
-					pass
-		# For prefix, try sending in-channel, then DM fallback
+				else:
+					await interaction.response.send_message(content=content, embed=embed, ephemeral=True)
+				return
+			except discord.HTTPException as exc:
+				logger.warning(f"Giveaway interaction reply to {ctx.author} failed: {exc}")
 		try:
 			await ctx.send(content=content, embed=embed, delete_after=delete_after)
 		except discord.Forbidden:
 			try:
 				await ctx.author.send(content=content, embed=embed)
-			except Exception:
-				pass
+			except discord.HTTPException as exc:
+				logger.warning(f"Giveaway notification to {ctx.author} could not be delivered: {exc}")
 
 
 async def setup(bot: core.Substiify):
