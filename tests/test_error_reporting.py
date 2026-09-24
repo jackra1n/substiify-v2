@@ -167,6 +167,8 @@ class KarmaErrorReportingTests(unittest.IsolatedAsyncioTestCase):
 			upsert_channel=AsyncMock(),
 		)
 		self.enterContext(patch("core.config.ERRORS_CHANNEL_ID", 30))
+		# Commands run in a DM channel here, so stand in for the server they would need.
+		self.enterContext(patch("core.require_guild", return_value=SimpleNamespace(id=20, members=[])))
 		with patch.multiple("core.config", BOT_PREFIX="!", BOT_OWNER_ID=12):
 			self.bot = Substiify(database=self.db)
 		await self.bot._async_setup_hook()

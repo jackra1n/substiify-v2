@@ -149,7 +149,7 @@ class Karma(commands.Cog):
 	async def check_payload(
 		self, payload: discord.RawReactionActionEvent
 	) -> tuple[discord.Member, discord.Message] | None:
-		if payload.event_type == "REACTION_ADD" and payload.member.bot:
+		if payload.member is not None and payload.member.bot:
 			return None
 		message = await self.__get_message_from_payload(payload)
 		if message is None:
@@ -173,7 +173,7 @@ class Karma(commands.Cog):
 		if cached_message is not None:
 			return cached_message
 		channel = self.bot.get_channel(payload.channel_id)
-		if channel is None:
+		if not isinstance(channel, discord.abc.Messageable):
 			logger.debug(f"Channel {payload.channel_id} not in cache, cannot fetch message for karma reaction.")
 			return None
 		try:
@@ -209,10 +209,10 @@ class Karma(commands.Cog):
 		"""
 		if ctx.channel.id in self.vote_channels:
 			embed = discord.Embed(color=discord.Color.green())
-			embed.description = f"Votes are **ALREADY enabled** in {ctx.channel.mention}!"
+			embed.description = f"Votes are **ALREADY enabled** in <#{ctx.channel.id}>!"
 		else:
 			embed = discord.Embed(color=discord.Color.red())
-			embed.description = f"Votes are **NOT enabled** in {ctx.channel.mention}!"
+			embed.description = f"Votes are **NOT enabled** in <#{ctx.channel.id}>!"
 		await ctx.reply(embed=embed)
 
 	@votes.command(name="list")
@@ -221,8 +221,9 @@ class Karma(commands.Cog):
 		"""
 		Lists all the votes channels that are enabled in the server
 		"""
+		guild = core.require_guild(ctx)
 		stmt = "SELECT * FROM discord_channel WHERE discord_server_id = $1 AND upvote = True"
-		upvote_channels = await self.bot.db.pool.fetch(stmt, ctx.guild.id)
+		upvote_channels = await self.bot.db.pool.fetch(stmt, guild.id)
 		channels_string = "\n".join([f"{x['discord_channel_id']} ({x['channel_name']})" for x in upvote_channels])
 		embed = discord.Embed(color=core.constants.PRIMARY_COLOR)
 		if not channels_string:
@@ -234,7 +235,7 @@ class Karma(commands.Cog):
 	@votes.command()
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
 	@app_commands.describe(channel="The channel to enable votes in")
-	async def enable(self, ctx: commands.Context, channel: discord.abc.GuildChannel = None):
+	async def enable(self, ctx: commands.Context, channel: discord.abc.GuildChannel | None = None):
 		"""
 		Enables votes in the current or specified channel. Requires Manage Channels permission.
 		After enabling votes, the bot will add the upvote and downvote reactions to every message in the channel.
@@ -242,47 +243,47 @@ class Karma(commands.Cog):
 
 		If users click the reactions, user karma will be updated.
 		"""
-		channel = channel or ctx.channel
+		target = channel or ctx.channel
 		stmt = "SELECT * FROM discord_channel WHERE discord_channel_id = $1 AND upvote = True"
-		votes_enabled = await self.bot.db.pool.fetch(stmt, channel.id)
+		votes_enabled = await self.bot.db.pool.fetch(stmt, target.id)
 		logger.info(f"Votes enabled: {votes_enabled}")
 
 		# The cache only follows confirmed database state; a failed enable must leave it unchanged.
 		embed = discord.Embed(color=discord.Colour.green())
 		if votes_enabled:
-			if channel.id not in self.vote_channels:
-				self.vote_channels.append(channel.id)
-			embed.description = f"Votes are **already active** in {ctx.channel.mention}!"
+			if target.id not in self.vote_channels:
+				self.vote_channels.append(target.id)
+			embed.description = f"Votes are **already active** in <#{target.id}>!"
 			return await ctx.send(embed=embed)
 
-		await self.bot.db.upsert_channel(channel)
+		await self.bot.db.upsert_channel(target)
 		await self.bot.db.pool.execute(
-			"UPDATE discord_channel SET upvote = True WHERE discord_channel_id = $1", channel.id
+			"UPDATE discord_channel SET upvote = True WHERE discord_channel_id = $1", target.id
 		)
-		if channel.id not in self.vote_channels:
-			self.vote_channels.append(channel.id)
+		if target.id not in self.vote_channels:
+			self.vote_channels.append(target.id)
 
-		embed.description = f"Votes **enabled** in {channel.mention}!"
+		embed.description = f"Votes **enabled** in <#{target.id}>!"
 		await ctx.send(embed=embed)
 
 	@votes.command()
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
 	@app_commands.describe(channel="The channel to disable votes in")
-	async def disable(self, ctx: commands.Context, channel: discord.TextChannel = None):
+	async def disable(self, ctx: commands.Context, channel: discord.TextChannel | None = None):
 		"""
 		Disables votes in the current channel. Requires Manage Channels permission.
 		"""
-		channel = channel or ctx.channel
-		await self.bot.db.upsert_channel(channel)
+		target = channel or ctx.channel
+		await self.bot.db.upsert_channel(target)
 		await self.bot.db.pool.execute(
-			"UPDATE discord_channel SET upvote = False WHERE discord_channel_id = $1", channel.id
+			"UPDATE discord_channel SET upvote = False WHERE discord_channel_id = $1", target.id
 		)
 
-		if channel.id in self.vote_channels:
-			self.vote_channels.remove(channel.id)
+		if target.id in self.vote_channels:
+			self.vote_channels.remove(target.id)
 
 		embed = discord.Embed(
-			description=f"Votes has been stopped in {channel.mention}!",
+			description=f"Votes has been stopped in <#{target.id}>!",
 			color=discord.Colour.red(),
 		)
 		await ctx.send(embed=embed)
@@ -296,26 +297,26 @@ class Karma(commands.Cog):
 	@app_commands.describe(
 		user="Which user do you want to see the karma of? If not specified, it will show your own karma."
 	)
-	async def karma(self, ctx: commands.Context, user: discord.User = None):
+	async def karma(self, ctx: commands.Context, user: discord.User | None = None):
 		"""
 		Shows the karma of a user. If you dont specify a user, it will show your own.
 		If you want to know what emote reactions are used for karma, use the subcommand `karma emotes`
 		"""
-		if user is None:
-			user = ctx.author
+		guild = core.require_guild(ctx)
+		target = user or ctx.author
 
-		if user.bot:
+		if target.bot:
 			embed = discord.Embed(description="Bots don't have karma!", color=discord.Colour.red())
 			return await ctx.reply(embed=embed)
 
-		if user not in ctx.guild.members:
-			embed = discord.Embed(description=f"{user} is not a member of this server.", color=discord.Colour.red())
+		if target not in guild.members:
+			embed = discord.Embed(description=f"{target} is not a member of this server.", color=discord.Colour.red())
 			return await ctx.send(embed=embed)
 
-		user_karma = await self._get_user_karma(user.id, ctx.guild.id)
+		user_karma = await self._get_user_karma(target.id, guild.id)
 		user_karma = 0 if user_karma is None else user_karma
 
-		embed = discord.Embed(title=f"Karma - {ctx.guild.name}", description=f"{user.mention} has {user_karma} karma.")
+		embed = discord.Embed(title=f"Karma - {guild.name}", description=f"{target.mention} has {user_karma} karma.")
 		await ctx.send(embed=embed)
 
 	@karma.error
@@ -334,6 +335,7 @@ class Karma(commands.Cog):
 		"""
 		Donates karma to another user.
 		"""
+		guild = core.require_guild(ctx)
 		if len(args) != 2:
 			msg = f"Got {len(args)} arguments, expected 2."
 			raise NotEnoughArguments(msg)
@@ -343,7 +345,7 @@ class Karma(commands.Cog):
 
 		for arg in args:
 			if user is None:
-				user = self._find_guild_user(ctx.guild, arg)
+				user = self._find_guild_user(guild, arg)
 				if user is not None:
 					continue
 
@@ -369,11 +371,11 @@ class Karma(commands.Cog):
 			embed.description = f"You cannot donate {amount} karma!"
 			return await ctx.send(embed=embed)
 
-		if user not in ctx.guild.members:
+		if user not in guild.members:
 			embed.description = f"`{user}` is not a member of this server!"
 			return await ctx.send(embed=embed)
 
-		if not await self.donate_karma(ctx.author, user, ctx.guild, amount):
+		if not await self.donate_karma(ctx.author, user, guild, amount):
 			embed.description = "You don't have enough karma!"
 			return await ctx.send(embed=embed)
 
@@ -382,7 +384,11 @@ class Karma(commands.Cog):
 		await ctx.send(embed=embed)
 
 	async def donate_karma(
-		self, donor: discord.User, recipient: discord.User, guild: discord.Guild, amount: int
+		self,
+		donor: discord.User | discord.Member,
+		recipient: discord.User | discord.Member,
+		guild: discord.Guild,
+		amount: int,
 	) -> bool:
 		"""Transfer karma atomically; a failed conditional debit never credits the recipient."""
 		if not 0 < amount <= 2**63 - 1:
@@ -425,12 +431,8 @@ class Karma(commands.Cog):
 				discriminator, username = username, discriminator
 
 			if discriminator == "0" or (len(discriminator) == 4 and discriminator.isdigit()):
-				return discord.utils.find(lambda m: m.name == username and m.discriminator == discriminator, members)
-
-			def pred(m: discord.Member) -> bool:
-				return m.name == arg or m.global_name == arg
-
-			return discord.utils.find(pred, members)
+				return next((m for m in members if m.name == username and m.discriminator == discriminator), None)
+			return next((m for m in members if m.name == arg or m.global_name == arg), None)
 		else:
 			user_id = int(match.group(1))
 			return guild.get_member(user_id)
@@ -458,8 +460,9 @@ class Karma(commands.Cog):
 		If you want to add or remove an emote from the karma system,
 		check the subcommand `karma emotes add` or `karma emotes remove`
 		"""
+		guild = core.require_guild(ctx)
 		stmt = "SELECT * FROM karma_emote WHERE discord_server_id = $1 ORDER BY increase_karma DESC"
-		karma_emotes = await self.bot.db.pool.fetch(stmt, ctx.guild.id)
+		karma_emotes = await self.bot.db.pool.fetch(stmt, guild.id)
 		if not karma_emotes:
 			return await ctx.send(embed=discord.Embed(title="No emotes found."))
 		embed_string = ""
@@ -469,7 +472,7 @@ class Karma(commands.Cog):
 				embed_string += f"\n`{'add' if emote['increase_karma'] is True else 'remove'}:` "
 				last_action = emote["increase_karma"]
 			embed_string += f"{self.bot.get_emoji(emote['discord_emote_id'])} "
-		embed = discord.Embed(title=f"Karma Emotes - {ctx.guild.name}", description=embed_string)
+		embed = discord.Embed(title=f"Karma Emotes - {guild.name}", description=embed_string)
 		await ctx.send(embed=embed)
 
 	@karma_emotes.command(name="add", usage="add <emote> <action>")
@@ -487,17 +490,18 @@ class Karma(commands.Cog):
 		`<<karma emotes add :upvote: 0` - adds the upvote emote to list as karma increasing emote
 		`<<karma emotes add :downvote: 1` - adds the downvote emote to list as karma decreasing emote
 		"""
+		guild = core.require_guild(ctx)
 		if emote_action not in [0, 1]:
 			embed = discord.Embed(title="Invalid action parameter.")
 			return await ctx.send(embed=embed)
 
-		existing_emote = await self._get_karma_emote_by_id(ctx.guild.id, emote)
+		existing_emote = await self._get_karma_emote_by_id(guild.id, emote)
 		if existing_emote is not None:
 			embed = discord.Embed(title="That emote is already added.")
 			return await ctx.send(embed=embed)
 
 		stmt_emote_count = "SELECT COUNT(*) FROM karma_emote WHERE discord_server_id = $1"
-		max_emotes = await self.bot.db.pool.fetchval(stmt_emote_count, ctx.guild.id)
+		max_emotes = await self.bot.db.pool.fetchval(stmt_emote_count, guild.id)
 		if max_emotes >= 10:
 			embed = discord.Embed(title="You can only have 10 emotes.")
 			return await ctx.send(embed=embed)
@@ -505,7 +509,7 @@ class Karma(commands.Cog):
 		stmt_insert_emote = (
 			"INSERT INTO karma_emote (discord_server_id, discord_emote_id, increase_karma) VALUES ($1, $2, $3)"
 		)
-		await self.bot.db.pool.execute(stmt_insert_emote, ctx.guild.id, emote.id, not bool(emote_action))
+		await self.bot.db.pool.execute(stmt_insert_emote, guild.id, emote.id, not bool(emote_action))
 
 		embed = discord.Embed(title=f"Emote {emote} added to the list.")
 		await ctx.send(embed=embed)
@@ -519,13 +523,14 @@ class Karma(commands.Cog):
 		"""
 		Remove an emote from the karma emotes for this server.
 		"""
-		existing_emote = await self._get_karma_emote_by_id(ctx.guild.id, emote)
+		guild = core.require_guild(ctx)
+		existing_emote = await self._get_karma_emote_by_id(guild.id, emote)
 		if existing_emote is None:
 			embed = discord.Embed(title="That emote is not in the list.")
 			return await ctx.send(embed=embed)
 
 		stmt_delete_emote = "DELETE FROM karma_emote WHERE discord_server_id = $1 AND discord_emote_id = $2"
-		await self.bot.db.pool.execute(stmt_delete_emote, ctx.guild.id, emote.id)
+		await self.bot.db.pool.execute(stmt_delete_emote, guild.id, emote.id)
 
 		embed = discord.Embed(title=f"Emote {emote} removed from the list.")
 		await ctx.send(embed=embed)
@@ -534,20 +539,20 @@ class Karma(commands.Cog):
 
 	@commands.cooldown(1, 5, commands.BucketType.user)
 	@karma.command(name="leaderboard", aliases=["lb", "leaderbord"], usage="leaderboard")
-	async def karma_leaderboard(self, ctx: commands.Context, global_leaderboard: str = None):
+	async def karma_leaderboard(self, ctx: commands.Context, global_leaderboard: str | None = None):
 		"""
 		Shows users with the most karma on the server.
 		"""
+		guild = core.require_guild(ctx)
 		async with ctx.typing():
 			embed = discord.Embed(title="Karma Leaderboard")
 
-			if global_leaderboard is None:
-				stmt_karma_leaderboard = "SELECT discord_user_id, amount FROM karma WHERE discord_server_id = $1 ORDER BY amount DESC LIMIT 15"
-				results = await self.bot.db.pool.fetch(stmt_karma_leaderboard, ctx.guild.id)
-
-			elif global_leaderboard == "global":
+			if global_leaderboard == "global":
 				stmt_karma_leaderboard = "SELECT discord_user_id, amount FROM karma ORDER BY amount DESC LIMIT 15"
 				results = await self.bot.db.pool.fetch(stmt_karma_leaderboard)
+			else:
+				stmt_karma_leaderboard = "SELECT discord_user_id, amount FROM karma WHERE discord_server_id = $1 ORDER BY amount DESC LIMIT 15"
+				results = await self.bot.db.pool.fetch(stmt_karma_leaderboard, guild.id)
 
 			if not results:
 				embed.description = "No users have karma."
@@ -573,11 +578,12 @@ class Karma(commands.Cog):
 		Shows karma stats for the server.
 		Some stats incluce total karma, karma amount in top percentile and more.
 		"""
+		guild = core.require_guild(ctx)
 		async with ctx.typing():
 			embed = discord.Embed(title="Karma Stats")
 
 			karma_info = await self.bot.db.pool.fetchrow(
-				"SELECT SUM(amount), COUNT(*) FROM karma WHERE discord_server_id = $1", ctx.guild.id
+				"SELECT SUM(amount), COUNT(*) FROM karma WHERE discord_server_id = $1", guild.id
 			)
 			total_karma = karma_info["sum"]
 			karma_users = karma_info["count"]
@@ -602,7 +608,7 @@ class Karma(commands.Cog):
 
 			percentiles = [(0.1, "10"), (0.01, "1")]
 			for percentile, label in percentiles:
-				top_percentile = await self.bot.db.pool.fetch(stmt_top_percentile, ctx.guild.id, percentile)
+				top_percentile = await self.bot.db.pool.fetch(stmt_top_percentile, guild.id, percentile)
 				top_percentile = sum(entry["amount"] for entry in top_percentile)
 				percantege = (top_percentile / total_karma) * 100
 				embed.add_field(
@@ -618,7 +624,7 @@ class Karma(commands.Cog):
                     AND upvotes >= 1
                     AND downvotes >= 1"""
 
-			avg_post_query = await self.bot.db.pool.fetchrow(stmt_avg_upvote_ratio, ctx.guild.id)
+			avg_post_query = await self.bot.db.pool.fetchrow(stmt_avg_upvote_ratio, guild.id)
 			avg_ratio = avg_post_query["average"] or 0
 			post_count = avg_post_query["post_count"] or 0
 			embed.add_field(
@@ -634,27 +640,28 @@ class Karma(commands.Cog):
 
 	@commands.cooldown(2, 15, commands.BucketType.user)
 	@post.command(name="leaderboard", aliases=["lb"], usage="lb [user]")
-	async def post_leaderboard(self, ctx: commands.Context, user: discord.User = None):
+	async def post_leaderboard(self, ctx: commands.Context, user: discord.User | None = None):
 		"""
 		Posts the leaderboard of the most upvoted posts.
 		"""
+		guild = core.require_guild(ctx)
 		async with ctx.typing():
-			all_board = await self.fetch_and_create_leaderboard(ctx, user)
-			month_board = await self.fetch_and_create_leaderboard(ctx, user, timedelta(days=30))
-			week_board = await self.fetch_and_create_leaderboard(ctx, user, timedelta(days=7))
+			all_board = await self.fetch_and_create_leaderboard(guild.id, user)
+			month_board = await self.fetch_and_create_leaderboard(guild.id, user, timedelta(days=30))
+			week_board = await self.fetch_and_create_leaderboard(guild.id, user, timedelta(days=7))
 
 		embed = discord.Embed(title="Top Messages")
-		embed.set_thumbnail(url=ctx.guild.icon)
+		embed.set_thumbnail(url=guild.icon)
 		embed.add_field(name="Top 5 All Time", value=all_board, inline=False)
 		embed.add_field(name="Top 5 This Month", value=month_board, inline=False)
 		embed.add_field(name="Top 5 This Week", value=week_board, inline=False)
 		await ctx.send(embed=embed)
 
 	async def fetch_and_create_leaderboard(
-		self, ctx: commands.Context, user: discord.User | None, interval: timedelta | None = None
+		self, guild_id: int, user: discord.User | None, interval: timedelta | None = None
 	):
 		stmt = "SELECT * FROM post WHERE discord_server_id = $1"
-		params: list = [ctx.guild.id]
+		params: list = [guild_id]
 		if user:
 			params.append(user.id)
 			stmt += f" AND discord_user_id = ${len(params)}"
@@ -671,22 +678,25 @@ class Karma(commands.Cog):
 		"""
 		Checks if a post exists.
 		"""
+		guild = core.require_guild(ctx)
 		try:
-			post_id = int(post_id)
+			message_id = int(post_id)
 		except ValueError:
 			embed = discord.Embed(title="Post ID must be a number.")
 			return await ctx.reply(embed=embed, ephemeral=True)
 
 		stmt_post = "SELECT * FROM post WHERE discord_message_id = $1"
-		post = await self.bot.db.pool.fetchrow(stmt_post, post_id)
+		post = await self.bot.db.pool.fetchrow(stmt_post, message_id)
 		if post is None:
 			embed = discord.Embed(title="That post does not exist.")
 			return await ctx.reply(embed=embed)
 
-		server_upvote_emotes = await self._get_karma_upvote_emotes(ctx.guild.id)
-		server_downvote_emotes = await self._get_karma_downvote_emotes(ctx.guild.id)
+		server_upvote_emotes = await self._get_karma_upvote_emotes(guild.id)
+		server_downvote_emotes = await self._get_karma_downvote_emotes(guild.id)
 
 		channel = await self.bot.fetch_channel(post["discord_channel_id"])
+		if not isinstance(channel, discord.abc.Messageable):
+			return await ctx.reply(embed=discord.Embed(title="That post's channel is not a text channel."))
 		message = await channel.fetch_message(post["discord_message_id"])
 
 		upvotes = 0
@@ -704,7 +714,7 @@ class Karma(commands.Cog):
 
 		update_post_query = "UPDATE post SET upvotes = $1, downvotes = $2 WHERE discord_message_id = $3"
 		await self.bot.db.pool.execute(UPSERT_KARMA_QUERY, message.author.id, message.guild.id, karma_difference)
-		await self.bot.db.pool.execute(update_post_query, upvotes, downvotes, post_id)
+		await self.bot.db.pool.execute(update_post_query, upvotes, downvotes, message_id)
 
 		embed_string = f"""
             Old post upvotes: {old_upvotes}, Old post downvotes: {old_downvotes}\n
