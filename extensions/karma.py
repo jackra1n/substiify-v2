@@ -109,43 +109,42 @@ class Karma(commands.Cog):
 			karma_amount *= -1
 			(upvote, downvote) = (downvote, upvote)
 
-		await self._upsert_karma(payload, user_id, karma_amount)
-		await self._upsert_post_votes(payload, user_id, upvote, downvote, message=message)
+		await self._apply_vote(payload, user_id, karma_amount, upvote, downvote, message=message)
 
 	async def _get_post_from_db(self, message_id: int) -> Record:
 		stmt = "SELECT * FROM post WHERE discord_message_id = $1"
 		return await self.bot.db.pool.fetchrow(stmt, message_id)
 
-	async def _upsert_karma(self, payload: discord.RawReactionActionEvent, user_id: int, amount: int):
-		await self.bot.db.pool.execute(UPSERT_KARMA_QUERY, user_id, payload.guild_id, amount)
-
-	async def _upsert_post_votes(
+	async def _apply_vote(
 		self,
 		payload: discord.RawReactionActionEvent,
 		user_id: int,
+		karma_amount: int,
 		upvote: int,
 		downvote: int,
 		message: discord.Message | None = None,
 	):
-		if message is None:
-			await self.bot.db.pool.execute(
-				"UPDATE post SET upvotes = post.upvotes + $1, downvotes = post.downvotes + $2 WHERE discord_message_id = $3",
-				upvote,
-				downvote,
-				payload.message_id,
-			)
-			return
-
-		await self.bot.db.pool.execute(
-			UPSERT_POST_VOTES_QUERY,
-			user_id,
-			payload.guild_id,
-			payload.channel_id,
-			payload.message_id,
-			message.created_at,
-			upvote,
-			downvote,
-		)
+		async with self.bot.db.pool.acquire() as conn:
+			async with conn.transaction():
+				await conn.execute(UPSERT_KARMA_QUERY, user_id, payload.guild_id, karma_amount)
+				if message is None:
+					await conn.execute(
+						"UPDATE post SET upvotes = post.upvotes + $1, downvotes = post.downvotes + $2 WHERE discord_message_id = $3",
+						upvote,
+						downvote,
+						payload.message_id,
+					)
+				else:
+					await conn.execute(
+						UPSERT_POST_VOTES_QUERY,
+						user_id,
+						payload.guild_id,
+						payload.channel_id,
+						payload.message_id,
+						message.created_at,
+						upvote,
+						downvote,
+					)
 
 	async def check_payload(
 		self, payload: discord.RawReactionActionEvent

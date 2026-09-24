@@ -61,6 +61,23 @@ class DatabaseTransactions(unittest.IsolatedAsyncioTestCase):
 		self.assertEqual(await self.db.pool.fetchval("SELECT amount FROM karma WHERE discord_user_id=11"), 2)
 		self.assertEqual(await self.db.pool.fetchval("SELECT sum(amount) FROM karma"), 30)
 
+	async def test_failed_post_vote_rolls_back_karma(self):
+		payload = cast(discord.RawReactionActionEvent, SimpleNamespace(guild_id=20, channel_id=30, message_id=555))
+		message = cast(discord.Message, SimpleNamespace(created_at="not a timestamp"))
+		with self.assertRaises(Exception):
+			await self.karma._apply_vote(payload, 11, 1, 1, 0, message=message)
+		self.assertEqual(await self.db.pool.fetchval("SELECT amount FROM karma WHERE discord_user_id=11"), 10)
+		self.assertIsNone(await self.db.pool.fetchval("SELECT discord_message_id FROM post WHERE discord_message_id=555"))
+
+	async def test_vote_updates_karma_and_post(self):
+		payload = cast(discord.RawReactionActionEvent, SimpleNamespace(guild_id=20, channel_id=30, message_id=555))
+		message = cast(discord.Message, SimpleNamespace(created_at=discord.utils.utcnow()))
+		await self.karma._apply_vote(payload, 11, 1, 1, 0, message=message)
+		await self.karma._apply_vote(payload, 11, -1, 0, 1)
+		self.assertEqual(await self.db.pool.fetchval("SELECT amount FROM karma WHERE discord_user_id=11"), 10)
+		post = await self.db.pool.fetchrow("SELECT upvotes, downvotes FROM post WHERE discord_message_id=555")
+		self.assertEqual((post["upvotes"], post["downvotes"]), (1, 1))
+
 	async def test_settlement_is_conserved_and_idempotent(self):
 		kasino_id = await self.create_kasino()
 		for user, option in zip(self.users, (1, 1, 2)):
