@@ -67,18 +67,29 @@ class Karma(commands.Cog):
 		if payload.emoji.id not in [*upvote_emotes, *downvote_emotes]:
 			return
 
+		reaction_user = payload.member or self.bot.get_user(payload.user_id)
+		if reaction_user is None:
+			try:
+				reaction_user = await self.bot.fetch_user(payload.user_id)
+			except Exception:
+				logger.exception("Failed to fetch user %s for karma reaction.", payload.user_id)
+				return
+		if reaction_user.bot:
+			return
+
 		post = await self._get_post_from_db(payload.message_id)
 		message = None
 		if post is None:
-			result = await self.check_payload(payload)
-			if result is None:
+			message = await self.__get_message_from_payload(payload)
+			if message is None or message.author.bot:
 				return
-			user, message = result
-
-			await self.bot.db.upsert_user(user)
-			user_id = user.id
+			user_id = message.author.id
 		else:
 			user_id = post["discord_user_id"]
+		if payload.user_id == user_id:
+			return
+		if message is not None:
+			await self.bot.db.upsert_user(message.author)
 
 		try:
 			server = self.bot.get_guild(payload.guild_id)
@@ -111,7 +122,7 @@ class Karma(commands.Cog):
 
 		await self._apply_vote(payload, user_id, karma_amount, upvote, downvote, message=message)
 
-	async def _get_post_from_db(self, message_id: int) -> Record:
+	async def _get_post_from_db(self, message_id: int) -> Record | None:
 		stmt = "SELECT * FROM post WHERE discord_message_id = $1"
 		return await self.bot.db.pool.fetchrow(stmt, message_id)
 
@@ -145,28 +156,6 @@ class Karma(commands.Cog):
 						upvote,
 						downvote,
 					)
-
-	async def check_payload(
-		self, payload: discord.RawReactionActionEvent
-	) -> tuple[discord.Member, discord.Message] | None:
-		if payload.member is not None and payload.member.bot:
-			return None
-		message = await self.__get_message_from_payload(payload)
-		if message is None:
-			return None
-		if message.author.bot:
-			return None
-		reaction_user = payload.member or self.bot.get_user(payload.user_id)
-		if not reaction_user:
-			logger.warning(f"User {payload.user_id} not found in cache for karma reaction. Fetching from API.")
-			try:
-				reaction_user = await self.bot.fetch_user(payload.user_id)
-			except Exception as e:
-				logger.warning(f"Failed to fetch user {payload.user_id} for karma reaction: {e}")
-				return None
-		if reaction_user == message.author:
-			return None
-		return message.author, message
 
 	async def __get_message_from_payload(self, payload: discord.RawReactionActionEvent) -> discord.Message | None:
 		cached_message = discord.utils.get(self.bot.cached_messages, id=payload.message_id)

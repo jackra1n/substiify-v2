@@ -10,6 +10,7 @@ import asyncpg
 import discord
 
 from core.bot import Substiify
+from core.constants import DOWNVOTE_EMOTE_ID, UPVOTE_EMOTE_ID
 from database import Database
 from extensions.free_games import FreeGames
 from extensions.free_games.base import Game
@@ -29,7 +30,10 @@ class DatabaseTransactions(unittest.IsolatedAsyncioTestCase):
 		self.guild = cast(discord.Guild, SimpleNamespace(id=20, name="guild"))
 		self.channel = SimpleNamespace(id=30, name="channel", guild=self.guild)
 		self.users = [
-			cast(discord.User, SimpleNamespace(id=i, name=str(i), display_avatar=SimpleNamespace(url="avatar")))
+			cast(
+				discord.User,
+				SimpleNamespace(id=i, name=str(i), bot=False, display_avatar=SimpleNamespace(url="avatar")),
+			)
 			for i in (11, 12, 13)
 		]
 		for user in self.users:
@@ -91,6 +95,86 @@ class DatabaseTransactions(unittest.IsolatedAsyncioTestCase):
 		self.assertEqual(await self.db.pool.fetchval("SELECT amount FROM karma WHERE discord_user_id=11"), 10)
 		post = await self.db.pool.fetchrow("SELECT upvotes, downvotes FROM post WHERE discord_message_id=555")
 		self.assertEqual((post["upvotes"], post["downvotes"]), (1, 1))
+
+	def reaction_context(self, reactor, source):
+		message = SimpleNamespace(
+			id=555, author=self.users[0], created_at=discord.utils.utcnow(), guild=self.guild, channel=self.channel
+		)
+		bot = SimpleNamespace(
+			db=self.db,
+			cached_messages=[message],
+			get_user=Mock(return_value=reactor if source == "cache" else None),
+			fetch_user=AsyncMock(return_value=reactor),
+			get_guild=Mock(return_value=self.guild),
+			get_channel=Mock(return_value=self.channel),
+		)
+		payload = SimpleNamespace(
+			guild_id=self.guild.id,
+			channel_id=self.channel.id,
+			message_id=message.id,
+			user_id=reactor.id,
+			member=reactor if source == "member" else None,
+			emoji=discord.PartialEmoji(name="upvote", id=UPVOTE_EMOTE_ID),
+		)
+		return Karma(cast(Substiify, bot), []), payload, message
+
+	async def test_ineligible_reactions_leave_balances_and_posts_unchanged(self):
+		for existing in (False, True):
+			for reactor in (self.users[0], SimpleNamespace(id=99, bot=True)):
+				for source, added in (("member", True), ("cache", False), ("api", False)):
+					with self.subTest(existing=existing, reactor=reactor.id, source=source):
+						await self.db.pool.execute("DELETE FROM post")
+						await self.db.pool.execute("UPDATE karma SET amount = 10")
+						cog, payload, message = self.reaction_context(reactor, source)
+						if existing:
+							await self.db.pool.execute(
+								"""INSERT INTO post(discord_message_id, discord_user_id, discord_server_id,
+								discord_channel_id, created_at, upvotes, downvotes)
+								VALUES(555, 11, 20, 30, $1, 3, 1)""",
+								message.created_at,
+							)
+						await cog.process_reaction(payload, added)
+						self.assertEqual(
+							await self.db.pool.fetchval("SELECT amount FROM karma WHERE discord_user_id=11"), 10
+						)
+						post = await self.db.pool.fetchrow(
+							"SELECT upvotes, downvotes FROM post WHERE discord_message_id=555"
+						)
+						if existing:
+							self.assertEqual((post["upvotes"], post["downvotes"]), (3, 1))
+						else:
+							self.assertIsNone(post)
+
+	async def test_eligible_vote_addition_and_removal_preserve_balance_and_counters(self):
+		for existing in (False, True):
+			for emoji_id, delta in ((UPVOTE_EMOTE_ID, 1), (DOWNVOTE_EMOTE_ID, -1)):
+				with self.subTest(existing=existing, emoji_id=emoji_id):
+					await self.db.pool.execute("DELETE FROM post")
+					cog, payload, message = self.reaction_context(self.users[1], "member")
+					if existing:
+						await self.db.pool.execute(
+							"""INSERT INTO post(discord_message_id, discord_user_id, discord_server_id,
+							discord_channel_id, created_at) VALUES(555, 11, 20, 30, $1)""",
+							message.created_at,
+						)
+					payload.emoji = discord.PartialEmoji(name="vote", id=emoji_id)
+					await cog.process_reaction(payload, True)
+					self.assertEqual(
+						await self.db.pool.fetchval("SELECT amount FROM karma WHERE discord_user_id=11"), 10 + delta
+					)
+					post = await self.db.pool.fetchrow(
+						"SELECT upvotes, downvotes FROM post WHERE discord_message_id=555"
+					)
+					self.assertEqual((post["upvotes"], post["downvotes"]), (int(delta == 1), int(delta == -1)))
+					payload.member = None
+					await cog.process_reaction(payload, False)
+					self.assertEqual(
+						await self.db.pool.fetchval("SELECT amount FROM karma WHERE discord_user_id=11"), 10
+					)
+					post = await self.db.pool.fetchrow(
+						"SELECT upvotes, downvotes FROM post WHERE discord_message_id=555"
+					)
+					self.assertEqual((post["upvotes"], post["downvotes"]), (0, 0))
 
 	async def test_settlement_is_conserved_and_idempotent(self):
 		kasino_id = await self.create_kasino()
