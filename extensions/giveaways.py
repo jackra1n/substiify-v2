@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 DURATION_UNITS = {"m": 60, "h": 3600, "d": 24 * 3600}
 MAX_DURATION = 365 * 24 * 3600
+MAX_PRIZE_LENGTH = 255
 
 
 def parse_duration(duration: str) -> int | None:
@@ -86,6 +87,8 @@ class Giveaways(commands.Cog):
 		"""
 		if ctx.guild is None or channel.guild.id != ctx.guild.id:
 			return await self._safe_notify(ctx, content="Choose a giveaway channel in this server.")
+		if len(prize) > MAX_PRIZE_LENGTH:
+			return await self._safe_notify(ctx, content=f"Keep the prize at {MAX_PRIZE_LENGTH} characters or fewer.")
 		host = hosted_by if hosted_by is not None and not hosted_by.bot else ctx.author
 
 		fetched_channel = await self.bot.fetch_channel(channel.id)
@@ -387,7 +390,7 @@ class Giveaways(commands.Cog):
 			return None, None
 		host_id = int(host_match[1]) if host_match else None
 		prize = prize_match[1]
-		if (host_id is not None and not 0 < host_id < 2**63) or len(prize) > 255:
+		if (host_id is not None and not 0 < host_id < 2**63) or len(prize) > MAX_PRIZE_LENGTH:
 			return None, None
 		async with self.bot.db.pool.acquire() as connection:
 			async with connection.transaction():
@@ -488,7 +491,7 @@ class Giveaways(commands.Cog):
 		embed = self.create_giveaway_embed(host, giveaway["prize"], result["winners_count"])
 		if result["winner_ids"]:
 			mentions = ", ".join(f"<@{user_id}>" for user_id in result["winner_ids"])
-			embed.add_field(name=f"Congratulations on winning '{giveaway['prize']}'", value=mentions)
+			embed.add_field(name="Congratulations to the winners!", value=mentions)
 			announcement = f"Congratulations {mentions}! You won **{giveaway['prize']}**!"
 			embed.set_footer(text="Giveaway ended")
 		else:

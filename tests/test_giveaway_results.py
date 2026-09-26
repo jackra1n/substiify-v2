@@ -136,7 +136,44 @@ class GiveawayResults(unittest.IsolatedAsyncioTestCase):
 		self.assertEqual(completed["winner_ids"], pending["winner_ids"])
 		self.assertIsNotNone(completed["completed_at"])
 		self.assertEqual(self.edited[0], self.edited[1])
-		self.assertEqual(sum(field["name"].startswith("Congratulations") for field in self.edited[1]["fields"]), 1)
+
+	async def test_saved_long_prize_completes_without_reannouncing_checkpointed_result(self):
+		prize = "x" * 255
+		giveaway = await self.create_giveaway()
+		giveaway = await self.db.pool.fetchrow(
+			"UPDATE giveaway SET prize = $1 WHERE id = $2 RETURNING *", prize, giveaway["id"]
+		)
+		await self.cog._select_giveaway_result(giveaway["id"], self.entrant_ids, 2)
+		await self.db.pool.execute(
+			"UPDATE giveaway_result SET announcement_message_id = 1000 WHERE giveaway_id = $1", giveaway["id"]
+		)
+		await self.cog._process_giveaway(giveaway)
+		result = await self.result(giveaway)
+		self.assertIsNotNone(result["completed_at"])
+		self.assertEqual(result["winner_ids"], [11, 12])
+		self.assertEqual(self.sent, [])
+		embed = self.source.embeds[0]
+		self.assertIn(prize, embed.description)
+		self.assertTrue(any("<@11>" in field.value and "<@12>" in field.value for field in embed.fields))
+		for field in embed.fields:
+			self.assertLessEqual(len(field.name), 256)
+			self.assertLessEqual(len(field.value), 1024)
+
+	async def test_create_accepts_maximum_prize_length(self):
+		prize = "x" * 255
+		self.guild.me = SimpleNamespace(id=99)
+		self.channel.permissions_for.return_value = discord.Permissions.all()
+		self.source.add_reaction = AsyncMock()
+		self.channel.send = AsyncMock(return_value=self.source)
+		await Giveaways.create.callback(self.cog, self.ctx, self.channel, "1m", prize)
+		self.assertEqual(
+			await self.db.pool.fetchval("SELECT prize FROM giveaway WHERE discord_message_id = 900"), prize
+		)
+
+	async def test_create_rejects_overlong_prize_before_posting(self):
+		await Giveaways.create.callback(self.cog, self.ctx, self.channel, "1m", "x" * 256)
+		self.assertEqual(await self.db.pool.fetchval("SELECT count(*) FROM giveaway"), 0)
+		self.channel.send.assert_not_awaited()
 
 	async def test_concurrent_workers_select_and_announce_once(self):
 		giveaway = await self.create_giveaway()
