@@ -136,6 +136,10 @@ class URLCleaner(commands.Cog):
 		if not message.guild:
 			return
 
+		cleaned_urls, removed_trackers = await self._clean_urls(message.content)
+		if not removed_trackers:
+			return
+
 		url_cleaner_settings = await self.bot.db.pool.fetchrow(
 			"SELECT * FROM url_cleaner_settings WHERE discord_server_id = $1", message.guild.id
 		)
@@ -151,20 +155,17 @@ class URLCleaner(commands.Cog):
 			logger.debug(f"User {message.author.id} on cooldown, skipping URL cleaning.")
 			return
 
-		cleaned_urls, removed_trackers = await self._clean_urls(message.content)
-
-		if removed_trackers:
-			removed_trackers.sort()
-			embed = self._build_tracking_embed(cleaned_urls, removed_trackers)
-			try:
-				reply = await message.reply(embed=embed, mention_author=False)
-				self._replies.remember(message.id, reply)
-			except discord.Forbidden:
-				logger.error(
-					f"Unable to send url_cleaner message in {message.guild} {message.channel}, missing permissions."
-				)
-			except discord.HTTPException as exc:
-				logger.warning(f"Failed to send url_cleaner message in {message.guild} {message.channel}: {exc}")
+		removed_trackers.sort()
+		embed = self._build_tracking_embed(cleaned_urls, removed_trackers)
+		try:
+			reply = await message.reply(embed=embed, mention_author=False)
+			self._replies.remember(message.id, reply)
+		except discord.Forbidden:
+			logger.error(
+				f"Unable to send url_cleaner message in {message.guild} {message.channel}, missing permissions."
+			)
+		except discord.HTTPException as exc:
+			logger.warning(f"Failed to send url_cleaner message in {message.guild} {message.channel}: {exc}")
 
 	@commands.Cog.listener()
 	async def on_message_edit(self, before: discord.Message, after: discord.Message):
