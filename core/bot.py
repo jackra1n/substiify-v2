@@ -117,6 +117,8 @@ class Substiify(commands.Bot):
 			)
 		except Exception:
 			logger.exception(f"Failed to persist command history for {command_name}")
+		if ctx.interaction is not None:
+			return
 		try:
 			await ctx.message.add_reaction("✅")
 		except discord.errors.NotFound:
@@ -143,7 +145,8 @@ class Substiify(commands.Bot):
 			logger.warning(f"Error without command occurred: [{ctx.author}] -> {error}")
 			return
 		if isinstance(error, (commands.CommandOnCooldown, slash_errors.CommandOnCooldown)):
-			await ctx.message.add_reaction("⏳")
+			if ctx.interaction is None:
+				await core.best_effort(ctx.message.add_reaction("⏳"), "cooldown reaction")
 			embed = discord.Embed(
 				title="Slow it down!",
 				description=f"Try again in {error.retry_after:.2f}s.",

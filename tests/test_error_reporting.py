@@ -154,6 +154,34 @@ class MusicErrorReportingTests(unittest.IsolatedAsyncioTestCase):
 		self.bot._save_command_error.assert_not_awaited()
 
 
+class CooldownReportingTests(unittest.IsolatedAsyncioTestCase):
+	def context(self, *, interaction=None, add_reaction=None):
+		return SimpleNamespace(
+			command=SimpleNamespace(qualified_name="avatar"),
+			author="user",
+			interaction=interaction,
+			message=SimpleNamespace(add_reaction=add_reaction or AsyncMock()),
+			reply=AsyncMock(),
+		)
+
+	async def report(self, ctx):
+		error = commands.CommandOnCooldown(commands.Cooldown(1, 5), 3.0, commands.BucketType.user)
+		await Substiify.on_command_error(cast(Substiify, SimpleNamespace()), cast(commands.Context, ctx), error)
+
+	async def test_slash_cooldown_replies_without_reacting(self):
+		ctx = self.context(interaction=object())
+		await self.report(ctx)
+		ctx.message.add_reaction.assert_not_awaited()
+		ctx.reply.assert_awaited_once()
+
+	async def test_failed_cooldown_reaction_still_replies(self):
+		response = SimpleNamespace(status=403, reason="Forbidden")
+		ctx = self.context(add_reaction=AsyncMock(side_effect=discord.Forbidden(response, "Missing Permissions")))
+		with self.assertLogs("core.delivery", level="WARNING"):
+			await self.report(ctx)
+		ctx.reply.assert_awaited_once()
+
+
 class FakeErrorsChannel(discord.abc.Messageable):
 	def __init__(self):
 		self.send = AsyncMock()
