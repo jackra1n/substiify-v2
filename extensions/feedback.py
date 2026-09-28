@@ -42,6 +42,9 @@ class Feedback(commands.Cog):
 		if payload.member.bot:
 			return
 
+		if not (payload.member.guild_permissions.manage_guild or payload.member.id == self.bot.owner_id):
+			return
+
 		if payload.channel_id not in (core.config.BUG_CHANNEL_ID, core.config.SUGGESTION_CHANNEL_ID):
 			return
 
