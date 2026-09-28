@@ -6,7 +6,7 @@
 
 ## Getting started
 
-Requires Docker Compose and the **Server Members**, **Presence**, and **Message Content** intents.
+Requires Docker Compose and the **Server Members** and **Message Content** intents.
 
 - Copy `example.env` to `.env`; set `BOT_TOKEN`, `BOT_PREFIX`, `BOT_OWNER_ID`, and `DB_PASSWORD`. Keep the database defaults for Compose.
 - Channel IDs are optional. Set both `LAVALINK_NODE_URL` and `LAVALINK_PASSWORD` to empty strings unless using Lavalink for music.

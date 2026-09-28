@@ -41,7 +41,8 @@ class Substiify(commands.Bot):
 		owner_id = core.config.BOT_OWNER_ID
 		if owner_id is None:
 			raise RuntimeError("BOT_OWNER_ID must be configured before creating the bot")
-		intents = discord.Intents().all()
+		intents = discord.Intents.all()
+		intents.presences = False
 		super().__init__(
 			command_prefix=commands.when_mentioned_or(prefix),
 			intents=intents,
