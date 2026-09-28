@@ -6,7 +6,23 @@ on:
   workflow_dispatch:
 
 jobs:
+  tests:
+    uses: ./.github/workflows/tests.yaml
+    permissions:
+      contents: read
+
+  ty:
+    uses: ./.github/workflows/ty.yaml
+    permissions:
+      contents: read
+
+  ruff:
+    uses: ./.github/workflows/ruff.yaml
+    permissions:
+      contents: read
+
   build-and-push-image:
+    needs: [tests, ty, ruff]
     uses: docker/github-builder/.github/workflows/build.yml@v1
     permissions:
       contents: read
