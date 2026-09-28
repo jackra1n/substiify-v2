@@ -3,6 +3,8 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock
 
+import discord
+
 from core.bot import Substiify
 from extensions.karma import Karma
 
@@ -56,3 +58,18 @@ class VoteChannelCacheTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class VoteReactionTests(unittest.IsolatedAsyncioTestCase):
+	async def test_missing_reaction_permission_is_logged_not_raised(self):
+		bot = SimpleNamespace(get_emoji=lambda emoji_id: f"emoji-{emoji_id}")
+		karma = Karma(cast(Substiify, bot), [42])
+		response = SimpleNamespace(status=403, reason="Forbidden")
+		message = SimpleNamespace(
+			author=SimpleNamespace(bot=False),
+			type=discord.MessageType.default,
+			channel=SimpleNamespace(id=42),
+			add_reaction=AsyncMock(side_effect=discord.Forbidden(response, "Missing Permissions")),
+		)
+		with self.assertLogs("extensions.karma", level="WARNING"):
+			await karma.on_message(cast(discord.Message, message))

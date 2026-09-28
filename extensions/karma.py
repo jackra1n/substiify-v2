@@ -45,6 +45,8 @@ class Karma(commands.Cog):
 				await message.add_reaction(downvote_emoji)
 			except discord.NotFound:
 				pass
+			except discord.HTTPException as error:
+				logger.warning("Could not add vote reactions in channel %s: %s", message.channel.id, error)
 
 	@commands.Cog.listener()
 	async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
