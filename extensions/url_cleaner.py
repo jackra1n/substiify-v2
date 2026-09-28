@@ -4,7 +4,7 @@ import logging
 import discord
 from discord.ext import commands, tasks
 
-from core import Substiify, config
+from core import Substiify, best_effort, config
 from utils.url_rules import URLRulesCleaner, load_compiled_rules, refresh_compiled_rules
 
 logger = logging.getLogger(__name__)
@@ -174,13 +174,13 @@ class URLCleaner(commands.Cog):
 			_, removed_trackers = await self._clean_urls(after.content)
 			if not removed_trackers:
 				self._replies.pop_original(after.id)
-				await reply_message.delete()
+				await best_effort(reply_message.delete(), "url cleaner reply deletion")
 
 	@commands.Cog.listener()
 	async def on_message_delete(self, message: discord.Message):
 		reply_message = self._replies.pop_original(message.id)
 		if reply_message is not None:
-			await reply_message.delete()
+			await best_effort(reply_message.delete(), "url cleaner reply deletion")
 
 		original_id = self._replies.pop_reply(message.id)
 		if original_id is not None:
