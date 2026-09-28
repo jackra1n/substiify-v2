@@ -501,7 +501,7 @@ requires-dist = [
     { name = "psutil" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "pytz" },
-    { name = "wavelink", specifier = ">=3.2" },
+    { name = "wavelink", specifier = ">=3.5.2" },
 ]
 
 [package.metadata.requires-dev]
