@@ -11,7 +11,7 @@ import asyncpg
 from extensions.free_games import FreeGames
 from extensions.free_games.base import ProviderError
 from extensions.free_games.epic_games import EpicGames
-from extensions.free_games.steam import STEAM_SEARCH_URL, Steam
+from extensions.free_games.steam import STEAM_APPDETAILS_URL, STEAM_SEARCH_URL, STEAM_STORE_URL, Steam
 from core.bot import Substiify
 
 
@@ -202,6 +202,40 @@ class FreeGameFetchOutages(unittest.IsolatedAsyncioTestCase):
 		# Per-app failures stay isolated as long as Steam answered anything at all.
 		with _fake_transport(partial_outage):
 			self.assertEqual(await Steam.get_free_games(), [])
+
+	async def test_steam_store_page_outage_does_not_announce_undated_games(self):
+		search_results = _FakeResponse(
+			text=json.dumps(
+				{
+					"items": [
+						{"logo": "https://cdn.steamstatic.com/steam/apps/111/header.jpg"},
+						{"logo": "https://cdn.steamstatic.com/steam/apps/222/header.jpg"},
+					]
+				}
+			)
+		)
+		details = {"type": "game", "name": "Game", "price_overview": {"discount_percent": 100, "initial": 1999}}
+
+		def store_pages_failing(failing_ids):
+			def respond(url, params):
+				if url == STEAM_SEARCH_URL:
+					return search_results
+				if url == STEAM_APPDETAILS_URL:
+					app_id = params["appids"]
+					return _FakeResponse(text=json.dumps({app_id: {"success": True, "data": details}}))
+				if any(url == f"{STEAM_STORE_URL}/{app_id}/" for app_id in failing_ids):
+					raise TimeoutError("steam store page unreachable")
+				return _FakeResponse(text="<html></html>")
+
+			return respond
+
+		with _fake_transport(store_pages_failing({"111", "222"})), self.assertLogs("extensions.free_games.steam"):
+			with self.assertRaises(ProviderError):
+				await Steam.get_free_games()
+
+		with _fake_transport(store_pages_failing({"111"})), self.assertLogs("extensions.free_games.steam"):
+			games = await Steam.get_free_games()
+		self.assertEqual([game.store_link for game in games], [f"{STEAM_STORE_URL}/222"])
 
 	async def test_manual_send_reports_unavailable_fetch_instead_of_no_games(self):
 		fetched = []

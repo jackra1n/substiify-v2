@@ -59,18 +59,21 @@ class Steam(Platform):
 
 		app_details_list = await Steam._fetch_app_details_batch(app_ids)
 
-		free_promo_ids = [app_id for app_id, details in app_details_list if Steam._is_free_promo(details)]
+		free_promos = [(app_id, details) for app_id, details in app_details_list if Steam._is_free_promo(details)]
+		if not free_promos:
+			return []
 
-		store_pages = {}
-		if free_promo_ids:
-			store_pages = await Steam._fetch_store_pages_batch(free_promo_ids)
+		store_pages = await Steam._fetch_store_pages_batch([app_id for app_id, _ in free_promos])
 
 		current_free_games: list[Game] = []
-		for app_id, details in app_details_list:
-			if not Steam._is_free_promo(details):
+		for app_id, details in free_promos:
+			# Without its store page the end date is unknown, and an undated
+			# announcement would be repeated once the dated one is found.
+			html = store_pages.get(app_id)
+			if html is None:
 				continue
 			try:
-				end_date = Steam._parse_end_date_from_html(store_pages.get(app_id, ""))
+				end_date = Steam._parse_end_date_from_html(html)
 				game = SteamGame(app_id, details, end_date=end_date)
 				current_free_games.append(game)
 			except Exception as ex:
@@ -189,6 +192,8 @@ class Steam(Platform):
 			for app_id, html in responses:
 				if html:
 					results[app_id] = html
+		if not results:
+			raise ProviderError("Steam store pages are unreachable")
 		return results
 
 	@staticmethod
