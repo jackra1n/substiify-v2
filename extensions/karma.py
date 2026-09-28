@@ -61,10 +61,9 @@ class Karma(commands.Cog):
 		if payload.emoji.id is None:
 			return
 
-		upvote_emotes = await self._get_karma_upvote_emotes(payload.guild_id)
-		downvote_emotes = await self._get_karma_downvote_emotes(payload.guild_id)
+		upvote_emotes, downvote_emotes = await self._get_karma_emotes(payload.guild_id)
 
-		if payload.emoji.id not in [*upvote_emotes, *downvote_emotes]:
+		if payload.emoji.id not in upvote_emotes | downvote_emotes:
 			return
 
 		reaction_user = payload.member or self.bot.get_user(payload.user_id)
@@ -183,12 +182,14 @@ class Karma(commands.Cog):
 		stmt = "SELECT * FROM karma_emote WHERE discord_server_id = $1 AND discord_emote_id = $2"
 		return await self.bot.db.pool.fetchrow(stmt, server_id, emote.id)
 
-	async def _get_karma_upvote_emotes(self, guild_id: int) -> list[int]:
-		stmt_upvotes = "SELECT discord_emote_id FROM karma_emote WHERE discord_server_id = $1 AND increase_karma = True"
-		emote_records = await self.bot.db.pool.fetch(stmt_upvotes, guild_id)
-		server_upvote_emotes = [emote["discord_emote_id"] for emote in emote_records]
-		server_upvote_emotes.append(int(core.constants.UPVOTE_EMOTE_ID))
-		return server_upvote_emotes
+	async def _get_karma_emotes(self, guild_id: int) -> tuple[set[int], set[int]]:
+		stmt = "SELECT discord_emote_id, increase_karma FROM karma_emote WHERE discord_server_id = $1"
+		upvote_emotes = {int(core.constants.UPVOTE_EMOTE_ID)}
+		downvote_emotes = {int(core.constants.DOWNVOTE_EMOTE_ID)}
+		for emote in await self.bot.db.pool.fetch(stmt, guild_id):
+			target = upvote_emotes if emote["increase_karma"] else downvote_emotes
+			target.add(emote["discord_emote_id"])
+		return upvote_emotes, downvote_emotes
 
 	@commands.hybrid_group(invoke_without_command=True)
 	@commands.guild_only()
@@ -682,8 +683,7 @@ class Karma(commands.Cog):
 			embed = discord.Embed(title="That post does not exist.")
 			return await ctx.reply(embed=embed)
 
-		server_upvote_emotes = await self._get_karma_upvote_emotes(guild.id)
-		server_downvote_emotes = await self._get_karma_downvote_emotes(guild.id)
+		server_upvote_emotes, server_downvote_emotes = await self._get_karma_emotes(guild.id)
 
 		channel = await self.bot.fetch_channel(post["discord_channel_id"])
 		if not isinstance(channel, discord.abc.Messageable):
@@ -732,15 +732,6 @@ class Karma(commands.Cog):
 
 	def _create_message_url(self, server_id, channel_id, message_id) -> str:
 		return f"https://discordapp.com/channels/{server_id}/{channel_id}/{message_id}"
-
-	async def _get_karma_downvote_emotes(self, guild_id: int) -> list[int]:
-		stmt_downvotes = (
-			"SELECT discord_emote_id FROM karma_emote WHERE discord_server_id = $1 AND increase_karma = False"
-		)
-		emote_records = await self.bot.db.pool.fetch(stmt_downvotes, guild_id)
-		server_downvote_emotes = [emote["discord_emote_id"] for emote in emote_records]
-		server_downvote_emotes.append(int(core.constants.DOWNVOTE_EMOTE_ID))
-		return server_downvote_emotes
 
 
 class NotEnoughArguments(commands.UserInputError):
