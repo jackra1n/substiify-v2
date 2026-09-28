@@ -52,8 +52,7 @@ BACKUP_FILE_PATH="${BACKUP_DEST_DIR}/${BACKUP_FILENAME}"
 
 # Create backup destination directory if it doesn't exist
 echo "Creating backup directory (if it doesn't exist): $BACKUP_DEST_DIR"
-mkdir -p "$BACKUP_DEST_DIR"
-if [ $? -ne 0 ]; then
+if ! mkdir -p "$BACKUP_DEST_DIR"; then
     echo "Error: Failed to create backup directory $BACKUP_DEST_DIR" >&2
     exit 1
 fi
@@ -71,11 +70,8 @@ echo "  User: $DB_USER"
 echo "  Destination: $BACKUP_FILE_PATH"
 
 # Run pg_dump inside the running database container
-docker exec -i -e PGPASSWORD="$DB_PASSWORD" substiify-postgres \
-    pg_dump -U "$DB_USER" -F c -b -v "$DB_NAME" > "$BACKUP_FILE_PATH"
-
-# Check if docker command was successful
-if [ $? -ne 0 ]; then
+if ! docker exec -i -e PGPASSWORD="$DB_PASSWORD" substiify-postgres \
+    pg_dump -U "$DB_USER" -F c -b -v "$DB_NAME" > "$BACKUP_FILE_PATH"; then
     echo "Error: Docker pg_dump command failed." >&2
     # Remove the potentially incomplete backup file
     rm -f "$BACKUP_FILE_PATH"
