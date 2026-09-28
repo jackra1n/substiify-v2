@@ -20,8 +20,6 @@ POSTGRES_DSN = (
 LAVALINK_NODE_URL = os.getenv("LAVALINK_NODE_URL")
 LAVALINK_PASSWORD = os.getenv("LAVALINK_PASSWORD")
 
-SPOTIFY_URLS_ENABLED = os.getenv("SPOTIFY_URLS_ENABLED", "false").lower() == "true"
-
 
 def _env_id(name: str) -> int | None:
 	raw = os.getenv(name)

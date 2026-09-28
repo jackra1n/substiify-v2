@@ -6,7 +6,6 @@ import discord
 import wavelink
 from discord import ButtonStyle, Interaction, ui
 from discord.ext import commands
-from urllib.parse import urlparse
 
 import core
 import utils
@@ -172,15 +171,10 @@ class Music(commands.Cog):
 			pass
 
 	async def _search_tracks(self, query: str) -> wavelink.Search:
-		is_spotify = self._is_spotify_url(query)
-
-		if is_spotify and not core.config.SPOTIFY_URLS_ENABLED:
-			raise SpotifyUnsupported()
-
 		try:
-			return await wavelink.Playable.search(query)
+			return await wavelink.Playable.search(query, source=wavelink.TrackSource.YouTubeMusic)
 		except wavelink.WavelinkException as error:
-			raise TrackLoadFailed(is_spotify=is_spotify) from error
+			raise TrackLoadFailed() from error
 
 	async def _connect_player(self, ctx: commands.Context) -> MusicPlayer:
 		player = ctx.voice_client
@@ -192,20 +186,6 @@ class Music(commands.Cog):
 			await player.set_volume(65)
 		player.text_channel = ctx.channel
 		return player
-
-	def _is_spotify_url(self, value: str) -> bool:
-		if value.startswith("spotify:"):
-			return True
-
-		parsed = urlparse(value)
-		if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-			return False
-
-		host = parsed.netloc.lower()
-		if host.startswith("www."):
-			host = host[4:]
-
-		return host in {"open.spotify.com", "play.spotify.com", "spotify.com"}
 
 	async def cog_before_invoke(self, ctx: commands.Context):
 		"""Command before-invoke handler."""
@@ -250,11 +230,12 @@ class Music(commands.Cog):
 	@commands.hybrid_command(aliases=["p"], usage="play <url/query>")
 	@commands.guild_only()
 	async def play(self, ctx: commands.Context, *, search: str):
-		"""Plays or queues a song/playlist. Can be a YouTube, Soundcloud link or a search query.
+		"""Plays or queues a song/playlist. Can be a YouTube, Spotify, SoundCloud link or a search query.
 
 		Examples:
 		`<<play All girls are the same Juice WRLD` - searches for a song and queues it
 		`<<play https://www.youtube.com/watch?v=dQw4w9WgXcQ` - plays a YouTube video
+		`<<play https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT` - plays a Spotify track
 		"""
 		if ctx.interaction:
 			await ctx.defer()
@@ -581,21 +562,11 @@ class NoTracksFound(MusicError):
 		super().__init__("Could not find any tracks with that query. Please try again.")
 
 
-class SpotifyUnsupported(MusicError):
-	def __init__(self, message: str | None = None):
-		super().__init__(
-			message
-			or "Spotify links are unsupported right now. Please use a search query, YouTube link, or SoundCloud link instead."
-		)
-
-
 class TrackLoadFailed(MusicError):
-	def __init__(self, *, is_spotify: bool = False):
-		message = "I couldn't load that track. Please try a search query, YouTube link, or SoundCloud link instead."
-		if is_spotify:
-			message = "Spotify links are not working right now. Please use a search query, YouTube link, or SoundCloud link instead."
-		super().__init__(message)
-
+	def __init__(self):
+		super().__init__(
+			"I couldn't load that track. Please try a search query, YouTube link, or SoundCloud link instead."
+		)
 
 class DifferentVoiceChannel(MusicError):
 	def __init__(self):
