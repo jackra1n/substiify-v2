@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /bot
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -33,5 +33,9 @@ COPY --from=builder /bot/.venv /bot/.venv
 COPY . .
 
 ENV PATH="/bot/.venv/bin:${PATH}"
+
+ARG GIT_COMMIT=""
+ARG GIT_COMMIT_DATE=""
+ENV GIT_COMMIT=${GIT_COMMIT} GIT_COMMIT_DATE=${GIT_COMMIT_DATE}
 
 CMD ["python", "-u", "main.py"]

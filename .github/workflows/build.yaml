@@ -35,6 +35,9 @@ jobs:
       meta-images: ghcr.io/${{ github.repository }}
       set-meta-labels: true
       sign: 'false'
+      build-args: |
+        GIT_COMMIT=${{ github.sha }}
+        GIT_COMMIT_DATE=${{ github.event.head_commit.timestamp }}
     secrets:
       registry-auths: |
         - registry: ghcr.io
