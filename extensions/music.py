@@ -290,7 +290,7 @@ class Music(commands.Cog):
 		if music_cleanup:
 			await message.delete(delay=60)
 		if not ctx.interaction:
-			await ctx.message.delete()
+			await core.best_effort(ctx.message.delete(), "command message deletion")
 
 	@commands.hybrid_command()
 	@commands.guild_only()
@@ -298,7 +298,7 @@ class Music(commands.Cog):
 		"""Skips the current song."""
 		player = _require_player(ctx)
 		if not ctx.interaction:
-			await ctx.message.delete()
+			await core.best_effort(ctx.message.delete(), "command message deletion")
 		if not player.queue and not player.playing:
 			await player._do_recommendation()
 		else:
@@ -319,7 +319,7 @@ class Music(commands.Cog):
 		player = _require_player(ctx)
 
 		if player.controller_message is not None:
-			await player.controller_message.delete()
+			await core.best_effort(player.controller_message.delete(), "music controller deletion")
 		await player.disconnect()
 		embed = discord.Embed(title="⏹️ Disconnected", color=EMBED_COLOR)
 		await ctx.send(embed=embed, delete_after=30)
@@ -332,7 +332,7 @@ class Music(commands.Cog):
 		"""
 		player = _require_player(ctx)
 		if player.controller_message is not None:
-			await player.controller_message.delete()
+			await core.best_effort(player.controller_message.delete(), "music controller deletion")
 		view = MusicController(player, ctx.author.id)
 		embed = await create_controller_embed(player)
 		player.controller_message = await ctx.send(embed=embed, view=view)
@@ -345,7 +345,7 @@ class Music(commands.Cog):
 		"""
 		players = wavelink.Pool.get_node().players
 		if not ctx.interaction:
-			await ctx.message.delete()
+			await core.best_effort(ctx.message.delete(), "command message deletion")
 		if not players:
 			embed = discord.Embed(color=EMBED_COLOR, title="*⃣ | No active players found.")
 			return await ctx.send(embed=embed, delete_after=30)
@@ -477,7 +477,7 @@ class MusicController(ui.View):
 		await self.player.disconnect()
 		await interaction.edit_original_response(view=None)
 		if self.player.controller_message is not None:
-			await self.player.controller_message.delete()
+			await core.best_effort(self.player.controller_message.delete(), "music controller deletion")
 		embed = discord.Embed(title="⏹️ Disconnected", color=EMBED_COLOR)
 		embed.description = f"By: {interaction.user.mention}"
 		if isinstance(interaction.channel, discord.abc.Messageable):

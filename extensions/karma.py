@@ -506,7 +506,7 @@ class Karma(commands.Cog):
 		embed = discord.Embed(title=f"Emote {emote} added to the list.")
 		await ctx.send(embed=embed)
 		if not ctx.interaction:
-			await ctx.message.delete()
+			await core.best_effort(ctx.message.delete(), "command message deletion")
 
 	@karma_emotes.command(name="remove", aliases=["delete"], usage="remove <emote>")
 	@commands.check_any(commands.has_permissions(manage_channels=True), commands.is_owner())
@@ -527,7 +527,7 @@ class Karma(commands.Cog):
 		embed = discord.Embed(title=f"Emote {emote} removed from the list.")
 		await ctx.send(embed=embed)
 		if not ctx.interaction:
-			await ctx.message.delete()
+			await core.best_effort(ctx.message.delete(), "command message deletion")
 
 	@commands.cooldown(1, 5, commands.BucketType.user)
 	@karma.command(name="leaderboard", aliases=["lb", "leaderbord"], usage="leaderboard")
@@ -716,7 +716,7 @@ class Karma(commands.Cog):
 		embed = discord.Embed(title=f"Post {post_id} check", description=embed_string)
 		await ctx.send(embed=embed, delete_after=60)
 		if not ctx.interaction:
-			await ctx.message.delete()
+			await core.best_effort(ctx.message.delete(), "command message deletion")
 
 	async def _create_post_leaderboard(self, posts: list[Record]) -> str:
 		if not posts:

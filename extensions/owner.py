@@ -252,7 +252,7 @@ class Owner(commands.Cog):
 		embed.add_field(name="Command", value=commands_used, inline=True)
 		embed.add_field(name="Count", value=commands_count, inline=True)
 		await ctx.send(embed=embed)
-		await ctx.message.delete()
+		await core.best_effort(ctx.message.delete(), "command message deletion")
 
 	@commands.is_owner()
 	@commands.group(name="db", invoke_without_command=True, hidden=True)

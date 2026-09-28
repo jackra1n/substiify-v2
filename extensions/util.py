@@ -47,7 +47,7 @@ class Util(commands.Cog):
 		if ctx.message.type == MessageType.reply:
 			if message := ctx.message.reference.resolved:
 				await message.delete()
-				await ctx.message.delete()
+				await core.best_effort(ctx.message.delete(), "command message deletion")
 			return
 		if amount is None:
 			return await ctx.send("Please specify the amount of messages to delete.", delete_after=30)
@@ -69,7 +69,7 @@ class Util(commands.Cog):
 		]
 
 		if len(bots_messages) <= 100 and isinstance(ctx.channel, discord.TextChannel):
-			await ctx.message.delete()
+			await core.best_effort(ctx.message.delete(), "command message deletion")
 			await ctx.channel.delete_messages(bots_messages)
 
 		elif isinstance(ctx.channel, discord.DMChannel):
@@ -109,7 +109,7 @@ class Util(commands.Cog):
 		)
 
 		await ctx.send(embed=embed)
-		await ctx.message.delete()
+		await core.best_effort(ctx.message.delete(), "command message deletion")
 
 	@commands.command()
 	@commands.cooldown(3, 30)
