@@ -10,7 +10,7 @@ dependencies = [
     "wavelink>=3.2",
     "pytz",
     "psutil",
-    "python-dotenv>=1.1.1",
+    "python-dotenv>=1.2.3",
     "colorlog>=6.9.0",
 ]
 
