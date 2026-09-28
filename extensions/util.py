@@ -17,19 +17,6 @@ class Util(commands.Cog):
 	def __init__(self, bot: core.Substiify):
 		self.bot = bot
 
-	async def _cooldown_error(self, ctx: commands.Context, error):
-		if isinstance(error, commands.CommandOnCooldown):
-			embed = discord.Embed(
-				title="Slow it down!",
-				description=f"Try again in {error.retry_after:.2f}s.",
-				color=discord.Colour.red(),
-			)
-
-			await ctx.send(embed=embed, delete_after=30)
-		if isinstance(error, commands.MissingRequiredArgument):
-			await ctx.send("Missing the suggestion description", delete_after=30)
-		await ctx.message.delete()
-
 	@commands.cooldown(6, 5)
 	@commands.hybrid_command(aliases=["av", "pfp"])
 	async def avatar(self, ctx: commands.Context, member: discord.Member | discord.User | None = None):
