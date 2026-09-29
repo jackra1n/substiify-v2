@@ -35,6 +35,15 @@ async def _report_music_error(bot, channel, embed: discord.Embed, detail: str):
 	await _send_music_error(admin_channel, report)
 
 
+class _LavalinkWebSocket(aiohttp.ClientWebSocketResponse):
+	async def receive(self, timeout: float | None = None):
+		message = await super().receive(timeout)
+		if message.type is aiohttp.WSMsgType.CLOSE:
+			# Wavelink 3.5.2 parses CLOSE as JSON instead of reconnecting on it.
+			return await super().receive(timeout)
+		return message
+
+
 class MusicPlayer(wavelink.Player):
 	text_channel: discord.abc.Messageable | None = None
 	controller_message: discord.Message | None = None
@@ -64,7 +73,7 @@ class Music(commands.Cog):
 		if not uri or not password:
 			logger.info("Lavalink is not configured; music commands are unavailable.")
 			return
-		self._session = aiohttp.ClientSession()
+		self._session = aiohttp.ClientSession(ws_response_class=_LavalinkWebSocket)
 		try:
 			self._node = wavelink.Node(
 				uri=uri,
@@ -87,6 +96,10 @@ class Music(commands.Cog):
 	@commands.Cog.listener()
 	async def on_wavelink_node_ready(self, payload: wavelink.NodeReadyEventPayload) -> None:
 		logger.info("Wavelink Node connected: %r | Resumed: %s", payload.node, payload.resumed)
+		if payload.resumed:
+			return
+		for player in payload.node.players.values():
+			await core.best_effort(player.disconnect(), "stale music voice disconnection")
 
 	def _create_error_embed(self, description: str, *, title: str = "Music Error") -> discord.Embed:
 		embed = discord.Embed(title=title, description=description, color=discord.Color.red())
@@ -231,6 +244,8 @@ class Music(commands.Cog):
 	@commands.guild_only()
 	async def play(self, ctx: commands.Context, *, search: str):
 		"""Plays or queues a song/playlist. Can be a YouTube, Spotify, SoundCloud link or a search query.
+
+		A music server restart clears the old queue. Run play again to reconnect.
 
 		Examples:
 		`<<play All girls are the same Juice WRLD` - searches for a song and queues it
