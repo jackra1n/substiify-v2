@@ -14,6 +14,13 @@ dependencies = [
     "colorlog>=6.9.0",
 ]
 
+# Run `uv run --locked basedpyright` locally and in CI.
+# Standard checks keep the migration separate from strict annotation enforcement.
+[tool.basedpyright]
+include = ["main.py", "core", "database", "extensions", "utils"]
+pythonVersion = "3.14"
+typeCheckingMode = "standard"
+
 [tool.isort]
 line_length = 90
 
@@ -81,7 +88,7 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
-    "ty>=0.0.84",
+    "basedpyright>=1.40.1",
 ]
 
 [tool.setuptools.dynamic]
