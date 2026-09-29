@@ -4,6 +4,7 @@ from importlib.resources import files
 from typing import Any, Protocol, Self
 
 import asyncpg
+from asyncpg.pool import PoolConnectionProxy
 import discord
 
 from .db_constants import MESSAGEABLE_INSERT_QUERY, SERVER_INSERT_QUERY, USER_INSERT_QUERY
@@ -20,7 +21,7 @@ class _DiscordChannel(Protocol):
 class _DatabasePool(asyncpg.Pool):
 	"""Apply the acquisition deadline to both explicit and convenience queries."""
 
-	def acquire(self, *, timeout=5):
+	def acquire(self, *, timeout: float | None = 5):
 		return super().acquire(timeout=timeout)
 
 
@@ -92,7 +93,7 @@ class Database:
 		guild: discord.Guild | None,
 		channel: _DiscordChannel,
 		*,
-		connection: asyncpg.Connection | None = None,
+		connection: asyncpg.Connection | PoolConnectionProxy | None = None,
 	) -> None:
 		if connection is None:
 			async with self.pool.acquire() as connection:
@@ -106,12 +107,14 @@ class Database:
 		await self.upsert_channel(channel, connection=connection)
 
 	async def upsert_user(
-		self, user: discord.User | discord.Member, *, connection: asyncpg.Connection | None = None
+		self, user: discord.User | discord.Member, *, connection: asyncpg.Connection | PoolConnectionProxy | None = None
 	) -> None:
 		executor = connection if connection is not None else self.pool
 		await executor.execute(USER_INSERT_QUERY, user.id, user.name, user.display_avatar.url)
 
-	async def upsert_server(self, guild: discord.Guild, *, connection: asyncpg.Connection | None = None) -> None:
+	async def upsert_server(
+		self, guild: discord.Guild, *, connection: asyncpg.Connection | PoolConnectionProxy | None = None
+	) -> None:
 		executor = connection if connection is not None else self.pool
 		await executor.execute(SERVER_INSERT_QUERY, guild.id, guild.name)
 
@@ -122,7 +125,9 @@ class Database:
 				await self.upsert_server(guild, connection=connection)
 				await connection.executemany(MESSAGEABLE_INSERT_QUERY, channels)
 
-	async def upsert_channel(self, channel: _DiscordChannel, *, connection: asyncpg.Connection | None = None) -> None:
+	async def upsert_channel(
+		self, channel: _DiscordChannel, *, connection: asyncpg.Connection | PoolConnectionProxy | None = None
+	) -> None:
 		if connection is None:
 			async with self.pool.acquire() as connection:
 				async with connection.transaction():

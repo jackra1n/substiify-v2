@@ -90,7 +90,7 @@ class Kasino(commands.Cog):
 	def _create_kasino_message_url(self, kasino: Record) -> str:
 		return f"https://discordapp.com/channels/{kasino['discord_server_id']}/{kasino['discord_channel_id']}/{kasino['discord_message_id']}"
 
-	@commands.hybrid_group(name="kasino", aliases=["kas"], invoke_without_command=True)
+	@commands.hybrid_group(name="kasino", aliases=["kas"])
 	@commands.guild_only()
 	async def kasino(self, ctx: commands.Context):
 		"""Karma kasino which allows people to bet on a question with two options.
@@ -163,7 +163,7 @@ class Kasino(commands.Cog):
 		else:
 			# Unrecognized errors keep their invocation for the central handler's diagnostics.
 			return
-		error.is_handled = True
+		setattr(error, "is_handled", True)
 		if not ctx.interaction:
 			await ctx.message.delete()
 
@@ -343,11 +343,11 @@ def _kasino_cog(bot: core.Substiify) -> "Kasino":
 	return cog
 
 
-async def _can_manage_kasino(interaction: discord.Interaction[core.Substiify]) -> bool:
+async def _can_manage_kasino(interaction: discord.Interaction) -> bool:
 	user = interaction.user
 	if isinstance(user, discord.Member) and user.guild_permissions.manage_channels:
 		return True
-	return user.id == interaction.client.owner_id
+	return isinstance(interaction.client, core.Substiify) and user.id == interaction.client.owner_id
 
 
 async def _update_kasino_msg(bot: core.Substiify, kasino_id: int, *, resend_channel=None) -> discord.Message | None:
@@ -457,7 +457,8 @@ class KasinoBetButton(discord.ui.Button):
 		self.option = option
 		super().__init__(label=f"Bet: {option}", emoji=gamba_emoji, style=discord.ButtonStyle.blurple)
 
-	async def callback(self, interaction: discord.Interaction[core.Substiify]):
+	async def callback(self, interaction: discord.Interaction):
+		assert isinstance(interaction.client, core.Substiify)
 		bot = interaction.client
 		try:
 			# Modals cannot follow a defer, so bound this lookup below Discord's response deadline.
@@ -500,8 +501,9 @@ class KasinoLockButton(discord.ui.Button):
 		label, emoji, style = self.lock_settings[locked]
 		super().__init__(label=label, emoji=emoji, style=style)
 
-	async def callback(self, interaction: discord.Interaction[core.Substiify]):
+	async def callback(self, interaction: discord.Interaction):
 		await interaction.response.defer(ephemeral=True)
+		assert isinstance(interaction.client, core.Substiify)
 		bot = interaction.client
 		kasino_id = self.kasino_id
 		guild_id = interaction.guild_id
@@ -563,8 +565,9 @@ class KasinoBetModal(discord.ui.Modal):
 		)
 		self.add_item(self.bet_amount_input)
 
-	async def on_submit(self, interaction: discord.Interaction[core.Substiify]) -> None:
+	async def on_submit(self, interaction: discord.Interaction) -> None:
 		await interaction.response.defer(ephemeral=True)
+		assert isinstance(interaction.client, core.Substiify)
 		bot = interaction.client
 		if interaction.guild_id is None or interaction.channel is None:
 			return

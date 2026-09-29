@@ -80,11 +80,12 @@ class CustomLogFormatter(logging.Formatter):
 	}
 
 	def format(self, record):
-		if _is_expected_retry(record):
+		exc_info = record.exc_info
+		if exc_info and _is_expected_retry(record):
 			# Other handlers must receive the original exception and traceback,
 			# including when a file handler has already populated exc_text.
 			record = copy(record)
-			error = record.exc_info[1]
+			error = exc_info[1]
 			reason = " ".join(str(error).split())
 			if not reason:
 				reason = "connection timed out" if isinstance(error, TimeoutError) else "connection interrupted"

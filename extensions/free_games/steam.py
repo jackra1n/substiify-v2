@@ -34,7 +34,7 @@ class SteamGame(Game):
 		price_overview = app_details.get("price_overview", {})
 		initial_cents = price_overview.get("initial", 0)
 		self.original_price: str = f"${initial_cents / 100:.2f}" if initial_cents else "$0.00"
-		self.discount_price: str = "Free"
+		self.discount_price = "Free"
 		self.cover_image_url: str = app_details.get("header_image", "")
 		self.store_link: str = f"{STEAM_STORE_URL}/{app_id}"
 		self.platform: type[Platform] = Steam

@@ -4,7 +4,7 @@ import logging
 import aiohttp
 import discord
 import wavelink
-from discord import ButtonStyle, Interaction, ui
+from discord import ButtonStyle, Interaction, app_commands, ui
 from discord.ext import commands
 
 import core
@@ -107,7 +107,14 @@ class Music(commands.Cog):
 
 	async def cog_command_error(self, ctx, error):
 		original = error
-		while getattr(original, "original", None) is not None:
+		while isinstance(
+			original,
+			(
+				commands.CommandInvokeError,
+				commands.HybridCommandError,
+				app_commands.CommandInvokeError,
+			),
+		):
 			original = original.original
 		if isinstance(original, MusicError) and original.__cause__ is None:
 			embed = self._create_error_embed(str(original))
@@ -123,7 +130,7 @@ class Music(commands.Cog):
 				),
 			)
 		# Discord still dispatches the global error event after this cog handler.
-		error.is_handled = True
+		setattr(error, "is_handled", True)
 
 	@commands.Cog.listener()
 	async def on_voice_state_update(self, member, before: discord.VoiceState, after):

@@ -45,7 +45,8 @@ class Util(commands.Cog):
 		Clears messages within the current channel.
 		"""
 		if ctx.message.type == MessageType.reply:
-			if message := ctx.message.reference.resolved:
+			reference = ctx.message.reference
+			if reference is not None and isinstance(message := reference.resolved, discord.Message):
 				await message.delete()
 				await core.best_effort(ctx.message.delete(), "command message deletion")
 			return

@@ -1,9 +1,12 @@
 from collections.abc import Iterable
 
 import asyncpg
+from asyncpg.pool import PoolConnectionProxy
 
 
-async def lock_karma_rows(conn: asyncpg.Connection, guild_id: int, user_ids: Iterable[int]) -> None:
+async def lock_karma_rows(
+	conn: asyncpg.Connection | PoolConnectionProxy, guild_id: int, user_ids: Iterable[int]
+) -> None:
 	# Always lock in user-ID order, including inserts for participants with no balance row.
 	for user_id in sorted(set(user_ids)):
 		await conn.execute(

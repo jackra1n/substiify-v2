@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 class EpicGamesGame(Game):
 	def __init__(self, game_info_json: dict[str, Any]) -> None:
 		self.title: str = game_info_json["title"]
-		self.start_date: datetime = self._create_start_date(game_info_json)
-		self.end_date: datetime = self._create_end_date(game_info_json)
+		self.start_date = self._create_start_date(game_info_json)
+		self.end_date = self._create_end_date(game_info_json)
 		self.original_price: str = game_info_json["price"]["totalPrice"]["fmtPrice"]["originalPrice"]
 		self.discount_price: str | int = self._create_discount_price(game_info_json["price"])
 		self.cover_image_url: str = self._create_thumbnail(game_info_json["keyImages"])

@@ -173,7 +173,12 @@ class Giveaways(commands.Cog):
 			return await self._safe_notify(ctx, content="This giveaway was cancelled or its source is unavailable.")
 		try:
 			msg = await ctx.fetch_message(message_id)
-			if msg.author != self.bot.user or msg.guild.id != ctx.guild.id or msg.channel.id != ctx.channel.id:
+			if (
+				msg.author != self.bot.user
+				or msg.guild is None
+				or msg.guild.id != ctx.guild.id
+				or msg.channel.id != ctx.channel.id
+			):
 				return await self._safe_notify(ctx, content="This is not one of my giveaways in this channel.")
 			users = await self._giveaway_entrants(msg)
 		except discord.NotFound, discord.Forbidden, TimeoutError:
@@ -320,11 +325,10 @@ class Giveaways(commands.Cog):
 				return
 			if result is None:
 				users = await self._giveaway_entrants(msg)
+				result = await self._select_giveaway_result(giveaway["id"], users, self.get_giveaway_winners(msg))
 		except (discord.NotFound, discord.Forbidden) as error:
 			await self._mark_giveaway_unavailable(giveaway["id"], f"Source unavailable: {type(error).__name__}.")
 			return
-		if result is None:
-			result = await self._select_giveaway_result(giveaway["id"], users, self.get_giveaway_winners(msg))
 		if result is not None:
 			await self._deliver_giveaway_result(giveaway, result, channel, msg)
 

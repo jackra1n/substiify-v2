@@ -193,7 +193,7 @@ class Karma(commands.Cog):
 			target.add(emote["discord_emote_id"])
 		return upvote_emotes, downvote_emotes
 
-	@commands.hybrid_group(invoke_without_command=True)
+	@commands.hybrid_group()
 	@commands.guild_only()
 	async def votes(self, ctx: commands.Context):
 		"""
@@ -318,7 +318,7 @@ class Karma(commands.Cog):
 		if isinstance(error, commands.BadArgument):
 			embed = discord.Embed(description=error, color=discord.Colour.red())
 			await ctx.reply(embed=embed)
-			error.is_handled = True
+			setattr(error, "is_handled", True)
 
 	@commands.cooldown(3, 10)
 	@karma.command(name="donate", aliases=["wiretransfer", "wt"], usage="donate <user> <amount>")
@@ -444,7 +444,7 @@ class Karma(commands.Cog):
 			# Unexpected errors must reach the central handler for diagnostics, persistence and admin reports.
 			return
 		await ctx.send(embed=embed)
-		error.is_handled = True
+		setattr(error, "is_handled", True)
 
 	@karma.group(name="emotes", aliases=["emote"], usage="emotes", invoke_without_command=True)
 	async def karma_emotes(self, ctx: commands.Context):
@@ -627,7 +627,7 @@ class Karma(commands.Cog):
 
 			await ctx.send(embed=embed)
 
-	@commands.hybrid_group(name="post", aliases=["po"], invoke_without_command=True)
+	@commands.hybrid_group(name="post", aliases=["po"])
 	@commands.guild_only()
 	async def post(self, ctx: commands.Context):
 		await ctx.send_help(ctx.command)
@@ -706,7 +706,7 @@ class Karma(commands.Cog):
 		karma_difference = (upvotes - old_upvotes) - (downvotes - old_downvotes)
 
 		update_post_query = "UPDATE post SET upvotes = $1, downvotes = $2 WHERE discord_message_id = $3"
-		await self.bot.db.pool.execute(UPSERT_KARMA_QUERY, message.author.id, message.guild.id, karma_difference)
+		await self.bot.db.pool.execute(UPSERT_KARMA_QUERY, message.author.id, guild.id, karma_difference)
 		await self.bot.db.pool.execute(update_post_query, upvotes, downvotes, message_id)
 
 		embed_string = f"""

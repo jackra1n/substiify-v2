@@ -158,7 +158,7 @@ class FeedbackModal(discord.ui.Modal):
 		)
 		self.add_item(self.feedback)
 
-	async def on_submit(self, interaction: discord.Interaction[core.Substiify]):
+	async def on_submit(self, interaction: discord.Interaction):
 		channel_id = _feedback_channel_id(self.feedback_type)
 		if channel_id is None:
 			await self._respond(
@@ -166,6 +166,7 @@ class FeedbackModal(discord.ui.Modal):
 				f"{self.feedback_type.value.capitalize()} feedback submissions are currently unavailable.",
 			)
 			return
+		assert isinstance(interaction.client, core.Substiify)
 		await interaction.response.defer(ephemeral=True, thinking=True)
 		channel = interaction.client.get_channel(channel_id)
 		if channel is None:
