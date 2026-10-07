@@ -88,7 +88,7 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
-    "basedpyright>=1.40.1",
+    "basedpyright>=1.40.2",
 ]
 
 [tool.setuptools.dynamic]
