@@ -83,7 +83,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [build-system]
-requires = ["setuptools>=64.0.3"]
+requires = ["setuptools>=84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [dependency-groups]
