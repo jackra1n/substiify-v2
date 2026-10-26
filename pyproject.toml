@@ -11,7 +11,7 @@ dependencies = [
     "pytz",
     "psutil",
     "python-dotenv>=1.2.4",
-    "colorlog>=6.9.0",
+    "colorlog>=6.12.0",
 ]
 
 # Run `uv run --locked basedpyright` locally and in CI.
