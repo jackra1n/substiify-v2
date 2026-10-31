@@ -12,10 +12,10 @@ logger = logging.getLogger(__name__)
 
 
 class EpicGamesGame(Game):
-	def __init__(self, game_info_json: dict[str, Any]) -> None:
+	def __init__(self, game_info_json: dict[str, Any], free_offer: dict[str, Any]) -> None:
 		self.title: str = game_info_json["title"]
-		self.start_date = self._create_start_date(game_info_json)
-		self.end_date = self._create_end_date(game_info_json)
+		self.start_date = datetime.fromisoformat(free_offer["startDate"]).astimezone(UTC)
+		self.end_date = datetime.fromisoformat(free_offer["endDate"]).astimezone(UTC)
 		self.original_price: str = game_info_json["price"]["totalPrice"]["fmtPrice"]["originalPrice"]
 		self.discount_price: str | int = self._create_discount_price(game_info_json["price"])
 		self.cover_image_url: str = self._create_thumbnail(game_info_json["keyImages"])
@@ -39,16 +39,6 @@ class EpicGamesGame(Game):
 			page_slug = "p/" + page_slug
 
 		return f"https://www.epicgames.com/store/en-US/{page_slug}"
-
-	def _create_start_date(self, game_info_json: dict[str, Any]) -> datetime:
-		return self._parse_date(game_info_json, "startDate")
-
-	def _create_end_date(self, game_info_json: dict[str, Any]) -> datetime:
-		return self._parse_date(game_info_json, "endDate")
-
-	def _parse_date(self, game_info_json: dict[str, Any], date_field: str) -> datetime:
-		date_str = game_info_json["promotions"]["promotionalOffers"][0]["promotionalOffers"][0][date_field]
-		return datetime.fromisoformat(date_str).astimezone(UTC)
 
 	def _create_discount_price(self, game_price: dict[str, Any]) -> str | int:
 		discount_price = game_price["totalPrice"]["discountPrice"]
@@ -88,21 +78,29 @@ class EpicGames(Platform):
 		current_free_games: list[Game] = []
 		for game in all_games:
 			try:
-				if _is_current_free_game(game):
-					current_free_games.append(EpicGamesGame(game))
+				free_offer = _current_free_offer(game)
+				if free_offer is not None:
+					current_free_games.append(EpicGamesGame(game, free_offer))
 			except (KeyError, TypeError, IndexError, ValueError) as ex:
 				logger.error(f"Skipping malformed Epic game entry: {ex!r}")
 		return current_free_games
 
 
-def _is_current_free_game(game: dict[str, Any]) -> bool:
+def _current_free_offer(game: dict[str, Any]) -> dict[str, Any] | None:
 	if not game["promotions"] or not game["promotions"]["promotionalOffers"]:
-		return False
+		return None
 	if not game["price"] or not game["price"]["totalPrice"]:
-		return False
+		return None
 	if game["price"]["totalPrice"]["discountPrice"] != 0:
-		return False
+		return None
 	categories = [category["path"] for category in game["categories"]]
 	if not all(category in categories for category in ("freegames", "games")):
-		return False
-	return game["status"] == "ACTIVE"
+		return None
+	if game["status"] != "ACTIVE":
+		return None
+	# A paid sale can be listed next to the giveaway. Epic's percentage is the share of the price left to pay.
+	for block in game["promotions"]["promotionalOffers"]:
+		for offer in block["promotionalOffers"]:
+			if offer["discountSetting"]["discountPercentage"] == 0:
+				return offer
+	return None

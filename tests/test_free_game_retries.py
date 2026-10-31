@@ -171,6 +171,36 @@ class FreeGameFetchOutages(unittest.IsolatedAsyncioTestCase):
 			with self.assertLogs("extensions.free_games.epic_games", level="ERROR"):
 				self.assertEqual(await EpicGames.get_free_games(), [])
 
+	async def test_epic_uses_giveaway_dates_when_a_sale_is_listed_too(self):
+		giveaway = {
+			"startDate": "2026-10-29T15:00:00.000Z",
+			"endDate": "2026-11-05T16:00:00.000Z",
+			"discountSetting": {"discountType": "PERCENTAGE", "discountPercentage": 0},
+		}
+		sale = {
+			"startDate": "2026-10-19T15:00:00.000Z",
+			"endDate": "2026-11-02T16:00:00.000Z",
+			"discountSetting": {"discountType": "PERCENTAGE", "discountPercentage": 70},
+		}
+		promotion_keys = set()
+		for offers in ([sale, giveaway], [giveaway, sale]):
+			element = {
+				"title": "Sorry We're Closed",
+				"status": "ACTIVE",
+				"promotions": {"promotionalOffers": [{"promotionalOffers": offers}]},
+				"price": {"totalPrice": {"discountPrice": 0, "fmtPrice": {"originalPrice": "$19.99"}}},
+				"categories": [{"path": "freegames"}, {"path": "games"}],
+				"keyImages": [{"type": "OfferImageWide", "url": "https://example.com/cover.png"}],
+				"offerMappings": [{"pageSlug": "sorry-were-closed-724c86"}],
+				"catalogNs": {"mappings": []},
+				"productSlug": None,
+			}
+			payload = {"data": {"Catalog": {"searchStore": {"elements": [element]}}}}
+			with _fake_transport(lambda _url, _params: _FakeResponse(payload=payload)):
+				[game] = await EpicGames.get_free_games()
+			promotion_keys.add(game.promotion_key)
+		self.assertEqual(promotion_keys, {"2026-10-29T15:00:00+00:00/2026-11-05T16:00:00+00:00"})
+
 	async def test_steam_detail_fetch_outage_is_not_an_empty_listing(self):
 		search_results = _FakeResponse(
 			text=json.dumps(
