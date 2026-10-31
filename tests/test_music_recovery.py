@@ -40,10 +40,9 @@ class MusicRecoveryTests(unittest.IsolatedAsyncioTestCase):
 			}
 		)
 
-	def player(self, guild_id: int, *, node: wavelink.Node | None = None) -> MusicPlayer:
-		node = node or self.node
+	def voice_channel(self, guild_id: int) -> discord.VoiceChannel:
 		guild = discord.Guild(data=cast(Any, {"id": str(guild_id), "name": "test"}), state=self.bot._connection)
-		channel = discord.VoiceChannel(
+		return discord.VoiceChannel(
 			state=self.bot._connection,
 			guild=guild,
 			data=cast(
@@ -58,19 +57,31 @@ class MusicRecoveryTests(unittest.IsolatedAsyncioTestCase):
 				},
 			),
 		)
+
+	def player(self, guild_id: int, *, node: wavelink.Node | None = None) -> MusicPlayer:
+		node = node or self.node
+		channel = self.voice_channel(guild_id)
 		player = MusicPlayer(self.bot, channel, nodes=[node])
-		player._guild = guild
+		player._guild = channel.guild
 		player._connected = True
 		player._current = self.track
 		player.queue.put(self.track)
-		node._players[guild.id] = player
-		self.bot._connection._add_voice_client(guild.id, player)
+		node._players[channel.guild.id] = player
+		self.bot._connection._add_voice_client(channel.guild.id, player)
 		return player
 
 	async def ready(self, *, resumed: bool):
 		await self.music.on_wavelink_node_ready(
 			wavelink.NodeReadyEventPayload(node=self.node, resumed=resumed, session_id="reconnected")
 		)
+
+	async def test_timed_out_connect_leaves_channel(self):
+		channel = self.voice_channel(1)
+		with self.assertLogs("extensions.music", level="WARNING"), self.assertRaises(wavelink.ChannelTimeoutException):
+			await channel.connect(cls=lambda client, ch: MusicPlayer(client, ch, nodes=[self.node]), timeout=0.01)
+		self.assertIsNone(channel.guild.voice_client)
+		self.assertEqual(self.node.players, {})
+		self.change_voice_state.assert_awaited_with(channel=None)
 
 	async def test_fresh_session_releases_all_stale_voice_clients(self):
 		players = [self.player(1), self.player(2)]

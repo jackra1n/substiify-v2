@@ -48,6 +48,21 @@ class MusicPlayer(wavelink.Player):
 	text_channel: discord.abc.Messageable | None = None
 	controller_message: discord.Message | None = None
 
+	async def connect(self, **kwargs) -> None:
+		try:
+			await super().connect(**kwargs)
+		except wavelink.ChannelTimeoutException:
+			voice = self._voice_state["voice"]
+			logger.warning(
+				"Voice connection timed out (voice state received: %s, voice server received: %s, endpoint: %s)",
+				"session_id" in voice,
+				"token" in voice,
+				voice.get("endpoint"),
+			)
+			# discord.py only cleans up after asyncio.TimeoutError, so a dead player would stay attached.
+			await core.best_effort(self.disconnect(), "timed out music voice disconnection")
+			raise
+
 
 def _require_player(ctx: commands.Context) -> MusicPlayer:
 	player = ctx.voice_client
