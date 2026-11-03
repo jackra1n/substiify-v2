@@ -1,6 +1,7 @@
 import asyncio
 import json
 import unittest
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from typing import cast
@@ -11,7 +12,13 @@ import asyncpg
 from extensions.free_games import FreeGames
 from extensions.free_games.base import ProviderError
 from extensions.free_games.epic_games import EpicGames
-from extensions.free_games.steam import STEAM_APPDETAILS_URL, STEAM_SEARCH_URL, STEAM_STORE_URL, Steam
+from extensions.free_games.steam import (
+	STEAM_APPDETAILS_URL,
+	STEAM_SEARCH_URL,
+	STEAM_STORE_URL,
+	STEAM_TIMEZONE,
+	Steam,
+)
 from core.bot import Substiify
 
 
@@ -58,6 +65,28 @@ class _FakeSession:
 
 	async def __aexit__(self, *exc_info) -> bool:
 		return False
+
+
+def _steam_store_page(end_date: datetime) -> str:
+	deadline = end_date.astimezone(STEAM_TIMEZONE).strftime("%b %d @ %I:%M%p")
+	return (
+		'<p class="game_purchase_discount_quantity ">'
+		f"Free to keep when you get it before {deadline}. Some limitations apply.</p>"
+	)
+
+
+def _epic_element(offers: list[dict]) -> dict:
+	return {
+		"title": "Sorry We're Closed",
+		"status": "ACTIVE",
+		"promotions": {"promotionalOffers": [{"promotionalOffers": offers}]},
+		"price": {"totalPrice": {"discountPrice": 0, "fmtPrice": {"originalPrice": "$19.99"}}},
+		"categories": [{"path": "freegames"}, {"path": "games"}],
+		"keyImages": [{"type": "OfferImageWide", "url": "https://example.com/cover.png"}],
+		"offerMappings": [{"pageSlug": "sorry-were-closed-724c86"}],
+		"catalogNs": {"mappings": []},
+		"productSlug": None,
+	}
 
 
 def _fake_transport(handler):
@@ -174,32 +203,31 @@ class FreeGameFetchOutages(unittest.IsolatedAsyncioTestCase):
 	async def test_epic_uses_giveaway_dates_when_a_sale_is_listed_too(self):
 		giveaway = {
 			"startDate": "2026-10-29T15:00:00.000Z",
-			"endDate": "2026-11-05T16:00:00.000Z",
+			"endDate": "2099-11-05T16:00:00.000Z",
 			"discountSetting": {"discountType": "PERCENTAGE", "discountPercentage": 0},
 		}
 		sale = {
 			"startDate": "2026-10-19T15:00:00.000Z",
-			"endDate": "2026-11-02T16:00:00.000Z",
+			"endDate": "2099-11-02T16:00:00.000Z",
 			"discountSetting": {"discountType": "PERCENTAGE", "discountPercentage": 70},
 		}
 		promotion_keys = set()
 		for offers in ([sale, giveaway], [giveaway, sale]):
-			element = {
-				"title": "Sorry We're Closed",
-				"status": "ACTIVE",
-				"promotions": {"promotionalOffers": [{"promotionalOffers": offers}]},
-				"price": {"totalPrice": {"discountPrice": 0, "fmtPrice": {"originalPrice": "$19.99"}}},
-				"categories": [{"path": "freegames"}, {"path": "games"}],
-				"keyImages": [{"type": "OfferImageWide", "url": "https://example.com/cover.png"}],
-				"offerMappings": [{"pageSlug": "sorry-were-closed-724c86"}],
-				"catalogNs": {"mappings": []},
-				"productSlug": None,
-			}
-			payload = {"data": {"Catalog": {"searchStore": {"elements": [element]}}}}
+			payload = {"data": {"Catalog": {"searchStore": {"elements": [_epic_element(offers)]}}}}
 			with _fake_transport(lambda _url, _params: _FakeResponse(payload=payload)):
 				[game] = await EpicGames.get_free_games()
 			promotion_keys.add(game.promotion_key)
-		self.assertEqual(promotion_keys, {"2026-10-29T15:00:00+00:00/2026-11-05T16:00:00+00:00"})
+		self.assertEqual(promotion_keys, {"2026-10-29T15:00:00+00:00/2099-11-05T16:00:00+00:00"})
+
+	async def test_epic_skips_ended_giveaway(self):
+		ended = {
+			"startDate": "2026-10-29T15:00:00.000Z",
+			"endDate": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+			"discountSetting": {"discountType": "PERCENTAGE", "discountPercentage": 0},
+		}
+		payload = {"data": {"Catalog": {"searchStore": {"elements": [_epic_element([ended])]}}}}
+		with _fake_transport(lambda _url, _params: _FakeResponse(payload=payload)):
+			self.assertEqual(await EpicGames.get_free_games(), [])
 
 	async def test_steam_detail_fetch_outage_is_not_an_empty_listing(self):
 		search_results = _FakeResponse(
@@ -255,7 +283,7 @@ class FreeGameFetchOutages(unittest.IsolatedAsyncioTestCase):
 					return _FakeResponse(text=json.dumps({app_id: {"success": True, "data": details}}))
 				if any(url == f"{STEAM_STORE_URL}/{app_id}/" for app_id in failing_ids):
 					raise TimeoutError("steam store page unreachable")
-				return _FakeResponse(text="<html></html>")
+				return _FakeResponse(text=_steam_store_page(datetime.now(UTC) + timedelta(days=3)))
 
 			return respond
 
@@ -266,6 +294,32 @@ class FreeGameFetchOutages(unittest.IsolatedAsyncioTestCase):
 		with _fake_transport(store_pages_failing({"111"})), self.assertLogs("extensions.free_games.steam"):
 			games = await Steam.get_free_games()
 		self.assertEqual([game.store_link for game in games], [f"{STEAM_STORE_URL}/222"])
+
+	async def test_steam_only_announces_running_dated_giveaways(self):
+		now = datetime.now(UTC)
+		pages = {
+			"111": "<html>no giveaway line</html>",
+			"222": _steam_store_page(now - timedelta(hours=1)),
+			"333": _steam_store_page(now + timedelta(days=3)),
+		}
+		search_results = _FakeResponse(
+			text=json.dumps(
+				{"items": [{"logo": f"https://cdn.steamstatic.com/steam/apps/{i}/header.jpg"} for i in pages]}
+			)
+		)
+		details = {"type": "game", "name": "Game", "price_overview": {"discount_percent": 100, "initial": 999}}
+
+		def respond(url, params):
+			if url == STEAM_SEARCH_URL:
+				return search_results
+			if url == STEAM_APPDETAILS_URL:
+				app_id = params["appids"]
+				return _FakeResponse(text=json.dumps({app_id: {"success": True, "data": details}}))
+			return _FakeResponse(text=pages[url.removeprefix(f"{STEAM_STORE_URL}/").strip("/")])
+
+		with _fake_transport(respond):
+			games = await Steam.get_free_games()
+		self.assertEqual([game.store_link for game in games], [f"{STEAM_STORE_URL}/333"])
 
 	async def test_manual_send_reports_unavailable_fetch_instead_of_no_games(self):
 		fetched = []

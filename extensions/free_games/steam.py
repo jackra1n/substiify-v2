@@ -65,15 +65,15 @@ class Steam(Platform):
 
 		store_pages = await Steam._fetch_store_pages_batch([app_id for app_id, _ in free_promos])
 
+		now = datetime.now(UTC)
 		current_free_games: list[Game] = []
 		for app_id, details in free_promos:
-			# Without its store page the end date is unknown, and an undated
-			# announcement would be repeated once the dated one is found.
-			html = store_pages.get(app_id)
-			if html is None:
+			# Only a dated "Free to keep" line marks a running giveaway. At the deadline
+			# Steam drops it from the store page while search still lists the game as free.
+			end_date = Steam._parse_end_date_from_html(store_pages.get(app_id, ""))
+			if end_date is None or end_date <= now:
 				continue
 			try:
-				end_date = Steam._parse_end_date_from_html(html)
 				game = SteamGame(app_id, details, end_date=end_date)
 				current_free_games.append(game)
 			except Exception as ex:

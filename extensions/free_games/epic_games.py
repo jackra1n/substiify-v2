@@ -99,8 +99,9 @@ def _current_free_offer(game: dict[str, Any]) -> dict[str, Any] | None:
 	if game["status"] != "ACTIVE":
 		return None
 	# A paid sale can be listed next to the giveaway. Epic's percentage is the share of the price left to pay.
+	now = datetime.now(UTC)
 	for block in game["promotions"]["promotionalOffers"]:
 		for offer in block["promotionalOffers"]:
-			if offer["discountSetting"]["discountPercentage"] == 0:
+			if offer["discountSetting"]["discountPercentage"] == 0 and datetime.fromisoformat(offer["endDate"]) > now:
 				return offer
 	return None
