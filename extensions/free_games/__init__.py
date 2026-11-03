@@ -152,16 +152,15 @@ class FreeGames(commands.Cog):
 				WHERE store_name = $1 AND store_link = $2 AND promotion_key = $3
 					AND discord_channel_id = $4
 			) OR NOT EXISTS (
+				-- Stores sometimes report changed dates for the same giveaway.
 				SELECT 1 FROM free_game_delivery
-				WHERE store_name = $1 AND store_link = $2 AND promotion_key = 'legacy'
+				WHERE store_name = $1 AND store_link = $2
 					AND discord_channel_id = $4 AND delivered_at >= NOW() - INTERVAL '30 days'
 			)
 			ON CONFLICT (store_name, store_link, promotion_key, discord_channel_id) DO UPDATE
 			SET claimed_until = EXCLUDED.claimed_until, claim_token = EXCLUDED.claim_token
-			WHERE (
-				free_game_delivery.delivered_at IS NULL
-				OR ($3 = 'undated' AND free_game_delivery.delivered_at < NOW() - INTERVAL '30 days')
-			) AND (free_game_delivery.claimed_until IS NULL OR free_game_delivery.claimed_until <= NOW())
+			WHERE free_game_delivery.delivered_at IS NULL
+				AND (free_game_delivery.claimed_until IS NULL OR free_game_delivery.claimed_until <= NOW())
 			RETURNING claim_token;
 		"""
 		return await self.bot.db.pool.fetchval(
