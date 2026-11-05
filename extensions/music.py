@@ -218,7 +218,7 @@ class Music(commands.Cog):
 			if voice is None or voice.channel is None:
 				raise NoVoiceChannel()
 			player = await voice.channel.connect(cls=MusicPlayer)
-			await player.set_volume(65)
+			await player.set_volume(50)
 		player.text_channel = ctx.channel
 		return player
 
