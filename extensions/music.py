@@ -242,7 +242,7 @@ class Music(commands.Cog):
 			return
 
 		player = ctx.voice_client
-		if command_name == "controller":
+		if command_name == "queue":
 			if player is None:
 				raise NoPlayerFound()
 			return
@@ -342,11 +342,11 @@ class Music(commands.Cog):
 		embed = discord.Embed(title="⏹️ Disconnected", color=EMBED_COLOR)
 		await ctx.send(embed=embed, delete_after=30)
 
-	@commands.hybrid_command(aliases=["con", "now", "queue", "q"])
+	@commands.hybrid_command(aliases=["q", "controller", "con", "now", "np"])
 	@commands.guild_only()
-	async def controller(self, ctx: commands.Context):
+	async def queue(self, ctx: commands.Context):
 		"""
-		Shows the music controller.
+		Shows the current song, the queue and the music controls.
 		"""
 		player = _require_player(ctx)
 		if player.controller_message is not None:
@@ -354,6 +354,47 @@ class Music(commands.Cog):
 		view = MusicController(player, ctx.author.id)
 		embed = await create_controller_embed(player)
 		player.controller_message = await ctx.send(embed=embed, view=view)
+
+	@commands.hybrid_command(aliases=["mv"], usage="move <from> <to>")
+	@commands.guild_only()
+	@app_commands.describe(track="Song to move", position="New position in the queue")
+	async def move(
+		self, ctx: commands.Context, track: commands.Range[int, 1, None], position: commands.Range[int, 1, None]
+	):
+		"""Moves a song in the queue to another position.
+
+		Examples:
+		`<<move 5 1` - moves the 5th song in the queue to the top
+		"""
+		player = _require_player(ctx)
+		if not ctx.interaction:
+			await core.best_effort(ctx.message.delete(), "command message deletion")
+		if track > len(player.queue):
+			raise InvalidQueuePosition()
+		moved = player.queue[track - 1]
+		player.queue.delete(track - 1)
+		position = min(position, len(player.queue) + 1)
+		player.queue.put_at(position - 1, moved)
+		embed = discord.Embed(title="↕️ Moved", color=EMBED_COLOR)
+		embed.description = f"**[{moved}]({moved.uri})** to position `{position}`"
+		embed.set_footer(text=f"By: {ctx.author}", icon_url=ctx.author.display_avatar)
+		await ctx.send(embed=embed, delete_after=30)
+		await self._update_controller(player)
+
+	@move.autocomplete("track")
+	async def move_track_autocomplete(self, interaction: Interaction, current: str) -> list[app_commands.Choice[int]]:
+		player = interaction.guild.voice_client if interaction.guild else None
+		if not isinstance(player, MusicPlayer):
+			return []
+		current = str(current).lower()
+		choices = []
+		for index, track in enumerate(player.queue, start=1):
+			name = f"{index}. {track.author} - {track.title}"
+			if current in name.lower():
+				choices.append(app_commands.Choice(name=name[:100], value=index))
+				if len(choices) == 25:
+					break
+		return choices
 
 	@commands.is_owner()
 	@commands.command(hidden=True)
@@ -604,6 +645,12 @@ class TrackLoadFailed(MusicError):
 		super().__init__(
 			"I couldn't load that track. Please try a search query, YouTube link, or SoundCloud link instead."
 		)
+
+
+class InvalidQueuePosition(MusicError):
+	def __init__(self):
+		super().__init__("There is no song at that position in the queue.")
+
 
 class DifferentVoiceChannel(MusicError):
 	def __init__(self):
