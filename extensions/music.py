@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import logging
 
@@ -9,10 +10,12 @@ from discord.ext import commands
 
 import core
 import utils
+from core.delivery import DELIVERY_ERRORS
 
 logger = logging.getLogger(__name__)
 
 EMBED_COLOR = core.constants.CYAN_COLOR
+LIVE_QUEUE_REFRESH_SECONDS = 15
 
 
 async def _send_music_error(channel, embed: discord.Embed):
@@ -47,6 +50,8 @@ class _LavalinkWebSocket(aiohttp.ClientWebSocketResponse):
 class MusicPlayer(wavelink.Player):
 	text_channel: discord.abc.Messageable | None = None
 	controller_message: discord.Message | None = None
+	controller_view: ui.View | None = None
+	controller_refresh: asyncio.Task | None = None
 
 	async def connect(self, **kwargs) -> None:
 		try:
@@ -62,6 +67,48 @@ class MusicPlayer(wavelink.Player):
 			# discord.py only cleans up after asyncio.TimeoutError, so a dead player would stay attached.
 			await core.best_effort(self.disconnect(), "timed out music voice disconnection")
 			raise
+
+	async def disconnect(self, **kwargs) -> None:
+		await self.close_controller()
+		await super().disconnect(**kwargs)
+
+	def set_controller(self, message: discord.Message, view: ui.View, *, live: bool) -> None:
+		self.controller_message = message
+		self.controller_view = view
+		if live:
+			self.controller_refresh = asyncio.create_task(self._refresh_controller())
+
+	async def update_controller(self) -> None:
+		if self.controller_message is None:
+			return
+		embed = await create_controller_embed(self)
+		try:
+			await self.controller_message.edit(embed=embed)
+		except discord.NotFound:
+			await self.close_controller()
+		except DELIVERY_ERRORS as error:
+			logger.warning("Could not update music controller (%s: %s)", type(error).__name__, error)
+
+	async def close_controller(self) -> None:
+		message, view, refresh = self.controller_message, self.controller_view, self.controller_refresh
+		self.controller_message = None
+		self.controller_view = None
+		self.controller_refresh = None
+		if view is not None:
+			view.stop()
+		if refresh is not None and refresh is not asyncio.current_task():
+			refresh.cancel()
+		if message is not None:
+			await core.best_effort(message.delete(), "music controller deletion")
+
+	async def _refresh_controller(self) -> None:
+		while self.controller_message is not None:
+			await asyncio.sleep(LIVE_QUEUE_REFRESH_SECONDS)
+			# Being kicked from voice destroys the player without calling disconnect().
+			if self.connected:
+				await self.update_controller()
+			else:
+				await self.close_controller()
 
 
 def _require_player(ctx: commands.Context) -> MusicPlayer:
@@ -166,7 +213,7 @@ class Music(commands.Cog):
 	@commands.Cog.listener()
 	async def on_wavelink_track_start(self, payload: wavelink.TrackStartEventPayload):
 		if isinstance(payload.player, MusicPlayer):
-			await self._update_controller(payload.player)
+			await payload.player.update_controller()
 
 	@commands.Cog.listener()
 	async def on_wavelink_track_exception(self, payload: wavelink.TrackExceptionEventPayload):
@@ -194,16 +241,6 @@ class Music(commands.Cog):
 		await _send_music_error(channel, embed)
 		detail = f"Stuck threshold: {payload.threshold} ms" if stuck else str(payload.exception)
 		await _report_music_error(self.bot, channel, embed, detail)
-
-	async def _update_controller(self, player: MusicPlayer):
-		if player.controller_message is None:
-			return
-
-		embed = await create_controller_embed(player)
-		try:
-			await player.controller_message.edit(embed=embed)
-		except discord.NotFound:
-			pass
 
 	async def _search_tracks(self, query: str) -> wavelink.Search:
 		try:
@@ -335,25 +372,32 @@ class Music(commands.Cog):
 		Disconnects the player from the voice channel and clears its queue.
 		"""
 		player = _require_player(ctx)
-
-		if player.controller_message is not None:
-			await core.best_effort(player.controller_message.delete(), "music controller deletion")
 		await player.disconnect()
 		embed = discord.Embed(title="⏹️ Disconnected", color=EMBED_COLOR)
 		await ctx.send(embed=embed, delete_after=30)
 
-	@commands.hybrid_command(aliases=["q", "controller", "con", "now", "np"])
+	@commands.hybrid_command(aliases=["q", "controller", "con", "now", "np"], usage="queue [on]")
 	@commands.guild_only()
-	async def queue(self, ctx: commands.Context):
-		"""
-		Shows the current song, the queue and the music controls.
+	@app_commands.describe(live="Keep the queue in chat and update it until the music stops")
+	async def queue(self, ctx: commands.Context, live: bool = False):
+		"""Shows the current song, the queue and the music controls.
+
+		Examples:
+		`<<queue` - shows the queue for a few minutes
+		`<<queue on` - keeps the queue in chat and updates it until the music stops
 		"""
 		player = _require_player(ctx)
-		if player.controller_message is not None:
-			await core.best_effort(player.controller_message.delete(), "music controller deletion")
-		view = MusicController(player, ctx.author.id)
+		if live and ctx.interaction:
+			await ctx.defer(ephemeral=True)
+		await player.close_controller()
+		view = MusicController(player, ctx.author.id, live=live)
 		embed = await create_controller_embed(player)
-		player.controller_message = await ctx.send(embed=embed, view=view)
+		if not live:
+			player.set_controller(await ctx.send(embed=embed, view=view), view, live=False)
+			return
+		player.set_controller(await ctx.channel.send(embed=embed, view=view), view, live=True)
+		if ctx.interaction:
+			await ctx.send(embed=discord.Embed(title="📌 Live queue started", color=EMBED_COLOR), ephemeral=True)
 
 	@commands.hybrid_command(aliases=["mv"], usage="move <from> <to>")
 	@commands.guild_only()
@@ -379,7 +423,7 @@ class Music(commands.Cog):
 		embed.description = f"**[{moved}]({moved.uri})** to position `{position}`"
 		embed.set_footer(text=f"By: {ctx.author}", icon_url=ctx.author.display_avatar)
 		await ctx.send(embed=embed, delete_after=30)
-		await self._update_controller(player)
+		await player.update_controller()
 
 	@move.autocomplete("track")
 	async def move_track_autocomplete(self, interaction: Interaction, current: str) -> list[app_commands.Choice[int]]:
@@ -481,28 +525,27 @@ class Music(commands.Cog):
 
 
 class MusicController(ui.View):
-	def __init__(self, player: MusicPlayer, author_id: int):
-		super().__init__()
+	def __init__(self, player: MusicPlayer, author_id: int, *, live: bool = False):
+		super().__init__(timeout=None if live else 180)
 		self.add_item(RadioButton(player))
 		self.add_item(LoopSelect(player))
 		self.player = player
 		self.author_id = author_id
+		self.live = live
 
 	async def on_timeout(self):
-		message = self.player.controller_message
-		if message is not None:
-			self.player.controller_message = None
-			try:
-				await message.edit(view=None)
-				await message.delete()
-			except discord.NotFound:
-				pass
+		await self.player.close_controller()
 
 	async def interaction_check(self, interaction: Interaction) -> bool:
-		if interaction.user.id != self.author_id:
-			await interaction.response.send_message(
-				f"⚠️ {interaction.user.mention} **You aren't the author of this embed**", ephemeral=True
-			)
+		if self.live:
+			voice = interaction.user.voice if isinstance(interaction.user, discord.Member) else None
+			allowed = voice is not None and voice.channel == self.player.channel
+			denied = "You need to be in my voice channel to use these controls"
+		else:
+			allowed = interaction.user.id == self.author_id
+			denied = "You aren't the author of this embed"
+		if not allowed:
+			await interaction.response.send_message(f"⚠️ {interaction.user.mention} **{denied}**", ephemeral=True)
 			return False
 		if not self.player.connected:
 			raise NoPlayerFound()
@@ -534,9 +577,6 @@ class MusicController(ui.View):
 	@ui.button(label="Stop", emoji="⏹️", row=2, style=ButtonStyle.danger)
 	async def leave_button(self, interaction: discord.Interaction, button: ui.Button):
 		await self.player.disconnect()
-		await interaction.edit_original_response(view=None)
-		if self.player.controller_message is not None:
-			await core.best_effort(self.player.controller_message.delete(), "music controller deletion")
 		embed = discord.Embed(title="⏹️ Disconnected", color=EMBED_COLOR)
 		embed.description = f"By: {interaction.user.mention}"
 		if isinstance(interaction.channel, discord.abc.Messageable):

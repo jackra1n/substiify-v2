@@ -11,7 +11,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestServer
 
 from core.bot import Substiify
-from extensions.music import Music, MusicPlayer, _LavalinkWebSocket
+from extensions.music import Music, MusicController, MusicPlayer, _LavalinkWebSocket
 
 
 class MusicRecoveryTests(unittest.IsolatedAsyncioTestCase):
@@ -129,6 +129,35 @@ class MusicRecoveryTests(unittest.IsolatedAsyncioTestCase):
 			self.assertFalse(player.connected)
 			assert player.guild is not None
 			self.assertIsNone(player.guild.voice_client)
+
+	def live_queue(self, player: MusicPlayer) -> tuple[Any, MusicController, asyncio.Task]:
+		message = SimpleNamespace(edit=AsyncMock(), delete=AsyncMock())
+		view = MusicController(player, 1, live=True)
+		player.set_controller(cast(discord.Message, message), view, live=True)
+		assert player.controller_refresh is not None
+		return message, view, player.controller_refresh
+
+	async def test_disconnect_removes_live_queue(self):
+		player = self.player(1)
+		message, view, refresh = self.live_queue(player)
+		await player.disconnect()
+		await asyncio.gather(refresh, return_exceptions=True)
+		message.delete.assert_awaited_once()
+		self.assertTrue(view.is_finished())
+		self.assertTrue(refresh.cancelled())
+		self.assertIsNone(player.controller_message)
+
+	async def test_live_queue_refreshes_until_bot_is_kicked(self):
+		player = self.player(1)
+		with patch("extensions.music.LIVE_QUEUE_REFRESH_SECONDS", 0):
+			message, view, refresh = self.live_queue(player)
+			while not message.edit.await_count:
+				await asyncio.sleep(0)
+			await player.on_voice_state_update(cast(Any, {"channel_id": None}))
+			await asyncio.wait_for(refresh, 1)
+		message.delete.assert_awaited_once()
+		self.assertTrue(view.is_finished())
+		self.assertIsNone(player.controller_message)
 
 
 class LavalinkWebSocketTests(unittest.IsolatedAsyncioTestCase):
